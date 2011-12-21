@@ -1,0 +1,53 @@
+                                  ÜÜÜÜ   ş      PI!
+                            Ü  Ü²²ÛßßÛÛÛÜ  Ü ß   ÜÜÜÜ
+                 ş         ß²ßÜ²²ÛÜ  ÜÛ²²Üß²ß Ü²²ÛÛÛÛÛÛÜ
+                   ßÜÜ    ß ÜÜß²Ûßßßßßßßßß    ßßßßßßßÛßÛ       ş
+                     ß²²   ²²Ûß ÜÜÛÛÛÛÛÛÛÛÛ ÛÛÛÛ²² ÛÛÛÛß   ÜÜß
+                       ß  ÜÜÛ ÜÛÛÛÛÛÛ²²ÛÛÛÛ°ÛÛÛÛÛİŞÛÛÛÜ °±²ß
+               °°        ²²ÛİŞÛßß  ÛÛÛİ Ü Û²Û Ü ÜÜÛÛÛÛÛİ°ß    °°
+             ÜÜ    ÜÜ    ßÛÛ ß ÜÛ² ÛÛÛ Ş² ÛÛÛ Û ÛÛÛ²²Ûß   ÜÜ    ÜÜ
+          Ü²ß   Ü²ß      Ü²ÜÛÛÛÛÛİŞÛÛÛ ÛÛ ÛÛÛ ÛßÛÛÛÜ  Ü     ß²Ü   ßÛÜ
+         ŞÛİ   ÛÛİ   ÜÜ   ß ßÛ²ÛÛ ŞÛÛİ ²Û ²ÛÛ ²ÛÛ²²ß    ÜÜ   ŞÛÛ   ŞÛİ
+          ß²Ü  ß²²Ü ß²²ß  Ü  Û ßß ÛÛÛİ ±Û ²ÛÛ ±Û²Ü  Ü  ß²²ß Ü²²ß  Ü²ß
+            ßßÛÜÜÛßÛÛÜÜÜ²ß   ²   ²ÛÛÛ  °² ²²Ûİ ²²ßÜ  ßßÜÜÜÛÛßÛÜÜÛßß
+                ÛÛßß²²ÜÜ     ± Ü²ÛÛÛÛ   ± ²²ÛÛÜ  Ü²    ÜÜ²²ßßÛÛ
+             m0 ²Û   Ü ßÛ²Ü  °ŞÛß ßÛİ   ° ß²²ÛÛÛÛ²  Ü²Ûß Ü   Û² CRO
+                °²  ß²ß Û  ß   ßÛÜÛß       ß²²Û²ß  ß  Û ß²ß  ²°
+                 ±      ² °° ß       Ü²²Ü        ß °° ²      ±
+                 °      ±    Şİ       ßß  Ü     Şİ    ±      °
+                 Ü      °   Üß    ş              ßÜ   °      Ü
+                          ß                         ß
+                   PI XBOX-360 DUMP EXTRACT V1.0 OPEN SOURCE
+      ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+      ³Û²±°      RELEASE INFORMATION   _ __/     /  / /\_____ __ _ °±²Û³
+      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+              Platform: ALL   Category: Tool + Source Code
+              Released: 12/8/2005   Origin: Who knows ? ;-)
+
+      ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+      ³Û²±°      RELEASE NOTES         _ __/     /  / /\____ __ _  °±²Û³
+      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+       So you've seen all our raw dumps? but what can you use them for?
+       Nothing in their current form, yet! - But here we go with a nice
+       extractor tool so that you can extract the dumps and check out
+       the files, we even decided to release the source code, so that
+       you can figure out the filesystem and make even nicer tools and
+       clean up our horrible looking code, cause we are lazy and old!
+
+       Usage: extract360.exe gamename.360 <wildcard>...
+
+       For example:
+
+          extract360.exe pi-nfsmw.360
+
+       Sit back and relax, and enjoy, these xbox360 games are quite
+       large!
+
+       And a note to the tech guys:
+         Yes, once you get past the protections and down to the raw
+       bits on the disc, its just the standard xboxdvdfs, however the
+       offset and layer breakpoint are different!
+
+                               / Team PI Coder - over and out!
