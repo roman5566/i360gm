@@ -37,20 +37,17 @@ void Iso::readXex()
 
 	//Check for XDG1 disc
 	uint offset = 0;
-	_lseeki64(iso, GAME_SECTOR*SECTOR_SIZE, SEEK_SET);
-	_read(iso, (char*)&xboxMedia, sizeof(XboxMedia));
+	xboxMedia.readMedia(iso);
 	if(!xboxMedia.isValidMedia())
 	{
 		//Check for XDG2 disc
 		offset = GLOBAL_LSEEK_OFFSET;
-		_lseeki64(iso, GAME_SECTOR*SECTOR_SIZE+GLOBAL_LSEEK_OFFSET, SEEK_SET);
-		_read(iso, (char*)&xboxMedia, sizeof(XboxMedia));
+		xboxMedia.readMedia(iso, offset);
 		if(!xboxMedia.isValidMedia())
 		{
 			//Check for XDG3 disc
 			offset = XGD3_LSEEK_OFFSET;
-			_lseeki64(iso, GAME_SECTOR*SECTOR_SIZE+XGD3_LSEEK_OFFSET, SEEK_SET);
-			_read(iso, (char*)&xboxMedia, sizeof(XboxMedia));
+			xboxMedia.readMedia(iso, offset);
 			if(!xboxMedia.isValidMedia())
 			{
 				//This is not a valid xbox disc
@@ -76,11 +73,14 @@ void Iso::readXex()
 	uint xexSize = NULL;
 
 	//Find default.xex
-	for(int i=0; i<xboxMedia.rootSize; i++)
+	for(int i = 0; i < xboxMedia.rootSize; i += fileInfo->getStructSize())
 	{
-		if(_strnicmp(rootBuffer+i, XEX_FILE, XEX_FILE_SIZE) == 0)
+		while((uchar)rootBuffer[i] == 0xFF)    //Skip padding
+			i++;
+
+		fileInfo = (XboxFileInfo*)(rootBuffer+i);
+		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
 		{
-			fileInfo = (XboxFileInfo*)(rootBuffer+i-10);
 			xexAddress = fileInfo->getAddress(offset);
 			xexSize = fileInfo->size;
 			break;
