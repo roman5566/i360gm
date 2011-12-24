@@ -20,6 +20,7 @@ public:
 	QVariant data(const QModelIndex& index, int role) const;
 	QVariant headerData(int section, Qt::Orientation orientation, int role) const;
 	void setIsos(vector<Iso*> *_isos);
+	Iso* getIso(int index);
 
 protected:
 	vector<Iso*> *_isos;

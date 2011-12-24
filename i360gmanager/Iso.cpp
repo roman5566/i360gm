@@ -7,7 +7,7 @@ Iso::Iso()
 
 Iso::~Iso()
 {
-
+	free(_rootSector);
 }
 QString Iso::getPath()
 {
@@ -29,64 +29,45 @@ QString Iso::getIso()
 void Iso::readXex()
 {
 	XboxMedia xboxMedia;
+	uint offset = 0;
 	int iso = _open(_path.toStdString().c_str(), _O_RDONLY);
 
 	if (iso < 0)
 		return; //Could not open the file
 
 
-	//Check for XDG1 disc
-	uint offset = 0;
-	xboxMedia.readMedia(iso);
-	if(!xboxMedia.isValidMedia())
+	//Check if this is a xbox 360 media disk
+	if(!xboxMedia.isValidMedia(iso, offset))
 	{
-		//Check for XDG2 disc
-		offset = GLOBAL_LSEEK_OFFSET;
-		xboxMedia.readMedia(iso, offset);
-		if(!xboxMedia.isValidMedia())
-		{
-			//Check for XDG3 disc
-			offset = XGD3_LSEEK_OFFSET;
-			xboxMedia.readMedia(iso, offset);
-			if(!xboxMedia.isValidMedia())
-			{
-				//This is not a valid xbox disc
-				_valid = NO_MEDIA;
-				return;
-			}
-		}
-
+			_valid = NO_MEDIA;                 //This is not a valid xbox disc
+			return;
 	}
 	
 	//We got valid media but its DAMN BIG!
-	if(xboxMedia.rootSize > 10240000)
-		xboxMedia.rootSize = 10240000;
+	if(xboxMedia.rootSize > MAX_SECTOR)
+		xboxMedia.rootSize = MAX_SECTOR;
 
 	//Read buffer
-	char *rootBuffer = (char*)malloc(xboxMedia.rootSize*sizeof(char));
+	_rootSector = (char*)malloc(xboxMedia.rootSize*sizeof(char));
 	_lseeki64(iso, xboxMedia.getRootAddress(offset), SEEK_SET);
-	_read(iso, rootBuffer, xboxMedia.rootSize);
+	_read(iso, _rootSector, xboxMedia.rootSize);
 
 	//Default.xex info
-	XboxFileInfo *fileInfo;
 	unsigned __int64 xexAddress = NULL;
 	uint xexSize = NULL;
 
 	//Find default.xex
+	XboxFileInfo *fileInfo = NULL;
 	for(int i = 0; i < xboxMedia.rootSize; i += fileInfo->getStructSize())
 	{
-		while((uchar)rootBuffer[i] == 0xFF)    //Skip padding
-			i++;
-
-		fileInfo = (XboxFileInfo*)(rootBuffer+i);
+		fileInfo = fileInfo->load(_rootSector+i);
 		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
 		{
 			xexAddress = fileInfo->getAddress(offset);
 			xexSize = fileInfo->size;
-			break;
 		}
+		_files.push_back(fileInfo);
 	}
-	free(rootBuffer);
 
 	//Found default.xex entry, try to read it
 	if(xexAddress != NULL && xexSize > 24)
@@ -117,6 +98,11 @@ void Iso::readXex()
 
 	//Cleanup
 	_close(iso);
+}
+
+vector<XboxFileInfo*> Iso::getFiles()
+{
+	return _files;
 }
 
 QBrush Iso::getBackground(int column)

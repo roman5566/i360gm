@@ -6,6 +6,7 @@
 
 #include "ui_uiMain.h"
 #include "Iso.h"
+#include "IsoList.h"
 
 using std::vector;
 
@@ -21,7 +22,11 @@ public:
 	//
 	void refreshDir(QString directory);
 
+	public slots:
+		void slotOnClickList(const QModelIndex &current, const QModelIndex &previous);
+
 private:
+	IsoList *_model;
 	Ui::MainClass ui;
 	vector<Iso*> _isos;
 };

@@ -17,6 +17,8 @@
 #include <string.h>
 #include "xbox.h"
 
+using std::vector;
+
 enum IsoCode
 {
 	BIG_ROOT,
@@ -45,12 +47,16 @@ public:
 
 	//Iso manip
 	void readXex();
+	vector<XboxFileInfo*> getFiles();
 
 private:
 	//Data
 	QString _path;
 
 	IsoCode _valid;
+
+	char* _rootSector;
+	vector<XboxFileInfo*> _files;
 
 };
 

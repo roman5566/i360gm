@@ -23,6 +23,11 @@ int IsoList::columnCount(const QModelIndex& parent) const
 	return _header.size();
 }
 
+Iso* IsoList::getIso(int index)
+{
+	return _isos->at(index);
+}
+
 QVariant IsoList::data(const QModelIndex& index, int role) const
 {
 	switch(role)
