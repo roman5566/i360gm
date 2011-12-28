@@ -51,6 +51,7 @@ public:
 private:
 	//Helper functions
 	void cleanupIso();
+	void walkFile(uint offset);
 
 	//Helper data
 	QString _path;

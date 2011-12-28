@@ -4,6 +4,7 @@
 #define SECTOR_SIZE 2048
 #define MAX_SECTOR 10240000
 #define GAME_SECTOR 32
+#define TABLE_TO_ADDRESS 4
 #define GLOBAL_LSEEK_OFFSET 0xFD90000ul
 #define XGD3_LSEEK_OFFSET 0x2080000ul
 #define MEDIA_MAGIC_BYTE "MICROSOFT*XBOX*MEDIA"
@@ -14,8 +15,6 @@
 #ifndef MAX_PATH
 	#define MAX_PATH 255
 #endif
-
-struct XboxFileInfoStruct;
 
 #pragma pack(1)
 typedef struct
@@ -74,8 +73,8 @@ typedef struct
 
 typedef struct XboxFileInfoStruct
 {
-	short flag1;
-	short flag2;
+	short ltable;               //Left file offset from beginning of sector *4 to get address
+	short rtable;				//Same but then right file
 	uint sector;
 	uint size;
 	uchar type;
@@ -94,6 +93,16 @@ typedef struct XboxFileInfoStruct
 		return (XboxFileInfoStruct*)pointer;
 	}
 
+	uint getLOffset()
+	{
+		return ltable*TABLE_TO_ADDRESS;
+	}
+
+	uint getROffset()
+	{
+		return rtable*TABLE_TO_ADDRESS;
+	}
+
 	unsigned __int64 getAddress(uint offset)
 	{
 		return ((unsigned __int64)sector*SECTOR_SIZE)+offset;
@@ -110,20 +119,7 @@ typedef struct XboxFileInfoStruct
 
 	uint getStructSize()
 	{
-		uint structSize = sizeof(XboxFileInfo)-MAX_PATH+length;
-		uint padding = 0;
-
-		for(int i = length; i < MAX_PATH; i++)
-		{
-			if((uchar)name[i] != 0xFF)
-				break;
-			padding++;
-
-			if(padding > 32)
-				return MAX_SECTOR;
-		}
-
-		return structSize + padding;
+		return sizeof(XboxFileInfo)-MAX_PATH+length;
 	}
 
 	friend bool operator==(const XboxFileInfoStruct &left, const XboxFileInfoStruct &right)

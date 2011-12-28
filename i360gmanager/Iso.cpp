@@ -97,15 +97,37 @@ vector<XboxFileInfo*> Iso::getFiles(bool refresh)
 		XboxFileInfo *fileInfo = NULL;
 		_rootSector = (char*)malloc(_xboxMedia.rootSize*sizeof(char));
 		if(_xboxMedia.readRootSector(_isoHandle, _rootSector, _offset))
-		{
-			for(int i = 0; i < _xboxMedia.rootSize; i += fileInfo->getStructSize())
-			{
-				fileInfo = fileInfo->load(_rootSector+i);
-				_files.push_back(fileInfo);
-			}
-		}
+			walkFile(0); //Start reading the first file and let it recursively work from there
 	}
 	return _files;
+}
+
+/**
+ * walkFiles walks through all the files in the rootsector of this is.
+ * @param offset Where the file struct resides from the beginning of the rootsector
+ */
+void Iso::walkFile(uint offset)
+{
+	//Get a pointer to this file struct and set it in the list
+	XboxFileInfo *fileInfo = NULL;
+	fileInfo = fileInfo->load(_rootSector+offset);
+
+	//Wtf load failed, this iso is corrupt or my code sucks!
+	if(fileInfo == NULL)
+		return;
+
+	//Put it in the list
+	_files.push_back(fileInfo);
+
+	//Get the offsets for the other files
+	uint lOffset = fileInfo->getLOffset();
+	uint rOffset = fileInfo->getROffset();
+
+	//Read the other files
+	if(lOffset > 0)
+		walkFile(lOffset);
+	if(rOffset > 0)
+		walkFile(rOffset);
 }
 
 /**
