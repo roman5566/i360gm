@@ -35,9 +35,9 @@ QVariant IsoList::data(const QModelIndex& index, int role) const
 		case Qt::DisplayRole:
 			return _isos->at(index.row())->getField(index.column());
 		break;
-		case Qt::BackgroundRole:
-			return _isos->at(index.row())->getBackground(index.column());
-		break;
+		//case Qt::BackgroundRole:
+		//	return _isos->at(index.row())->getBackground(index.column());
+		//break;
 	}
 	return QVariant::Invalid;
 }

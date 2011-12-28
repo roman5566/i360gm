@@ -2,145 +2,158 @@
 
 Iso::Iso()
 {
-	_valid = NOTHING;
+	_rootSector = NULL;
+	cleanupIso();
 }
 
 Iso::~Iso()
 {
-	free(_rootSector);
+	cleanupIso();
 }
+
+/**
+ * cleanupIso cleans up all helper data for this class
+ */
+void Iso::cleanupIso()
+{
+
+	if(_isoHandle >= 0)        //If we had a valid iso, close it
+		_close(_isoHandle);
+
+	if(_rootSector != NULL)    //If we allocated resources, free it
+		free(_rootSector);
+
+	_rootSector = NULL;        //Set pointer to NULL
+	_isoHandle = -1;           //No iso handle on
+	_isValidMedia = _isValidXex = NULL;
+}
+
+/**
+ * getPath returns the current full path of this iso
+ * @return QString containing full path
+ */
 QString Iso::getPath()
 {
 	return _path;
 }
 
-void Iso::setPath(QString path)
+/**
+ * setPath sets the path where to find the iso. The argument needs to be absolute or relative path to the iso. Example: C:\test.iso
+ * @param path a QString containing the path
+ * @return If the file exists returns true, else false
+ */
+bool Iso::setPath(QString path)
 {
+	cleanupIso();
+
 	_path = path;
-	readXex();
+	
+	//Got an iso
+	_isoHandle = _open(_path.toStdString().c_str(), _O_RDONLY);
+	return (_isoHandle >= 0);
 }
 
+/**
+ * getIso returns the full name of the iso file (including .iso).
+ * @return Full iso name. Example: blablabla.iso
+ */
 QString Iso::getIso()
 {
 	return _path.split("/").back();
 }
 
-
-void Iso::readXex()
+/**
+ * isValidMedia returns true when the iso was a valid XDG2 or XDG3 disc.
+ * @return True on valid media, else false
+ */
+bool Iso::isValidMedia()
 {
-	XboxMedia xboxMedia;
-	uint offset = 0;
-	int iso = _open(_path.toStdString().c_str(), _O_RDONLY);
+	if(_isoHandle < 0)                                       //No file handle to iso, so just wtf dont call me!
+		return false;
 
-	if (iso < 0)
-		return; //Could not open the file
-
-
-	//Check if this is a xbox 360 media disk
-	if(!xboxMedia.isValidMedia(iso, offset))
+	if(_isValidMedia == NULL)
 	{
-			_valid = NO_MEDIA;                 //This is not a valid xbox disc
-			return;
-	}
-	
-	//We got valid media but its DAMN BIG!
-	if(xboxMedia.rootSize > MAX_SECTOR)
-		xboxMedia.rootSize = MAX_SECTOR;
-
-	//Read buffer
-	_rootSector = (char*)malloc(xboxMedia.rootSize*sizeof(char));
-	_lseeki64(iso, xboxMedia.getRootAddress(offset), SEEK_SET);
-	_read(iso, _rootSector, xboxMedia.rootSize);
-
-	//Default.xex info
-	unsigned __int64 xexAddress = NULL;
-	uint xexSize = NULL;
-
-	//Find default.xex
-	XboxFileInfo *fileInfo = NULL;
-	for(int i = 0; i < xboxMedia.rootSize; i += fileInfo->getStructSize())
-	{
-		fileInfo = fileInfo->load(_rootSector+i);
-		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
+		if(_xboxMedia.isValidMedia(_isoHandle, _offset))
 		{
-			xexAddress = fileInfo->getAddress(offset);
-			xexSize = fileInfo->size;
+			_isValidMedia = 1;
+			if(_xboxMedia.rootSize > MAX_SECTOR)             //It has a freaking big root sector, so truncate it and hope for the best
+				_xboxMedia.rootSize = MAX_SECTOR;
 		}
-		_files.push_back(fileInfo);
 	}
-
-	//Found default.xex entry, try to read it
-	if(xexAddress != NULL && xexSize > 24)
-	{
-		//Read magic bytes
-		uint magic;
-		_lseeki64(iso, xexAddress, SEEK_SET);
-		_read(iso, (char*)&magic, sizeof(uint));
-
-		//Check magic bytes
-		if(magic == XEX_MAGIC_BYTE)
-		{
-			//Seriusly good xex
-			_valid = GOOD;
-			return;
-		}
-		else
-		{
-			_valid = FALSE_XEX;
-			return;
-		}		
-	}
-	else
-	{
-		//Was not able to find the default.xex
-		_valid = NO_XEX;
-	}
-
-	//Cleanup
-	_close(iso);
+	return (_isValidMedia == 1);
 }
 
-vector<XboxFileInfo*> Iso::getFiles()
+/**
+ * getFiles returns a list of all files in the rootsector of the disc. (So path depth 1)
+ * @param refresh forces to reread all files 
+ * return vector of XboxFileInfo pointers
+ */
+vector<XboxFileInfo*> Iso::getFiles(bool refresh)
 {
+	if((refresh || _files.size() <= 0) && isValidMedia())
+	{
+		_files.clear();
+
+		XboxFileInfo *fileInfo = NULL;
+		_rootSector = (char*)malloc(_xboxMedia.rootSize*sizeof(char));
+		if(_xboxMedia.readRootSector(_isoHandle, _rootSector, _offset))
+		{
+			for(int i = 0; i < _xboxMedia.rootSize; i += fileInfo->getStructSize())
+			{
+				fileInfo = fileInfo->load(_rootSector+i);
+				_files.push_back(fileInfo);
+			}
+		}
+	}
 	return _files;
 }
 
-QBrush Iso::getBackground(int column)
+/**
+ * getFile returns a pointer to a XboxFileInfo struct for the file with name and length. If there was no such file it returns NULL.
+ * @param name contains the file name
+ * @param length length of the name
+ * @return XboxFileInfo struct containing information for that file
+ */
+XboxFileInfo* Iso::getFile(char* name, int length)
 {
-	/*
-	switch(column)
+	if(_files.size() <= 0)
+		getFiles();
+
+	XboxFileInfo *file;
+	for(int i = 0; i < _files.size(); i++)
 	{
-	case 2:
-		
-	default:
-		return QBrush();
-	}*/
-	QColor color = Qt::white;
-	switch(_valid)
-	{
-		case GOOD:
-			color = QColor::fromRgb(124, 197, 118);
-		break;
-		case NO_MEDIA:
-			color = QColor::fromRgb(237, 28, 36);
-		break;
-		case NO_XEX:
-			color = Qt::blue;
-		break;
-		case BIG_ROOT:
-			color = Qt::yellow;
-		break;
-		case NOTHING:
-			color = Qt::darkYellow;
-		break;
-		case FALSE_XEX:
-			color = Qt::darkMagenta;
-		break;
+		file = _files.at(i);
+		if(file->isEqual(name, length))
+			return file;
 	}
-	
-	return QBrush(color);
+	return NULL;
 }
 
+/**
+ * isDefaultXex check is this iso has a valid default xex (or if we can find the default.xex ;)).
+ * @return True is is has a valid default.xex, else false
+ */
+bool Iso::isDefaultXex()
+{
+	if(isValidMedia())
+	{
+		if(_isValidXex == NULL)
+		{
+			XboxFileInfo *defaultxex = getFile(XEX_FILE, XEX_FILE_SIZE);
+			if(defaultxex == NULL)
+				return false;                                              //We could not find the file...
+			if(defaultxex->isXex(_isoHandle, _offset))
+				_isValidXex = 1;
+		}
+	}
+	return (_isValidXex == 1);
+}
+
+/**
+ * getField returns data based on colum number, this is used for the ItemWidget of Qt
+ * @param column referencing to what colum we want the data
+ * @return QVariant containing data for that column
+ */
 QVariant Iso::getField(int column)
 {
 	switch(column)
@@ -150,7 +163,7 @@ QVariant Iso::getField(int column)
 	case 1:
 		return QString("b");
 	case 2:
-		return _valid;
+		return isDefaultXex();
 	case 3:
 		return getIso();
 	default:

@@ -47,10 +47,16 @@ typedef struct
 		return true;
 	}
 
-	void readMedia(int iso, uint offset = 0)
+	int readMedia(int iso, uint offset = 0)
 	{
 		_lseeki64(iso, GAME_SECTOR*SECTOR_SIZE+offset, SEEK_SET);
-		_read(iso, (char*)this, sizeof(XboxMedia));
+		return _read(iso, (char*)this, sizeof(XboxMedia));
+	}
+
+	int readRootSector(int iso, char* buffer, uint offset = 0)
+	{
+		_lseeki64(iso, getRootAddress(offset), SEEK_SET);
+		return _read(iso, buffer, rootSize);
 	}
 
 	bool isXboxMedia()
@@ -74,8 +80,14 @@ typedef struct XboxFileInfoStruct
 	uint size;
 	uchar type;
 	uchar length;
-	uchar name[MAX_PATH];		//This is nasty! But there is no other way.....
+	uchar name[MAX_PATH];		//This is nasty! But there is no other way i can think of...
 
+
+	XboxFileInfoStruct(char* _name, int _length)
+	{
+		memcpy((char*)name, _name, _length);
+		length = _length;
+	}
 
 	XboxFileInfoStruct* load(char *pointer)
 	{
@@ -85,6 +97,15 @@ typedef struct XboxFileInfoStruct
 	unsigned __int64 getAddress(uint offset)
 	{
 		return ((unsigned __int64)sector*SECTOR_SIZE)+offset;
+	}
+
+	bool isXex(int iso, uint offset)
+	{
+		uint magic;
+		_lseeki64(iso, getAddress(offset), SEEK_SET);
+		_read(iso, (char*)&magic, sizeof(uint));
+
+		return (magic == XEX_MAGIC_BYTE);
 	}
 
 	uint getStructSize()
@@ -105,11 +126,17 @@ typedef struct XboxFileInfoStruct
 		return structSize + padding;
 	}
 
+	friend bool operator==(const XboxFileInfoStruct &left, const XboxFileInfoStruct &right)
+	{
+		if(left.length == right.length)
+			return (_strnicmp((char*)left.name, (char*)right.name, left.length) == 0);
+		return false;
+	}
+
 	bool isEqual(char* _name, int _length)
 	{
 		if(length == _length)   //Speed up
-			if(_strnicmp((char*)name, _name, _length) == 0)
-				return true;
+			return (_strnicmp((char*)name, _name, _length) == 0);
 		return false;
 	}
 

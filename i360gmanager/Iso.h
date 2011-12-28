@@ -34,30 +34,35 @@ public:
 	Iso();
 	~Iso();
 
-	//Custom stuff
+	//Qt data passing
 	QVariant getField(int column);
-	QBrush getBackground(int column);
 	
-	//Set/Get
+	//Set and get functions
 	QString getPath();
-	void setPath(QString path);
-
-	//Fields
 	QString getIso();
+	bool setPath(QString path);
 
-	//Iso manip
-	void readXex();
-	vector<XboxFileInfo*> getFiles();
+	//Iso functions
+	bool isDefaultXex();
+	bool isValidMedia();
+	vector<XboxFileInfo*> getFiles(bool refresh = false);
+	XboxFileInfo* getFile(char* name, int length);
 
 private:
-	//Data
+	//Helper functions
+	void cleanupIso();
+
+	//Helper data
 	QString _path;
-
-	IsoCode _valid;
-
 	char* _rootSector;
 	vector<XboxFileInfo*> _files;
 
+	//Iso data
+	int _isoHandle;
+	char _isValidMedia;
+	char _isValidXex;
+	XboxMedia _xboxMedia;
+	uint _offset;
 };
 
 #endif
