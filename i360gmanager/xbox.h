@@ -1,6 +1,12 @@
 #ifndef XBOX_H
 #define XBOX_H
 
+#include <io.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
 #define SECTOR_SIZE 2048
 #define MAX_SECTOR 10240000
 #define GAME_SECTOR 32
@@ -15,6 +21,19 @@
 #ifndef MAX_PATH
 	#define MAX_PATH 255
 #endif
+
+#ifndef uchar
+	typedef unsigned char uchar;
+	typedef unsigned short ushort;
+	typedef unsigned int uint;
+	typedef unsigned long ulong;
+#endif
+
+#ifndef int64
+	typedef __int64 int64;
+	typedef unsigned __int64 uint64;
+#endif
+
 
 #pragma pack(1)
 typedef struct
@@ -52,10 +71,19 @@ typedef struct
 		return _read(iso, (char*)this, sizeof(XboxMedia));
 	}
 
-	int readRootSector(int iso, char* buffer, uint offset = 0)
+	int readRootSector(int iso, void *&buffer, uint offset = 0)
 	{
-		_lseeki64(iso, getRootAddress(offset), SEEK_SET);
-		return _read(iso, buffer, rootSize);
+		return readSector(iso, buffer, getRootAddress(offset), rootSize);
+	}
+
+	int readSector(int iso, void *&buffer, uint64 address, uint size)
+	{
+		if(size > MAX_SECTOR)
+			int i = 1;
+
+		buffer = malloc(size);
+		_lseeki64(iso, address, SEEK_SET);
+		return _read(iso, buffer, size);
 	}
 
 	bool isXboxMedia()
@@ -64,17 +92,17 @@ typedef struct
 		return (memcmp(magic, MEDIA_MAGIC_BYTE, MEDIA_MAGIC_BYTE_SIZE) == 0);
 	}
 
-	unsigned __int64 getRootAddress(uint video)
+	uint64 getRootAddress(uint video)
 	{
-		return ((unsigned __int64)rootSector*SECTOR_SIZE)+video;
+		return ((uint64)rootSector*SECTOR_SIZE)+video;
 	}
 
 } XboxMedia;
 
 typedef struct XboxFileInfoStruct
 {
-	short ltable;               //Left file offset from beginning of sector *4 to get address
-	short rtable;				//Same but then right file
+	ushort ltable;               //Left file offset from beginning of sector *4 to get address
+	ushort rtable;				//Same but then right file
 	uint sector;
 	uint size;
 	uchar type;
@@ -88,31 +116,31 @@ typedef struct XboxFileInfoStruct
 		length = _length;
 	}
 
-	XboxFileInfoStruct* load(char *pointer)
+	XboxFileInfoStruct* load(void *pointer)
 	{
 		return (XboxFileInfoStruct*)pointer;
 	}
 
 	uint getLOffset()
 	{
-		return ltable*TABLE_TO_ADDRESS;
+		return (uint)ltable*TABLE_TO_ADDRESS;
 	}
 
 	uint getROffset()
 	{
-		return rtable*TABLE_TO_ADDRESS;
+		return (uint)rtable*TABLE_TO_ADDRESS;
 	}
 
-	unsigned __int64 getAddress(uint offset)
+	uint64 getAddress(uint offset)
 	{
-		return ((unsigned __int64)sector*SECTOR_SIZE)+offset;
+		return ((uint64)sector*SECTOR_SIZE)+offset;
 	}
 
 	bool isXex(int iso, uint offset)
 	{
 		uint magic;
 		_lseeki64(iso, getAddress(offset), SEEK_SET);
-		_read(iso, (char*)&magic, sizeof(uint));
+		_read(iso, (void*)&magic, sizeof(uint));
 
 		return (magic == XEX_MAGIC_BYTE);
 	}

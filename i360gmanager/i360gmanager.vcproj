@@ -4,6 +4,7 @@
 	Version="9,00"
 	Name="i360gmanager"
 	ProjectGUID="{3E9F0E8D-079D-4A96-9082-F5857C58313B}"
+	RootNamespace="i360gmanager"
 	Keyword="Qt4VSv1.0"
 	TargetFrameworkVersion="0"
 	>
@@ -162,6 +163,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\FileNode.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\main.cpp"
 				>
 			</File>
@@ -175,6 +180,10 @@
 			Filter="h"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath=".\FileNode.h"
+				>
+			</File>
 			<File
 				RelativePath=".\uiMain.h"
 				>

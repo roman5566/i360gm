@@ -9,25 +9,15 @@
 #include <QBool>
 #include <QBrush>
 
-#include <io.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-#include <string.h>
 #include "xbox.h"
+#include "FileNode.h"
 
+#include <vector>
+#include <map>
+
+using std::map;
 using std::vector;
 
-enum IsoCode
-{
-	BIG_ROOT,
-	NOTHING,
-	NO_XEX,
-	NO_MEDIA,
-	GOOD,
-	FALSE_XEX
-};
 class Iso
 {
 public:
@@ -47,22 +37,26 @@ public:
 	bool isValidMedia();
 	vector<XboxFileInfo*> getFiles(bool refresh = false);
 	XboxFileInfo* getFile(char* name, int length);
+	
 
 private:
 	//Helper functions
 	void cleanupIso();
 	void walkFile(uint offset);
+	void makeTree(void *sector, uint offset, FileNode *&node);
 
 	//Helper data
 	QString _path;
-	char* _rootSector;
+	map<XboxFileInfo*, void*> _sectors;
 	vector<XboxFileInfo*> _files;
+	FileNode *_rootFile;
 
 	//Iso data
 	int _isoHandle;
 	char _isValidMedia;
 	char _isValidXex;
 	XboxMedia _xboxMedia;
+	XboxFileInfo *_defaultXex;
 	uint _offset;
 };
 

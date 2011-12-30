@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1038</width>
-    <height>629</height>
+    <height>848</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,7 +20,7 @@
       <x>10</x>
       <y>10</y>
       <width>641</width>
-      <height>611</height>
+      <height>511</height>
      </rect>
     </property>
     <property name="verticalScrollBarPolicy">
@@ -66,7 +66,7 @@
       <x>660</x>
       <y>10</y>
       <width>371</width>
-      <height>611</height>
+      <height>511</height>
      </rect>
     </property>
     <property name="editTriggers">
@@ -80,6 +80,16 @@
     </property>
     <property name="selectionBehavior">
      <enum>QAbstractItemView::SelectRows</enum>
+    </property>
+   </widget>
+   <widget class="QTextEdit" name="textEdit">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>530</y>
+      <width>1021</width>
+      <height>311</height>
+     </rect>
     </property>
    </widget>
   </widget>
