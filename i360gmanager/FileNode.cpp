@@ -2,19 +2,13 @@
 
 FileNode::FileNode()
 {
-	FileNode(NULL);
 }
 
 FileNode::FileNode(XboxFileInfo *file)
 {
-	FileNode(file, NULL, NULL);
-}
-
-FileNode::FileNode(XboxFileInfo *file, FileNode *left, FileNode *right)
-{
 	this->file = file;
-	this->left = left;
-	this->right = right;
+	this->left = NULL;
+	this->right = NULL;
 	this->dir = NULL;
 }
 
@@ -29,4 +23,43 @@ uint FileNode::getNodesNo(FileNode *node)
 		nodes += getNodesNo(node->right);  //Count right node
 		return nodes;
 	}
+}
+
+XboxFileInfo *FileNode::getXboxByName(FileNode *node, char *name, uint length)
+{
+	return getNodeByName(node, name, length)->file;
+}
+
+FileNode *FileNode::getNodeByName(FileNode *node, char *name, uint length)
+{
+	if(node == NULL)
+		return NULL;
+
+	XboxFileInfo *file = node->file;
+	uint cLength = length;
+
+	if(cLength > file->length) cLength = file->length; //Posible bufferoverflow fix
+
+	int cmp = _strnicmp((char*)file->name, name, cLength);
+	if(cmp == 0)
+		return node;
+	if(cmp > 0 )
+		return getNodeByName(node->right, name, length);
+	else
+		return getNodeByName(node->left, name, length);
+}
+
+bool FileNode::isDir()
+{
+	return (dir != NULL);
+}
+
+bool FileNode::hasLeft()
+{
+	return (left != NULL);
+}
+
+bool FileNode::hasRight()
+{
+	return (right != NULL);
 }

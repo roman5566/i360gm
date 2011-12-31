@@ -12,6 +12,8 @@
 #include "xbox.h"
 #include "FileNode.h"
 
+#include <time.h>
+
 #include <vector>
 #include <map>
 
@@ -31,13 +33,12 @@ public:
 	QString getPath();
 	QString getIso();
 	bool setPath(QString path);
+	FileNode* getRootNode();
 
 	//Iso functions
 	bool isDefaultXex();
 	bool isValidMedia();
-	vector<XboxFileInfo*> getFiles(bool refresh = false);
 	XboxFileInfo* getFile(char* name, int length);
-	
 
 private:
 	//Helper functions
@@ -48,7 +49,6 @@ private:
 	//Helper data
 	QString _path;
 	map<XboxFileInfo*, void*> _sectors;
-	vector<XboxFileInfo*> _files;
 	FileNode *_rootFile;
 
 	//Iso data
@@ -58,6 +58,14 @@ private:
 	XboxMedia _xboxMedia;
 	XboxFileInfo *_defaultXex;
 	uint _offset;
+
+	//Timing system
+	long s;
+	void startTime(){ s = clock();}
+	long stopTime(){ return clock()-s;}
+
+	long _binTree;
+	long _fileNo;
 };
 
 #endif

@@ -27,6 +27,7 @@ void Iso::cleanupIso()
 	_sectors[0] = NULL;        //Set pointer to NULL
 	_isoHandle = -1;           //No iso handle on
 	_isValidMedia = _isValidXex = NULL;
+	_defaultXex = NULL;
 }
 
 /**
@@ -51,7 +52,7 @@ bool Iso::setPath(QString path)
 	
 	//Got an iso
 	_isoHandle = _open(_path.toStdString().c_str(), _O_BINARY | _O_RDONLY);
-	return (_isoHandle >= 0);
+	return (_isoHandle >= 0 && isValidMedia());
 }
 
 /**
@@ -79,49 +80,61 @@ bool Iso::isValidMedia()
 			_isValidMedia = 1;
 			if(_xboxMedia.rootSize > MAX_SECTOR)             //It has a freaking big root sector, so truncate it and hope for the best
 				_xboxMedia.rootSize = MAX_SECTOR;
+
+			getRootNode();                                   //Do a full index
 		}
 	}
 	return (_isValidMedia == 1);
 }
 
-/**
- * getFiles returns a list of all files in the rootsector of the disc. (So path depth 1)
- * @param refresh forces to reread all files 
- * return vector of XboxFileInfo pointers
- */
-vector<XboxFileInfo*> Iso::getFiles(bool refresh)
-{
-	if((refresh || _files.size() <= 0) && isValidMedia())
-	{
-		_files.clear();
 
-		XboxFileInfo *fileInfo = NULL;
+/**
+ * getRootNode returns the root element of the binary tree of the file structure
+ * @return a pointer to the root element
+ */
+FileNode* Iso::getRootNode()
+{
+	if(_rootFile == NULL) //Caching system
+	{
 		if(_xboxMedia.readRootSector(_isoHandle, _sectors[0], _offset))
 		{
-			walkFile(0); //Start reading the first file and let it recursively work from there
+			_fileNo = 0;
+			startTime();
 			makeTree(_sectors[0], 0, _rootFile);
+			_binTree = stopTime();
 		}
 	}
-	return _files;
+
+	return _rootFile;
 }
 
+/**
+ * makeTree walks the complete iso in a binary tree and recreates the complete file structure.
+ * @param sector address that points to the data of the sector we searching in
+ * @param offset the offset to read the file info from
+ * @param node the node to add the info to
+ */
 void Iso::makeTree(void *sector, uint offset, FileNode *&node)
 {
-	node = new FileNode();
 	XboxFileInfo *fileInfo = NULL;
-	fileInfo = fileInfo->load((void*)((uint)sector+offset));
+	fileInfo = XboxFileInfo::load((void*)((uint)sector+offset));
 	
 	if(fileInfo == NULL)                                           //Wtf load failed, this iso is corrupt or my code sucks!
 		return;
 
-	node->file = fileInfo;
+	node = new FileNode(fileInfo);
 	uint lOffset = fileInfo->getLOffset();
 	uint rOffset = fileInfo->getROffset();
+	_fileNo++;
+
+	if(_defaultXex == NULL)                                        //While we at it, find default.xex
+		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
+			_defaultXex = fileInfo;
 
 	if((node->file->type & 16) != 0 && fileInfo->size > 0)         //This is a directory, read the sector and begin
 	{
 		if(_sectors[fileInfo] == NULL)                             //Read the directory sector and jump to that sector
-			_xboxMedia.readSector(_isoHandle, _sectors[fileInfo], fileInfo->getAddress(_offset), fileInfo->size);
+			XboxMedia::readSector(_isoHandle, _sectors[fileInfo], fileInfo->getAddress(_offset), fileInfo->size);
 
 		if(_sectors[fileInfo] != NULL)                             //Sanity check for allocation
 			makeTree(_sectors[fileInfo], 0, node->dir);
@@ -132,34 +145,6 @@ void Iso::makeTree(void *sector, uint offset, FileNode *&node)
 	if(rOffset > 0)
 		makeTree(sector, rOffset, node->right);
 }
-/**
- * walkFiles walks through all the files in the rootsector of this iso.
- * @param offset Where the file struct resides from the beginning of the rootsector
- */
-void Iso::walkFile(uint offset)
-{
-	//Get a pointer to this file struct and set it in the list
-	XboxFileInfo *fileInfo = NULL;
-	fileInfo = fileInfo->load((void*)((uint)_sectors[0]+offset));
-
-	//Wtf load failed, this iso is corrupt or my code sucks!
-
-	if(fileInfo == NULL)
-		return;
-
-	//Put it in the list
-	_files.push_back(fileInfo);
-
-	//Get the offsets for the other files
-	uint lOffset = fileInfo->getLOffset();
-	uint rOffset = fileInfo->getROffset();
-
-	//Read the other files
-	if(lOffset > 0)
-		walkFile(lOffset);
-	if(rOffset > 0)
-		walkFile(rOffset);
-}
 
 /**
  * getFile returns a pointer to a XboxFileInfo struct for the file with name and length. If there was no such file it returns NULL.
@@ -169,17 +154,7 @@ void Iso::walkFile(uint offset)
  */
 XboxFileInfo* Iso::getFile(char* name, int length)
 {
-	if(_files.size() <= 0)
-		getFiles();
-
-	XboxFileInfo *file;
-	for(int i = 0; i < _files.size(); i++)
-	{
-		file = _files.at(i);
-		if(file->isEqual(name, length))
-			return file;
-	}
-	return NULL;
+	return FileNode::getXboxByName(getRootNode(), name, length);
 }
 
 /**
@@ -190,7 +165,6 @@ bool Iso::isDefaultXex()
 {
 	if(_isValidXex == NULL)
 	{
-		_defaultXex = getFile(XEX_FILE, XEX_FILE_SIZE);
 		if(_defaultXex == NULL)
 			return false;                                              //We could not find the file...
 		if(_defaultXex->isXex(_isoHandle, _offset))
@@ -210,13 +184,15 @@ QVariant Iso::getField(int column)
 	switch(column)
 	{
 	case 0:
-		return QString("a");
+		return _binTree;
 	case 1:
-		return QString("b");
+		return _fileNo;
 	case 2:
-		return isDefaultXex();
+		return QVariant();
 	case 3:
 		return getIso();
+	case 4:
+		return isDefaultXex();
 	default:
 		return QVariant();
 	}

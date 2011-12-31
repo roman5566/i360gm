@@ -275,6 +275,10 @@
 					/>
 				</FileConfiguration>
 			</File>
+			<File
+				RelativePath=".\i360gmanager.rc"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Generated Files"

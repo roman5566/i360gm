@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1038</width>
-    <height>848</height>
+    <width>1152</width>
+    <height>558</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Main</string>
+   <string>360 Game Manger</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <widget class="QTableView" name="tableView">
@@ -19,7 +19,7 @@
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>641</width>
+      <width>521</width>
       <height>511</height>
      </rect>
     </property>
@@ -60,12 +60,12 @@
      <number>20</number>
     </attribute>
    </widget>
-   <widget class="QListWidget" name="listWidget">
+   <widget class="QTreeWidget" name="treeWidget">
     <property name="geometry">
      <rect>
-      <x>660</x>
+      <x>540</x>
       <y>10</y>
-      <width>371</width>
+      <width>601</width>
       <height>511</height>
      </rect>
     </property>
@@ -78,18 +78,62 @@
     <property name="alternatingRowColors">
      <bool>true</bool>
     </property>
-    <property name="selectionBehavior">
-     <enum>QAbstractItemView::SelectRows</enum>
+    <property name="uniformRowHeights">
+     <bool>true</bool>
     </property>
+    <property name="animated">
+     <bool>false</bool>
+    </property>
+    <attribute name="headerCascadingSectionResizes">
+     <bool>false</bool>
+    </attribute>
+    <attribute name="headerDefaultSectionSize">
+     <number>75</number>
+    </attribute>
+    <attribute name="headerStretchLastSection">
+     <bool>false</bool>
+    </attribute>
+    <column>
+     <property name="text">
+      <string>File</string>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>Attrib</string>
+     </property>
+     <property name="textAlignment">
+      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>Size</string>
+     </property>
+     <property name="textAlignment">
+      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>Sector</string>
+     </property>
+     <property name="textAlignment">
+      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+     </property>
+    </column>
    </widget>
-   <widget class="QTextEdit" name="textEdit">
+   <widget class="QPushButton" name="pushButton">
     <property name="geometry">
      <rect>
       <x>10</x>
       <y>530</y>
-      <width>1021</width>
-      <height>311</height>
+      <width>75</width>
+      <height>23</height>
      </rect>
+    </property>
+    <property name="text">
+     <string>Dump dot file</string>
     </property>
    </widget>
   </widget>

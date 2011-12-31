@@ -19,13 +19,16 @@ public:
 	~Main();
 
 
-	//
+	void addTreeToWidget(QTreeWidgetItem *&parent, FileNode *&node);
 	void refreshDir(QString directory);
 
 	public slots:
 		void slotOnClickList(const QModelIndex &current, const QModelIndex &previous);
+		void dumpDot();
 
 private:
+	void walkDot(QString &trace, FileNode *&node);
+
 	IsoList *_model;
 	Ui::MainClass ui;
 	vector<Iso*> _isos;

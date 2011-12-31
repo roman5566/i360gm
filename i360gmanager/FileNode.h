@@ -13,8 +13,16 @@ class FileNode
 
 		FileNode();
 		FileNode(XboxFileInfo *file);
-		FileNode(XboxFileInfo *file, FileNode *left, FileNode *right);
-		uint getNodesNo(FileNode *node);
+
+		//General functions
+		static uint getNodesNo(FileNode *node);
+		static FileNode *getNodeByName(FileNode *node, char *name, uint length);
+		static XboxFileInfo *getXboxByName(FileNode *node, char *name, uint length);
+
+		//Traversing
+		bool isDir();
+		bool hasLeft();
+		bool hasRight();
 
 };
 

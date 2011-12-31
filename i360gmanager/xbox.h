@@ -76,11 +76,8 @@ typedef struct
 		return readSector(iso, buffer, getRootAddress(offset), rootSize);
 	}
 
-	int readSector(int iso, void *&buffer, uint64 address, uint size)
+	static int readSector(int iso, void *&buffer, uint64 address, uint size)
 	{
-		if(size > MAX_SECTOR)
-			int i = 1;
-
 		buffer = malloc(size);
 		_lseeki64(iso, address, SEEK_SET);
 		return _read(iso, buffer, size);
@@ -116,7 +113,7 @@ typedef struct XboxFileInfoStruct
 		length = _length;
 	}
 
-	XboxFileInfoStruct* load(void *pointer)
+	static XboxFileInfoStruct* load(void *pointer)
 	{
 		return (XboxFileInfoStruct*)pointer;
 	}
@@ -163,6 +160,7 @@ typedef struct XboxFileInfoStruct
 			return (_strnicmp((char*)name, _name, _length) == 0);
 		return false;
 	}
+
 
 } XboxFileInfo;
 #pragma pack()

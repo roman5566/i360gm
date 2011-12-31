@@ -2,10 +2,11 @@
 
 IsoList::IsoList() : QAbstractTableModel()
 {
-	_header.push_back(QString("Icon"));    //1
-	_header.push_back(QString("Title"));   //2
-	_header.push_back(QString("MediaID")); //3
-	_header.push_back(QString("Iso"));    //4
+	_header.push_back(QString("Icon"));          //0
+	_header.push_back(QString("Title"));         //1
+	_header.push_back(QString("MediaID"));       //2
+	_header.push_back(QString("Iso"));           //3
+	_header.push_back(QString("Defaul.xex"));    //4
 }
 
 void IsoList::setIsos(vector<Iso*> *isos)
