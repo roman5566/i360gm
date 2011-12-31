@@ -19,12 +19,17 @@ public:
 	~Main();
 
 
+	Ui::MainClass *getUi(){return &ui;}
 	void addTreeToWidget(QTreeWidgetItem *&parent, FileNode *&node);
 	void refreshDir(QString directory);
+
+	//Data
+	uint pValue;
 
 	public slots:
 		void slotOnClickList(const QModelIndex &current, const QModelIndex &previous);
 		void dumpDot();
+		void extractIso();
 
 private:
 	void walkDot(QString &trace, FileNode *&node);
@@ -32,6 +37,8 @@ private:
 	IsoList *_model;
 	Ui::MainClass ui;
 	vector<Iso*> _isos;
-};
 
+
+};
+extern Main *mainClass;
 #endif // UIMAIN_H

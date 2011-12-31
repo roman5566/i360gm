@@ -34,6 +34,15 @@
 	typedef unsigned __int64 uint64;
 #endif
 
+#ifndef HANDLE
+	typedef void *HANDLE;
+#endif
+
+#ifndef LODWORD
+	#define LODWORD(l)           ((DWORD)(l & 0xffffffff))
+	#define HIDWORD(l)           ((DWORD)((l >> 32) & 0xffffffff))
+	#define MAKEQWORD(a, b)      (((uint64)(a & 0xffffffff)) | (((uint64)(b & 0xffffffff)) << 32))
+#endif
 
 #pragma pack(1)
 typedef struct

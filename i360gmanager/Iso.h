@@ -20,6 +20,8 @@
 using std::map;
 using std::vector;
 
+typedef void (*extractCallback)(uint bytesWritten);
+
 class Iso
 {
 public:
@@ -32,6 +34,7 @@ public:
 	//Set and get functions
 	QString getPath();
 	QString getIso();
+	uint getFileNo();
 	bool setPath(QString path);
 	FileNode* getRootNode();
 
@@ -39,12 +42,15 @@ public:
 	bool isDefaultXex();
 	bool isValidMedia();
 	XboxFileInfo* getFile(char* name, int length);
+	void extractIso(QString output, extractCallback cb);
+	
 
 private:
 	//Helper functions
 	void cleanupIso();
 	void walkFile(uint offset);
 	void makeTree(void *sector, uint offset, FileNode *&node);
+	void extractFile(QString output, FileNode *node, HANDLE isoMap, extractCallback cb);
 
 	//Helper data
 	QString _path;

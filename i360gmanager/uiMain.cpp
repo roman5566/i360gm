@@ -19,6 +19,7 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	//Create connections
 	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
 	connect(ui.pushButton, SIGNAL(clicked()), this, SLOT(dumpDot()));
+	connect(ui.pushButton_2, SIGNAL(clicked()), this, SLOT(extractIso()));
 }
 
 void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previous)
@@ -35,6 +36,31 @@ void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previo
 	addTreeToWidget(parent, root);
 
 	this->ui.treeWidget->addTopLevelItem(parent);
+}
+
+void progressInc(uint bytesWritten)
+{
+	mainClass->pValue++;
+	mainClass->getUi()->progressBar->setValue(mainClass->pValue);
+}
+
+void Main::extractIso()
+{
+	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
+	if(iso == NULL)
+		return;
+
+	pValue = 0;
+	ui.progressBar->setMaximum(iso->getFileNo());
+
+	
+
+	QString file = iso->getIso();
+	file.chop(4);
+	QString p = "C://iso/";
+	p.append(file);
+
+	iso->extractIso(p, (extractCallback)&progressInc);
 }
 
 void Main::walkDot(QString &trace, FileNode *&node)

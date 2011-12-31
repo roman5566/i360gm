@@ -1,3 +1,4 @@
+#include <Windows.h>
 #include "Iso.h"
 
 Iso::Iso()
@@ -28,6 +29,70 @@ void Iso::cleanupIso()
 	_isoHandle = -1;           //No iso handle on
 	_isValidMedia = _isValidXex = NULL;
 	_defaultXex = NULL;
+}
+
+void Iso::extractIso(QString output, extractCallback cb)
+{
+	//Map the whole iso in memory
+	DWORD high, low;
+	HANDLE isoFile = CreateFile(getPath().toStdWString().c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
+	low = GetFileSize(isoFile, &high);
+	HANDLE isoMap = CreateFileMapping(isoFile, NULL, PAGE_READONLY, high, low, NULL);
+
+	//Start extracting everyfile
+	CreateDirectory(output.toStdWString().c_str(), NULL);
+	extractFile(output, _rootFile, isoMap, cb);
+
+	//Cleanup
+	CloseHandle(isoMap);
+}
+
+
+
+void Iso::extractFile(QString output, FileNode *node, HANDLE isoMap, extractCallback cb)
+{
+	QString path(output);
+	path.append("/").append(QString::fromAscii((const char*)node->file->name, node->file->length));
+
+	if(node->isDir())
+	{
+		//We are a directory so just make this dir and continue
+		CreateDirectory(path.toStdWString().c_str(), NULL);
+		cb(0);
+		extractFile(path, node->dir, isoMap, cb);
+	}
+	else
+	{
+		SYSTEM_INFO info;
+		GetSystemInfo(&info);
+		//We are a normal file... so first map it then write it
+		uint64 addy = node->file->getAddress(_offset);
+		uint offset = addy % info.dwAllocationGranularity;
+		addy -= offset;
+		DWORD high = HIDWORD(addy);
+		DWORD low = LODWORD(addy);
+
+		void *isoData = MapViewOfFile(isoMap, FILE_MAP_READ, high, low, node->file->size+offset);
+		DWORD err = GetLastError();
+
+		DWORD bytes;
+		HANDLE file = CreateFile(path.toStdWString().c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, NULL, NULL);
+		WriteFile(file, (void*)((char*)isoData+offset), node->file->size, &bytes, NULL);
+		cb(bytes);
+		CloseHandle(file);
+
+		UnmapViewOfFile(isoData);
+	}
+
+	if(node->hasLeft())
+		extractFile(output, node->left, isoMap, cb);
+	if(node->hasRight())
+		extractFile(output, node->right, isoMap, cb);
+}
+
+uint Iso::getFileNo()
+{
+	return _fileNo;
 }
 
 /**
