@@ -8,7 +8,9 @@
 #include <QFile>
 #include <QBool>
 #include <QBrush>
-
+#include <QThread>
+#include <QTreeWidgetItem>
+#include <QMutex>
 #include "xbox.h"
 #include "FileNode.h"
 
@@ -20,10 +22,13 @@
 using std::map;
 using std::vector;
 
-typedef void (*extractCallback)(uint bytesWritten);
+//Mutex
+extern QMutex mTreeWidget;
 
-class Iso
+class Iso  : public QObject
 {
+	Q_OBJECT
+
 public:
 	Iso();
 	~Iso();
@@ -34,25 +39,33 @@ public:
 	//Set and get functions
 	QString getPath();
 	QString getIso();
+	QString getShortIso();
 	uint getFileNo();
-	bool setPath(QString path);
 	FileNode* getRootNode();
 
 	//Iso functions
 	bool isDefaultXex();
 	bool isValidMedia();
 	XboxFileInfo* getFile(char* name, int length);
-	void extractIso(QString output, extractCallback cb);
 	
+public slots:
+	bool setPath(QString path);
+	void extractIso(QString output);
+
+signals:
+	void doIsoExtracted(Iso *iso);
+	void doFileExtracted(QString name, uint size);
+
 
 private:
 	//Helper functions
 	void cleanupIso();
 	void walkFile(uint offset);
 	void makeTree(void *sector, uint offset, FileNode *&node);
-	void extractFile(QString output, FileNode *node, HANDLE isoMap, extractCallback cb);
+	void extractFile(QString output, FileNode *node, HANDLE isoMap);
 
 	//Helper data
+	QThread *_thread;
 	QString _path;
 	map<XboxFileInfo*, void*> _sectors;
 	FileNode *_rootFile;

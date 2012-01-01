@@ -20,19 +20,27 @@ public:
 
 
 	Ui::MainClass *getUi(){return &ui;}
-	void addTreeToWidget(QTreeWidgetItem *&parent, FileNode *&node);
 	void refreshDir(QString directory);
 
 	//Data
-	uint pValue;
+	signals:
 
 	public slots:
 		void slotOnClickList(const QModelIndex &current, const QModelIndex &previous);
-		void dumpDot();
+		void saveDot();
 		void extractIso();
+
+		//Extraction
+		void fileExtracted(QString name, uint size);
+		void isoExtracted(Iso *iso);
 
 private:
 	void walkDot(QString &trace, FileNode *&node);
+	void addLog(QString log);
+	uint64 addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node);
+
+	//Helper functions
+	QString getHumenSize(uint64 size);
 
 	IsoList *_model;
 	Ui::MainClass ui;
@@ -40,5 +48,4 @@ private:
 
 
 };
-extern Main *mainClass;
 #endif // UIMAIN_H

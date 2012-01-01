@@ -1,3 +1,4 @@
+#include <Windows.h>
 #include "FileNode.h"
 
 FileNode::FileNode()
@@ -10,6 +11,31 @@ FileNode::FileNode(XboxFileInfo *file)
 	this->left = NULL;
 	this->right = NULL;
 	this->dir = NULL;
+}
+
+uint FileNode::extractFile(HANDLE isoMap, const wchar_t *path, uint offset)
+{
+	//Get alignment
+	SYSTEM_INFO info;
+	GetSystemInfo(&info);
+
+	//Get the closest correct aligned address
+	DWORD bytes;
+	uint64 address = file->getAddress(offset);
+	uint offsetAddress = address % info.dwAllocationGranularity;
+	address -= offsetAddress;
+	DWORD high = HIDWORD(address);
+	DWORD low = LODWORD(address);
+	
+	//Get data pointer
+	void *isoData = MapViewOfFile(isoMap, FILE_MAP_READ, high, low, file->size+offsetAddress);
+	HANDLE fileOut = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, NULL, NULL);
+	WriteFile(fileOut, (void*)((char*)isoData+offsetAddress), file->size, &bytes, NULL);
+
+	//Cleanup
+	CloseHandle(fileOut);
+	UnmapViewOfFile(isoData);
+	return bytes;
 }
 
 uint FileNode::getNodesNo(FileNode *node)

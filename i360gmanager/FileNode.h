@@ -19,6 +19,9 @@ class FileNode
 		static FileNode *getNodeByName(FileNode *node, char *name, uint length);
 		static XboxFileInfo *getXboxByName(FileNode *node, char *name, uint length);
 
+		//Special functions
+		uint extractFile(HANDLE isoMap, const wchar_t *path, uint offset);
+
 		//Traversing
 		bool isDir();
 		bool hasLeft();

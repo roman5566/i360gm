@@ -6,166 +6,307 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1152</width>
-    <height>558</height>
+    <width>946</width>
+    <height>796</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>360 Game Manger</string>
   </property>
   <widget class="QWidget" name="centralWidget">
-   <widget class="QTableView" name="tableView">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>10</y>
-      <width>521</width>
-      <height>511</height>
-     </rect>
-    </property>
-    <property name="verticalScrollBarPolicy">
-     <enum>Qt::ScrollBarAsNeeded</enum>
-    </property>
-    <property name="horizontalScrollBarPolicy">
-     <enum>Qt::ScrollBarAlwaysOff</enum>
-    </property>
-    <property name="editTriggers">
-     <set>QAbstractItemView::NoEditTriggers</set>
-    </property>
-    <property name="showDropIndicator" stdset="0">
-     <bool>false</bool>
-    </property>
-    <property name="dragDropOverwriteMode">
-     <bool>false</bool>
-    </property>
-    <property name="alternatingRowColors">
-     <bool>true</bool>
-    </property>
-    <property name="selectionMode">
-     <enum>QAbstractItemView::SingleSelection</enum>
-    </property>
-    <property name="selectionBehavior">
-     <enum>QAbstractItemView::SelectRows</enum>
-    </property>
-    <property name="wordWrap">
-     <bool>false</bool>
-    </property>
-    <attribute name="horizontalHeaderHighlightSections">
-     <bool>false</bool>
-    </attribute>
-    <attribute name="verticalHeaderVisible">
-     <bool>false</bool>
-    </attribute>
-    <attribute name="verticalHeaderDefaultSectionSize">
-     <number>20</number>
-    </attribute>
-   </widget>
-   <widget class="QTreeWidget" name="treeWidget">
-    <property name="geometry">
-     <rect>
-      <x>540</x>
-      <y>10</y>
-      <width>601</width>
-      <height>511</height>
-     </rect>
-    </property>
-    <property name="editTriggers">
-     <set>QAbstractItemView::NoEditTriggers</set>
-    </property>
-    <property name="showDropIndicator" stdset="0">
-     <bool>false</bool>
-    </property>
-    <property name="alternatingRowColors">
-     <bool>true</bool>
-    </property>
-    <property name="uniformRowHeights">
-     <bool>true</bool>
-    </property>
-    <property name="animated">
-     <bool>false</bool>
-    </property>
-    <attribute name="headerCascadingSectionResizes">
-     <bool>false</bool>
-    </attribute>
-    <attribute name="headerDefaultSectionSize">
-     <number>75</number>
-    </attribute>
-    <attribute name="headerStretchLastSection">
-     <bool>false</bool>
-    </attribute>
-    <column>
-     <property name="text">
-      <string>File</string>
-     </property>
-    </column>
-    <column>
-     <property name="text">
-      <string>Attrib</string>
-     </property>
-     <property name="textAlignment">
-      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
-     </property>
-    </column>
-    <column>
-     <property name="text">
-      <string>Size</string>
-     </property>
-     <property name="textAlignment">
-      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
-     </property>
-    </column>
-    <column>
-     <property name="text">
-      <string>Sector</string>
-     </property>
-     <property name="textAlignment">
-      <set>AlignHCenter|AlignVCenter|AlignCenter</set>
-     </property>
-    </column>
-   </widget>
-   <widget class="QPushButton" name="pushButton">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>530</y>
-      <width>75</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Dump dot file</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="pushButton_2">
-    <property name="geometry">
-     <rect>
-      <x>90</x>
-      <y>530</y>
-      <width>75</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Extract Iso</string>
-    </property>
-   </widget>
-   <widget class="QProgressBar" name="progressBar">
-    <property name="geometry">
-     <rect>
-      <x>170</x>
-      <y>530</y>
-      <width>361</width>
-      <height>23</height>
-     </rect>
-    </property>
-    <property name="value">
+   <layout class="QVBoxLayout" name="verticalLayout_3">
+    <property name="spacing">
      <number>0</number>
     </property>
-    <property name="textVisible">
-     <bool>false</bool>
+    <property name="margin">
+     <number>0</number>
     </property>
+    <item>
+     <widget class="QTableView" name="tableView">
+      <property name="verticalScrollBarPolicy">
+       <enum>Qt::ScrollBarAsNeeded</enum>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+      <property name="showDropIndicator" stdset="0">
+       <bool>false</bool>
+      </property>
+      <property name="dragDropOverwriteMode">
+       <bool>false</bool>
+      </property>
+      <property name="alternatingRowColors">
+       <bool>true</bool>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+      <property name="selectionBehavior">
+       <enum>QAbstractItemView::SelectRows</enum>
+      </property>
+      <property name="wordWrap">
+       <bool>false</bool>
+      </property>
+      <attribute name="horizontalHeaderHighlightSections">
+       <bool>false</bool>
+      </attribute>
+      <attribute name="verticalHeaderVisible">
+       <bool>false</bool>
+      </attribute>
+      <attribute name="verticalHeaderDefaultSectionSize">
+       <number>20</number>
+      </attribute>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QDockWidget" name="DockFileExplorer">
+   <property name="windowTitle">
+    <string>File explore</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_4">
+    <layout class="QVBoxLayout" name="verticalLayout">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="margin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QTreeWidget" name="treeWidget">
+       <property name="editTriggers">
+        <set>QAbstractItemView::NoEditTriggers</set>
+       </property>
+       <property name="showDropIndicator" stdset="0">
+        <bool>false</bool>
+       </property>
+       <property name="alternatingRowColors">
+        <bool>true</bool>
+       </property>
+       <property name="uniformRowHeights">
+        <bool>true</bool>
+       </property>
+       <property name="animated">
+        <bool>false</bool>
+       </property>
+       <attribute name="headerCascadingSectionResizes">
+        <bool>false</bool>
+       </attribute>
+       <attribute name="headerDefaultSectionSize">
+        <number>75</number>
+       </attribute>
+       <attribute name="headerStretchLastSection">
+        <bool>false</bool>
+       </attribute>
+       <column>
+        <property name="text">
+         <string>File</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Attrib</string>
+        </property>
+        <property name="textAlignment">
+         <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Size</string>
+        </property>
+        <property name="textAlignment">
+         <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Sector</string>
+        </property>
+        <property name="textAlignment">
+         <set>AlignHCenter|AlignVCenter|AlignCenter</set>
+        </property>
+       </column>
+      </widget>
+     </item>
+    </layout>
    </widget>
   </widget>
+  <widget class="QDockWidget" name="DockLog">
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="contextMenuPolicy">
+    <enum>Qt::DefaultContextMenu</enum>
+   </property>
+   <property name="styleSheet">
+    <string notr="true"/>
+   </property>
+   <property name="windowTitle">
+    <string>Log window</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_5">
+    <property name="styleSheet">
+     <string notr="true"/>
+    </property>
+    <layout class="QVBoxLayout" name="verticalLayout_2">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="margin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QPlainTextEdit" name="textLog">
+       <property name="styleSheet">
+        <string notr="true">QPlainTextEdit
+{
+	margin: 0px;
+  padding: 0px;
+}</string>
+       </property>
+       <property name="textInteractionFlags">
+        <set>Qt::NoTextInteraction</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>946</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionExtractIso"/>
+    <addaction name="actionSaveDot"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>View</string>
+    </property>
+    <addaction name="actionFileExplorer"/>
+    <addaction name="actionLogWindow"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuView"/>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <widget class="QDockWidget" name="DockProgress">
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
+   <property name="sizePolicy">
+    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+     <horstretch>0</horstretch>
+     <verstretch>0</verstretch>
+    </sizepolicy>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>524287</width>
+     <height>22</height>
+    </size>
+   </property>
+   <property name="styleSheet">
+    <string notr="true"> QDockWidget::title {
+	margin: -100px;
+ }
+
+ QDockWidget::close-button, QDockWidget::float-button {
+     border: 0px solid transparent;
+     background: darkgray;
+     padding: 0px;
+ }
+
+ QDockWidget {
+     titlebar-close-icon: url(close.png);
+     titlebar-normal-icon: url(undock.png);
+ }
+</string>
+   </property>
+   <property name="features">
+    <set>QDockWidget::NoDockWidgetFeatures</set>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>8</number>
+   </attribute>
+   <widget class="QWidget" name="Grid1">
+    <layout class="QGridLayout" name="gridLayout">
+     <property name="leftMargin">
+      <number>5</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>5</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <item row="0" column="0">
+      <widget class="QProgressBar" name="progressBar">
+       <property name="value">
+        <number>0</number>
+       </property>
+       <property name="textVisible">
+        <bool>true</bool>
+       </property>
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="textDirection">
+        <enum>QProgressBar::TopToBottom</enum>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <action name="actionExtractIso">
+   <property name="text">
+    <string>Extract Iso</string>
+   </property>
+  </action>
+  <action name="actionSaveDot">
+   <property name="text">
+    <string>Save dot file</string>
+   </property>
+  </action>
+  <action name="actionFileExplorer">
+   <property name="text">
+    <string>File Explorer</string>
+   </property>
+  </action>
+  <action name="actionLogWindow">
+   <property name="text">
+    <string>Log Window</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources>
