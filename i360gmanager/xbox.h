@@ -11,6 +11,12 @@
 #define MAX_SECTOR 10240000
 #define GAME_SECTOR 32
 #define TABLE_TO_ADDRESS 4
+
+/*
+        Gdf = 0xfd90000,
+        XGD3 = 0x2080000,
+        Xsf = 0*/
+		
 #define GLOBAL_LSEEK_OFFSET 0xFD90000ul
 #define XGD3_LSEEK_OFFSET 0x2080000ul
 #define MEDIA_MAGIC_BYTE "MICROSOFT*XBOX*MEDIA"

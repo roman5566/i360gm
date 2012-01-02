@@ -1,0 +1,69 @@
+GOD Container:
+	all hashes are sha1 hash
+	hashSize = 20;	
+	MasterHashTableSize = 4060 + 20; //hash of next MHT
+	SubHashTableSize = 4080;
+	Live file size = 0xB000
+	
+	LIVE File:
+		Magic bytes: LIVE
+		0x022C: 0xFFFFFFFFFFFFFFFF
+		0x0342: 0x0EAD
+		
+		IDs:
+		 0x0360: TitleID 			(uint)
+		 0x0354: MediaID 			(uint)
+		 0x0412: GameTitle		
+		 0x0D12: GameDescription
+		 0x1692: GameTitle		
+		 0x034B: Icons				(byte) //No fucking idea, just trying
+		 0x0379: NoIdea				//24 05 05 11
+		 0x03AC: NoIdea				(uint) //1
+		
+		Execution Details:
+		 0x0364: Platform			(byte)
+		 0x0365: ExType				(byte)
+		 0x0366: DiscNumber			(byte)
+		 0x0367: DiscCount			(byte)
+		 
+		BlockCounts:
+		 0x0392: BlocksRequered 	(short)
+		 0x0394: BlocksNotWritten	(short)
+		
+		DataPartsInfo:
+		 0x03A0: PartsNo			(byte) (Bigendian) //Some use int, but as we can store max of 255 parts makes us at 40GB+- and no iso will ever be that big
+		 0x03A4: SizeOfParts		(uint) (Litendian) //Devide by 0x100
+		
+		Contenttype:
+		 0x0344: ContentType		(uint) (Litendian) //GamesOnDemand = 0x7000, XboxOriginal = 0x5000
+		
+		ThumbNails:
+		 0x1712: Length				(uint) (Litendian)
+		 0x1716: Lenght				(uint) (Litendian)
+		 0x171A: PngData
+		 0x571A: PngData
+		
+		Hashes:
+		 0x037D: Part0MHT			(20 bytes)
+		 0x032C: MyHash				(20 bytes) //Calculate this LIVE hash sha1 from offset 0x344 with size 0xacbc, (NOTE: AFTER THIS YOU CAN NOT CHANGE THE FILE)
+		
+	MTH Hash Chain:
+		The part files are chained together by keeping track of eachothers MHT (hash)
+		part0 contains hash of part1 MHT at the end of his own MHT
+		part0 hash is saved in the LIVE file
+
+	Data part:	
+		shtPerMHT = 0xcb; //203
+		shtPerSHT = 0xcc; //204
+	
+		Structure:										//Always 170.459.136 bytes big
+			MasterHashTable[0x1000];					//Add a hash (20 bytes long) of every SubHashTable to this table
+			for each in range(0 -> 0xcb)				//Size 839680
+			{   
+				SubHashTable[0x1000];					//Add a hash (20 bytes long) of every block to this table
+				//This part size 835584 bytes
+				for each in range(0 -> 0xcc)			//Limit the total amounts of blocks, when writing to last data file
+				{
+					block[0x1000];						//Copy blocks from iso and start at rootSector
+				}
+			}
