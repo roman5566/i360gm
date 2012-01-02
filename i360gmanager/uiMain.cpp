@@ -10,13 +10,19 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 {
 	ui.setupUi(this);
 
+	//Set model for iso list
 	_model = new IsoList();
 	_model->setIsos(&_isos);
 	ui.tableView->setModel(_model);
 	ui.tableView->verticalHeader()->setResizeMode(QHeaderView::ResizeToContents);
+
+	//Fancy the file explorer
 	ui.treeWidget->header()->resizeSection(0, 400);
 	ui.treeWidget->header()->resizeSection(1, 50);
 	ui.treeWidget->header()->resizeSection(2, 70);
+
+	//Directories
+	_lastDotPath = _lastIsoPath = QDir::currentPath();
 	refreshDir("D:/xbox/Games");
 
 	//Create connections
@@ -30,6 +36,9 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	connect(ui.actionFileExplorer, SIGNAL(triggered()), getUi()->DockFileExplorer, SLOT(show()));
 	connect(ui.actionLogWindow, SIGNAL(triggered()), getUi()->DockLog, SLOT(show()));
 
+	//Set come custom menu's
+	getUi()->tableView->addActions(getUi()->menuFile->actions());
+
 	//Some fancy style setting
 	getUi()->progressBar->setStyle(new QPlastiqueStyle);
 	getUi()->progressBar->reset();
@@ -38,22 +47,6 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 Main::~Main()
 {
 
-}
-
-void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previous)
-{	
-	Iso *iso = _model->getIso(current.row());
-	if(iso == NULL)
-		return;
-
-	getUi()->treeWidget->clear();
-
-	QTreeWidgetItem *parent = new QTreeWidgetItem(getUi()->treeWidget);
-	parent->setText(0, iso->getShortIso());
-	uint64 totalSize = addTreeToWidget(parent, iso->getRootNode());
-	parent->setText(2, getHumenSize(totalSize));
-
-	getUi()->treeWidget->addTopLevelItem(parent);
 }
 
 QString Main::getHumenSize(uint64 size)
@@ -68,6 +61,26 @@ QString Main::getHumenSize(uint64 size)
 		str = str.sprintf("%.2f GB", kb/(1000*1000));
 
 	return str;
+}
+
+void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previous)
+{	
+	//Only update the list if the dock is visible, if it is not visible then dont update!
+	if(getUi()->DockFileExplorer->isVisible())
+	{
+		Iso *iso = _model->getIso(current.row());
+		if(iso == NULL)
+			return;
+
+		getUi()->treeWidget->clear();
+
+		QTreeWidgetItem *parent = new QTreeWidgetItem(getUi()->treeWidget);
+		parent->setText(0, iso->getShortIso());
+		uint64 totalSize = addTreeToWidget(parent, iso->getRootNode());
+		parent->setText(2, getHumenSize(totalSize));
+
+		getUi()->treeWidget->addTopLevelItem(parent);
+	}
 }
 
 uint64 Main::addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node)
@@ -118,17 +131,49 @@ void Main::extractIso()
 	if(iso == NULL)
 		return;
 
+	//Get directory from user
+	QString dir = QFileDialog::getExistingDirectory(this, NULL, _lastIsoPath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+	if(dir.length() <= 0)
+		return;
+	_lastIsoPath = dir;                                                                                          //Save this path so users can save a bit easier
+
 	//UI setup
 	getUi()->actionExtractIso->setDisabled(true);
 	getUi()->progressBar->setMaximum(iso->getFileNo());
 	getUi()->progressBar->setValue(0);
 
-	QString file = iso->getIso(); file.chop(4);
-	QString path = "C://iso/"; path.append(file);
-
+	//Set log and start the thread*
 	addLog(QString("Extracting iso with %1 files").arg(iso->getFileNo()));
+	QMetaObject::invokeMethod(iso, "extractIso", Q_ARG(QString, dir.append("/").append(iso->getShortIso())));    //Start the extraction threaded
+}
 
-	QMetaObject::invokeMethod(iso, "extractIso", Q_ARG(QString, path)); //Start the extraction threaded
+void Main::saveDot()
+{
+	//Get info
+	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
+	if(iso == NULL)
+		return;
+	FileNode *root = iso->getRootNode();
+
+	//Ask user for save
+	QString file = iso->getShortIso();
+	QString fileName = QFileDialog::getSaveFileName(this, NULL, _lastDotPath + tr("/") + file + tr(".gv"), tr("DOT Graph  (*.gv *.dot)"));   //Default file extension is .gv as .dot is in use by office
+	_lastDotPath = QFileInfo(fileName).absoluteDir().absolutePath();
+	
+	//Make the dot file
+	QString dotty = "digraph " + file.remove(QRegExp("\\W")) + " {\n";                                                                       //Remove all non [a-zA-Z0-9] (except _) chars from the string because it breaks Graphviz
+	walkDot(dotty, root);
+	dotty.append("}");
+
+	//Write the file
+	QFile out(fileName);
+	out.open(QIODevice::WriteOnly | QIODevice::Text);
+	QTextStream write(&out);
+	write << dotty;
+	out.close();
+
+	//Log
+	addLog(tr("Saved dot graph of ") + file);
 }
 
 void Main::walkDot(QString &trace, FileNode *&node)
@@ -150,32 +195,6 @@ void Main::walkDot(QString &trace, FileNode *&node)
 
 	//Add myself to label list
 	trace.append(sp.sprintf("\t %i [label=\"%s (%i)\"];\n", (uint)node, QString::fromAscii((const char*)node->file->name, node->file->length).toStdString().c_str(), node->file->length));
-}
-
-void Main::saveDot()
-{
-	//Get info
-	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
-	if(iso == NULL)
-		return;
-	FileNode *root = iso->getRootNode();
-
-	//Ask user for save
-	QString file = iso->getShortIso();
-	QString fileName = QFileDialog::getSaveFileName(this, tr("Save File"), file + tr(".dot"), tr("DOT Graph  (*.gv *.dot)"));
-
-	//Make the dot file
-	QString dotty = "digraph " + file.remove(QRegExp("\\W")) + " {\n";
-	walkDot(dotty, root);
-	dotty.append("}");
-
-	//Write the file
-	QFile out(fileName);
-	out.open(QIODevice::WriteOnly | QIODevice::Text);
-	QTextStream write(&out);
-	write << dotty;
-	out.close();
-
 }
 
 void Main::refreshDir(QString directory)

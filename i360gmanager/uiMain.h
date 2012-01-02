@@ -42,9 +42,13 @@ private:
 	//Helper functions
 	QString getHumenSize(uint64 size);
 
+	//Helper data
 	IsoList *_model;
 	Ui::MainClass ui;
 	vector<Iso*> _isos;
+
+	QString _lastDotPath;
+	QString _lastIsoPath;
 
 
 };
