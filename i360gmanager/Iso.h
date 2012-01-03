@@ -61,22 +61,18 @@ private:
 	//Helper functions
 	void cleanupIso();
 	void walkFile(uint offset);
-	void makeTree(void *sector, uint offset, FileNode *&node);
+	void makeTree(SectorData *sector, uint offset, FileNode *&node);
 	void extractFile(QString output, FileNode *node, HANDLE isoMap);
 
 	//Helper data
 	QThread *_thread;
 	QString _path;
-	map<XboxFileInfo*, void*> _sectors;
 	FileNode *_rootFile;
 
 	//Iso data
-	int _isoHandle;
-	char _isValidMedia;
-	char _isValidXex;
-	XboxMedia _xboxMedia;
+	XboxDisc *_disc;
 	XboxFileInfo *_defaultXex;
-	uint _offset;
+	char _isValidXex;
 
 	//Timing system
 	long s;

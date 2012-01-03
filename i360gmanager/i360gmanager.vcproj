@@ -414,6 +414,10 @@
 			</File>
 		</Filter>
 		<File
+			RelativePath=".\xbox.cpp"
+			>
+		</File>
+		<File
 			RelativePath=".\xbox.h"
 			>
 		</File>

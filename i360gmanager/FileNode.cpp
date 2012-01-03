@@ -21,7 +21,7 @@ uint FileNode::extractFile(HANDLE isoMap, const wchar_t *path, uint offset)
 
 	//Get the closest correct aligned address
 	DWORD bytes;
-	uint64 address = file->getAddress(offset);
+	uint64 address = ((uint64)file->sector*SECTOR_SIZE)+offset;
 	uint offsetAddress = address % info.dwAllocationGranularity;
 	address -= offsetAddress;
 	DWORD high = HIDWORD(address);

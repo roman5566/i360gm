@@ -5,17 +5,16 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
+#include <string>
+#include <map>
+
+using std::map;
+using std::string;
 
 #define SECTOR_SIZE 2048
 #define MAX_SECTOR 10240000
 #define GAME_SECTOR 32
 #define TABLE_TO_ADDRESS 4
-
-/*
-        Gdf = 0xfd90000,
-        XGD3 = 0x2080000,
-        Xsf = 0*/
 		
 #define GLOBAL_LSEEK_OFFSET 0xFD90000ul
 #define XGD3_LSEEK_OFFSET 0x2080000ul
@@ -50,66 +49,22 @@
 	#define MAKEQWORD(a, b)      (((uint64)(a & 0xffffffff)) | (((uint64)(b & 0xffffffff)) << 32))
 #endif
 
-#pragma pack(1)
+enum DiscType
+{
+	NO = -1,
+	XSF = 0,
+	GDFX = 0xFD90000,
+	XGD3 = 0x2080000,
+};
+
+#pragma pack(1) //Byte alignment
 typedef struct
 {
 	uchar magic[MEDIA_MAGIC_BYTE_SIZE];
 	uint rootSector;
 	uint rootSize;
-	
-	bool isValidMedia(int iso, uint &offset)
-	{
-		offset = 0;
-		readMedia(iso);
-		if(!isXboxMedia())
-		{
-			//Check for XDG2 disc
-			offset = GLOBAL_LSEEK_OFFSET;
-			readMedia(iso, offset);
-			if(!isXboxMedia())
-			{
-				//Check for XDG3 disc
-				offset = XGD3_LSEEK_OFFSET;
-				readMedia(iso, offset);
-				if(!isXboxMedia())
-				{
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-
-	int readMedia(int iso, uint offset = 0)
-	{
-		_lseeki64(iso, GAME_SECTOR*SECTOR_SIZE+offset, SEEK_SET);
-		return _read(iso, (char*)this, sizeof(XboxMedia));
-	}
-
-	int readRootSector(int iso, void *&buffer, uint offset = 0)
-	{
-		return readSector(iso, buffer, getRootAddress(offset), rootSize);
-	}
-
-	static int readSector(int iso, void *&buffer, uint64 address, uint size)
-	{
-		buffer = malloc(size);
-		_lseeki64(iso, address, SEEK_SET);
-		return _read(iso, buffer, size);
-	}
-
-	bool isXboxMedia()
-	{
-		if(magic == NULL) return false;
-		return (memcmp(magic, MEDIA_MAGIC_BYTE, MEDIA_MAGIC_BYTE_SIZE) == 0);
-	}
-
-	uint64 getRootAddress(uint video)
-	{
-		return ((uint64)rootSector*SECTOR_SIZE)+video;
-	}
-
-} XboxMedia;
+	uint64 creationTime;
+} MediaInfo;
 
 typedef struct XboxFileInfoStruct
 {
@@ -121,18 +76,6 @@ typedef struct XboxFileInfoStruct
 	uchar length;
 	uchar name[MAX_PATH];		//This is nasty! But there is no other way i can think of...
 
-
-	XboxFileInfoStruct(char* _name, int _length)
-	{
-		memcpy((char*)name, _name, _length);
-		length = _length;
-	}
-
-	static XboxFileInfoStruct* load(void *pointer)
-	{
-		return (XboxFileInfoStruct*)pointer;
-	}
-
 	uint getLOffset()
 	{
 		return (uint)ltable*TABLE_TO_ADDRESS;
@@ -141,25 +84,6 @@ typedef struct XboxFileInfoStruct
 	uint getROffset()
 	{
 		return (uint)rtable*TABLE_TO_ADDRESS;
-	}
-
-	uint64 getAddress(uint offset)
-	{
-		return ((uint64)sector*SECTOR_SIZE)+offset;
-	}
-
-	bool isXex(int iso, uint offset)
-	{
-		uint magic;
-		_lseeki64(iso, getAddress(offset), SEEK_SET);
-		_read(iso, (void*)&magic, sizeof(uint));
-
-		return (magic == XEX_MAGIC_BYTE);
-	}
-
-	uint getStructSize()
-	{
-		return sizeof(XboxFileInfo)-MAX_PATH+length;
 	}
 
 	friend bool operator==(const XboxFileInfoStruct &left, const XboxFileInfoStruct &right)
@@ -176,8 +100,52 @@ typedef struct XboxFileInfoStruct
 		return false;
 	}
 
-
 } XboxFileInfo;
+
+typedef struct SectorDataStruct
+{
+	void *data;
+	uint size;
+	SectorDataStruct(){data = NULL;}                                                   ///!< SectorData constructor (setting data pointer to NULL)
+	~SectorDataStruct(){if(isInit()) free(data);}                                      ///!< ~SectorData destructor freeing allocated memory
+	bool init(uint size){this->size = size;this->data = malloc(size);return isInit();} ///!< init initializes this sector allocation memory and stuff
+	bool isInit(){return (data != NULL);}                                              ///!< isInit returns if this sector data has allocated memory
+} SectorData;
 #pragma pack()
 
+//Callback system
+class XboxDisc
+{
+public:
+	XboxDisc(string path);
+	~XboxDisc();
+
+	//Public functions
+	//Booleans
+	bool isXboxMedia();
+	bool isValidMedia();
+
+	//Gets and Sets
+	XboxFileInfo *getFileInfo(SectorData *sector, uint offset);
+	SectorData *getRootData();
+	SectorData *getSector(uint sector, uint size);
+	uint getRootSize();
+	uint getRootSector();
+	uint64 getAddress(uint sector);
+	uint64 getRootAddress();
+	DiscType getDiscType();
+
+	//XboxFileInfo functions
+	bool isXex(XboxFileInfo *file);
+
+private:
+	//Disc data
+	int _handle;
+	DiscType _type;
+	MediaInfo _mediaInfo;
+	map<uint, SectorData*> _sectors;
+
+	//Private helper functions
+	bool readMagicMedia(DiscType type);
+};
 #endif

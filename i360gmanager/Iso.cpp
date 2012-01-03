@@ -8,35 +8,17 @@ Iso::Iso()
 	moveToThread(_thread);
 	_thread->start();
 
+	_isValidXex = NULL;
+	_defaultXex = NULL;
 	_rootFile = NULL;
-	_sectors[0] = NULL;
-	cleanupIso();
 }
 
 Iso::~Iso()
 {
-	cleanupIso();
 	_thread->exit();
 	delete _thread;
 }
 
-/**
- * cleanupIso cleans up all helper data for this class
- */
-void Iso::cleanupIso()
-{
-
-	if(_isoHandle >= 0)        //If we had a valid iso, close it
-		_close(_isoHandle);
-
-	if(_sectors[0] != NULL)    //If we allocated resources, free it
-		free(_sectors[0]);
-
-	_sectors[0] = NULL;        //Set pointer to NULL
-	_isoHandle = -1;           //No iso handle on
-	_isValidMedia = _isValidXex = NULL;
-	_defaultXex = NULL;
-}
 
 void Iso::extractIso(QString output)
 {
@@ -72,7 +54,7 @@ void Iso::extractFile(QString output, FileNode *node, HANDLE isoMap)
 	else
 	{
 		//Get allocation alignment
-		uint size = node->extractFile(isoMap, path.toStdWString().c_str(), _offset);
+		uint size = node->extractFile(isoMap, path.toStdWString().c_str(), _disc->getDiscType());
 		emit doFileExtracted(fileName, size);                                             //Emit that we have written the file
 	}
 
@@ -96,6 +78,19 @@ QString Iso::getPath()
 	return _path;
 }
 
+/**
+ * getIso returns the full name of the iso file (including .iso)
+ * @return Full iso name. Example: blablabla.iso
+ */
+QString Iso::getIso()
+{
+	return _path.split("/").back();
+}
+
+/**
+ * getShortIso returns the name of the iso file (exluding .iso)
+ * @return Iso name, example: cool_game
+ */
 QString Iso::getShortIso()
 {
 	QString shortIso = getIso(); shortIso.chop(4);
@@ -109,45 +104,15 @@ QString Iso::getShortIso()
  */
 bool Iso::setPath(QString path)
 {
-	cleanupIso();
-
 	_path = path;
-	
-	//Got an iso
-	_isoHandle = _open(_path.toStdString().c_str(), _O_BINARY | _O_RDONLY);
-	return (_isoHandle >= 0 && isValidMedia());
-}
 
-/**
- * getIso returns the full name of the iso file (including .iso).
- * @return Full iso name. Example: blablabla.iso
- */
-QString Iso::getIso()
-{
-	return _path.split("/").back();
-}
-
-/**
- * isValidMedia returns true when the iso was a valid XDG2 or XDG3 disc.
- * @return True on valid media, else false
- */
-bool Iso::isValidMedia()
-{
-	if(_isoHandle < 0)                                       //No file handle to iso, so just wtf dont call me!
-		return false;
-
-	if(_isValidMedia == NULL)
+	_disc = new XboxDisc(path.toStdString());
+	if(_disc->isValidMedia())
 	{
-		if(_xboxMedia.isValidMedia(_isoHandle, _offset))
-		{
-			_isValidMedia = 1;
-			if(_xboxMedia.rootSize > MAX_SECTOR)             //It has a freaking big root sector, so truncate it and hope for the best
-				_xboxMedia.rootSize = MAX_SECTOR;
-
-			getRootNode();                                   //Do a full index
-		}
+		getRootNode();
+		return true;
 	}
-	return (_isValidMedia == 1);
+	return false;
 }
 
 
@@ -159,15 +124,15 @@ FileNode* Iso::getRootNode()
 {
 	if(_rootFile == NULL) //Caching system
 	{
-		if(_xboxMedia.readRootSector(_isoHandle, _sectors[0], _offset))
+		SectorData *data = _disc->getRootData();
+		if(data->isInit())
 		{
 			_fileNo = 0;
 			startTime();
-			makeTree(_sectors[0], 0, _rootFile);
+			makeTree(data, 0, _rootFile);
 			_binTree = stopTime();
 		}
 	}
-
 	return _rootFile;
 }
 
@@ -177,11 +142,9 @@ FileNode* Iso::getRootNode()
  * @param offset the offset to read the file info from
  * @param node the node to add the info to
  */
-void Iso::makeTree(void *sector, uint offset, FileNode *&node)
+void Iso::makeTree(SectorData *sector, uint offset, FileNode *&node)
 {
-	XboxFileInfo *fileInfo = NULL;
-	fileInfo = XboxFileInfo::load((void*)((uint)sector+offset));
-	
+	XboxFileInfo *fileInfo = _disc->getFileInfo(sector, offset);
 	if(fileInfo == NULL)                                           //Wtf load failed, this iso is corrupt or my code sucks!
 		return;
 
@@ -196,11 +159,9 @@ void Iso::makeTree(void *sector, uint offset, FileNode *&node)
 
 	if((node->file->type & 16) != 0 && fileInfo->size > 0)         //This is a directory, read the sector and begin
 	{
-		if(_sectors[fileInfo] == NULL)                             //Read the directory sector and jump to that sector
-			XboxMedia::readSector(_isoHandle, _sectors[fileInfo], fileInfo->getAddress(_offset), fileInfo->size);
-
-		if(_sectors[fileInfo] != NULL)                             //Sanity check for allocation
-			makeTree(_sectors[fileInfo], 0, node->dir);
+		SectorData *dirSector = _disc->getSector(fileInfo->sector, fileInfo->size);
+		if(dirSector->isInit())                                    //Sanity check for allocation
+			makeTree(dirSector, 0, node->dir);
 	}
 
 	if(lOffset > 0)                                                //Read the other files
@@ -230,7 +191,7 @@ bool Iso::isDefaultXex()
 	{
 		if(_defaultXex == NULL)
 			return false;                                              //We could not find the file...
-		if(_defaultXex->isXex(_isoHandle, _offset))
+		if(_disc->isXex(_defaultXex))
 			_isValidXex = 1;
 	}
 
