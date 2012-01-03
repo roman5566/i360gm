@@ -19,11 +19,12 @@ public:
 	int columnCount(const QModelIndex& parent) const;
 	QVariant data(const QModelIndex& index, int role) const;
 	QVariant headerData(int section, Qt::Orientation orientation, int role) const;
-	void setIsos(vector<Iso*> *_isos);
+	void addIso(Iso *iso);
+	void clearIsos();
 	Iso* getIso(int index);
 
 protected:
-	vector<Iso*> *_isos;
+	vector<Iso*> _isos;
 
 private:
 	vector<QString> _header;

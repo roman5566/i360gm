@@ -15,8 +15,11 @@ Iso::Iso()
 
 Iso::~Iso()
 {
-	_thread->exit();
-	delete _thread;
+	if(_disc != NULL)
+		delete _disc;
+
+	//We should dealloc the bin tree
+	_rootFile->deleteTree();
 }
 
 

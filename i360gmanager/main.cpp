@@ -1,6 +1,8 @@
 #include "uiMain.h"
 #include <QtGui/QApplication>
 
+//#include <vld.h>
+
 /** \mainpage
  *
  * \section intro Introduction
@@ -20,7 +22,7 @@
 int main(int argc, char *argv[])
 {
 	QApplication a(argc, argv);
-	a.setStyle(new QCleanlooksStyle);
+	//a.setStyle(new QCleanlooksStyle);
     Main m;
 	m.show();
 	return a.exec();

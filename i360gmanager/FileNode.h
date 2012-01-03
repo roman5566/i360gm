@@ -22,6 +22,8 @@ class FileNode
 		//Special functions
 		uint extractFile(HANDLE isoMap, const wchar_t *path, uint offset);
 
+		void deleteTree();
+
 		//Traversing
 		bool isDir();
 		bool hasLeft();

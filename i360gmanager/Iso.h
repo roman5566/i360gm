@@ -11,6 +11,8 @@
 #include <QThread>
 #include <QTreeWidgetItem>
 #include <QMutex>
+#include <QSettings>
+
 #include "xbox.h"
 #include "FileNode.h"
 
@@ -83,4 +85,5 @@ private:
 	long _fileNo;
 };
 
+extern QSettings *settings;
 #endif

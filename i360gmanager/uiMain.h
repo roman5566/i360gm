@@ -29,6 +29,7 @@ public:
 		void slotOnClickList(const QModelIndex &current, const QModelIndex &previous);
 		void saveDot();
 		void extractIso();
+		void setGamePath();
 
 		//Extraction
 		void fileExtracted(QString name, uint size);
@@ -45,11 +46,9 @@ private:
 	//Helper data
 	IsoList *_model;
 	Ui::MainClass ui;
-	vector<Iso*> _isos;
 
 	QString _lastDotPath;
 	QString _lastIsoPath;
-
-
+	QString _gamePath;
 };
 #endif // UIMAIN_H

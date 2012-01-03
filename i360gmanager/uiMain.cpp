@@ -3,16 +3,16 @@
 
 //Mutex
 QMutex mTreeWidget;
-
+QSettings *settings;
 
 Main::Main(QWidget *parent, Qt::WFlags flags)
 	: QMainWindow(parent, flags)
 {
 	ui.setupUi(this);
+	settings = new QSettings("./config.ini", QSettings::IniFormat, this);
 
 	//Set model for iso list
 	_model = new IsoList();
-	_model->setIsos(&_isos);
 	ui.tableView->setModel(_model);
 	ui.tableView->verticalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
@@ -22,8 +22,9 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	ui.treeWidget->header()->resizeSection(2, 70);
 
 	//Directories
-	_lastDotPath = _lastIsoPath = QDir::currentPath();
-	refreshDir("D:/xbox/Games");
+	_lastDotPath = settings->value("paths/dotPath", QDir::currentPath()).toString();
+	_lastIsoPath = settings->value("paths/isoPath", QDir::currentPath()).toString();
+	_gamePath = settings->value("paths/gamePath", QDir::currentPath()).toString();
 
 	//Create connections
 	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
@@ -31,22 +32,49 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	//Menu bar connections
 	connect(ui.actionSaveDot, SIGNAL(triggered()), this, SLOT(saveDot()));
 	connect(ui.actionExtractIso, SIGNAL(triggered()), this, SLOT(extractIso()));
+	connect(ui.actionSetGamePath, SIGNAL(triggered()), this, SLOT(setGamePath()));
 
 	//Show events for docks
 	connect(ui.actionFileExplorer, SIGNAL(triggered()), getUi()->DockFileExplorer, SLOT(show()));
 	connect(ui.actionLogWindow, SIGNAL(triggered()), getUi()->DockLog, SLOT(show()));
 
 	//Set come custom menu's
-	getUi()->tableView->addActions(getUi()->menuFile->actions());
+	getUi()->tableView->addAction(getUi()->actionExtractIso);
+	getUi()->tableView->addAction(getUi()->actionSaveDot);
 
 	//Some fancy style setting
 	getUi()->progressBar->setStyle(new QPlastiqueStyle);
 	getUi()->progressBar->reset();
+
+	//If we have a gamePath use it
+	if(_gamePath.length() > 0)
+		refreshDir(_gamePath);
 }
 
 Main::~Main()
 {
+	//Save settings
+	if(QDir::currentPath() != _lastDotPath)
+		settings->setValue("paths/dotPath", _lastDotPath);
+	if(QDir::currentPath() != _lastIsoPath)
+		settings->setValue("paths/isoPath", _lastIsoPath);
+	if(QDir::currentPath() != _gamePath)
+		settings->setValue("paths/gamePath", _gamePath);
+	delete settings;
+}
 
+void Main::setGamePath()
+{
+	//Get directory from user
+	QString dir = QFileDialog::getExistingDirectory(this, NULL, _gamePath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+	if(dir.length() <= 0)
+		return;
+	_gamePath = dir;        
+
+	if(_gamePath.length() > 0)
+		refreshDir(_gamePath);
+
+	getUi()->tableView->showRow(1);
 }
 
 QString Main::getHumenSize(uint64 size)
@@ -157,11 +185,11 @@ void Main::saveDot()
 
 	//Ask user for save
 	QString file = iso->getShortIso();
-	QString fileName = QFileDialog::getSaveFileName(this, NULL, _lastDotPath + tr("/") + file + tr(".gv"), tr("DOT Graph  (*.gv *.dot)"));   //Default file extension is .gv as .dot is in use by office
+	QString fileName = QFileDialog::getSaveFileName(this, NULL, _lastDotPath + QDir::separator() + file.append(".gv"), "DOT Graph (*.gv *.dot)");      //Default file extension is .gv as .dot is in use by office
 	_lastDotPath = QFileInfo(fileName).absoluteDir().absolutePath();
 	
 	//Make the dot file
-	QString dotty = "digraph " + file.remove(QRegExp("\\W")) + " {\n";                                                                       //Remove all non [a-zA-Z0-9] (except _) chars from the string because it breaks Graphviz
+	QString dotty = "digraph " + file.remove(QRegExp("\\W")) + " {\n";                                                                                 //Remove all non [a-zA-Z0-9] (except _) chars from the string because it breaks Graphviz
 	walkDot(dotty, root);
 	dotty.append("}");
 
@@ -199,7 +227,7 @@ void Main::walkDot(QString &trace, FileNode *&node)
 
 void Main::refreshDir(QString directory)
 {
-	_isos.clear();                                //Clear the list
+	_model->clearIsos();                          //Clear the list
 
 	QDir dir(directory);
 	QStringList filter; filter << "*.iso";        //Filter the dir list
@@ -207,14 +235,13 @@ void Main::refreshDir(QString directory)
 
 	for (int i = 0; i < list.size(); ++i)
 	{
-		QString path = dir.filePath(list.at(i));
 		Iso *iso = new Iso();
-		iso->setPath(path);
+		iso->setPath(dir.filePath(list.at(i)));
 
 		//Set up the connections
 		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
 		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
 
-		_isos.push_back(iso);
+		_model->addIso(iso);
 	}
 }

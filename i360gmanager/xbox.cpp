@@ -16,8 +16,9 @@ XboxDisc::XboxDisc(string path)
  */
 XboxDisc::~XboxDisc()
 {
-	_sectors.clear(); //Calls ever destructor of sector data and so it will free all allocated data
-
+	map<uint,SectorData*>::iterator it;
+	for(it = _sectors.begin(); it != _sectors.end(); it++)
+		delete it->second;
 	_close(_handle);  //Close the handle to the iso
 }
 
@@ -116,8 +117,8 @@ SectorData *XboxDisc::getSector(uint sector, uint size)
 		if(sectorData->isInit() && sectorData->size == size)
 			return sectorData;
 	}
-	else
-		sectorData = new SectorData();
+
+	sectorData = new SectorData();
 
 	//Set this sector data
 	sectorData->init(size);

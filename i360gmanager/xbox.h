@@ -106,10 +106,28 @@ typedef struct SectorDataStruct
 {
 	void *data;
 	uint size;
-	SectorDataStruct(){data = NULL;}                                                   ///!< SectorData constructor (setting data pointer to NULL)
-	~SectorDataStruct(){if(isInit()) free(data);}                                      ///!< ~SectorData destructor freeing allocated memory
-	bool init(uint size){this->size = size;this->data = malloc(size);return isInit();} ///!< init initializes this sector allocation memory and stuff
-	bool isInit(){return (data != NULL);}                                              ///!< isInit returns if this sector data has allocated memory
+	SectorDataStruct()                 ///!< SectorData constructor (setting data pointer to NULL)
+	{
+		data = NULL;
+	}
+	~SectorDataStruct()                ///!< ~SectorData destructor freeing allocated memory
+	{
+		if(isInit())
+		{
+			delete [] data;
+			this->data = NULL;
+		}
+	}
+	bool init(uint size)               ///!< init initializes this sector allocation memory and stuff
+	{
+		this->size = size;
+		this->data = new char[size];
+		return isInit();
+	}
+	bool isInit()                      ///!< isInit returns if this sector data has allocated memory
+	{
+		return (data != NULL);
+	}
 } SectorData;
 #pragma pack()
 

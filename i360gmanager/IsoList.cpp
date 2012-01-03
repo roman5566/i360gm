@@ -9,14 +9,24 @@ IsoList::IsoList() : QAbstractTableModel()
 	_header.push_back(QString("Defaul.xex"));    //4
 }
 
-void IsoList::setIsos(vector<Iso*> *isos)
+void IsoList::clearIsos()
 {
-	_isos = isos;
+	while(!_isos.empty()) {
+		delete _isos.back();
+		_isos.pop_back();
+	}
+	emit layoutChanged();
+}
+
+void IsoList::addIso(Iso *iso)
+{
+	_isos.push_back(iso);
+	emit layoutChanged();
 }
 
 int IsoList::rowCount(const QModelIndex& parent) const
 {
-	return _isos->size();
+	return _isos.size();
 }
 
 int IsoList::columnCount(const QModelIndex& parent) const
@@ -26,7 +36,7 @@ int IsoList::columnCount(const QModelIndex& parent) const
 
 Iso* IsoList::getIso(int index)
 {
-	return _isos->at(index);
+	return _isos.at(index);
 }
 
 QVariant IsoList::data(const QModelIndex& index, int role) const
@@ -34,7 +44,7 @@ QVariant IsoList::data(const QModelIndex& index, int role) const
 	switch(role)
 	{
 		case Qt::DisplayRole:
-			return _isos->at(index.row())->getField(index.column());
+			return _isos.at(index.row())->getField(index.column());
 		break;
 		//case Qt::BackgroundRole:
 		//	return _isos->at(index.row())->getBackground(index.column());

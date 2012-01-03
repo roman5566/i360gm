@@ -201,6 +201,8 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionSetGamePath"/>
+    <addaction name="separator"/>
     <addaction name="actionExtractIso"/>
     <addaction name="actionSaveDot"/>
    </widget>
@@ -292,7 +294,7 @@
   </widget>
   <action name="actionExtractIso">
    <property name="text">
-    <string>Extract Iso</string>
+    <string>Extract iso</string>
    </property>
   </action>
   <action name="actionSaveDot">
@@ -308,6 +310,11 @@
   <action name="actionLogWindow">
    <property name="text">
     <string>Log Window</string>
+   </property>
+  </action>
+  <action name="actionSetGamePath">
+   <property name="text">
+    <string>Set game path</string>
    </property>
   </action>
  </widget>

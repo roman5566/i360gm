@@ -38,6 +38,18 @@ uint FileNode::extractFile(HANDLE isoMap, const wchar_t *path, uint offset)
 	return bytes;
 }
 
+void FileNode::deleteTree()
+{
+	if(hasLeft())
+		left->deleteTree();
+	if(hasRight())
+		right->deleteTree();
+	if(isDir())
+		dir->deleteTree();
+
+	delete this;
+}
+
 uint FileNode::getNodesNo(FileNode *node)
 {
 	if(node == NULL)
