@@ -25,46 +25,25 @@ Iso::~Iso()
 
 void Iso::extractIso(QString output)
 {
-	//Open the iso and make a file map object
-	DWORD high, low;
-	HANDLE isoFile = CreateFile(getPath().toStdWString().c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
-	low = GetFileSize(isoFile, &high);
-	HANDLE isoMap = CreateFileMapping(isoFile, NULL, PAGE_READONLY, high, low, NULL);
-
-	//Start extracting everyfile
+	//Start extracting every file
 	CreateDirectory(output.toStdWString().c_str(), NULL);
-	extractFile(output, _rootFile, isoMap);
-
-	//Cleanup and send signal that we are done
-	CloseHandle(isoMap);
-	CloseHandle(isoFile);
+	extractFile(output, _rootFile);
 	emit doIsoExtracted(this);
 }
 
-void Iso::extractFile(QString output, FileNode *node, HANDLE isoMap)
+void Iso::extractFile(QString output, FileNode *node)
 {
-	QString fileName(QString::fromAscii((const char*)node->file->name, node->file->length));
-	QString path(output);
-	path.append("/").append(fileName);
+	string dir = output.toStdString();
+	int64 writen = _disc->saveFile(dir, node->file);
 
-	if(node->isDir())
-	{
-		//We are a directory so just make this dir and continue
-		emit doFileExtracted(fileName, 0);                                                //Emit our directoy written
-		CreateDirectory(path.toStdWString().c_str(), NULL);
-		extractFile(path, node->dir, isoMap);
-	}
-	else
-	{
-		//Get allocation alignment
-		uint size = node->extractFile(isoMap, path.toStdWString().c_str(), _disc->getDiscType());
-		emit doFileExtracted(fileName, size);                                             //Emit that we have written the file
-	}
+	if(writen == 0) //Was a dir so dive into the dir
+		extractFile(QString::fromStdString(dir), node->dir);
+	emit doFileExtracted(QString::fromAscii((char*)node->file->name, node->file->length), writen);
 
 	if(node->hasLeft())
-		extractFile(output, node->left, isoMap);
+		extractFile(output, node->left);
 	if(node->hasRight())
-		extractFile(output, node->right, isoMap);
+		extractFile(output, node->right);
 }
 
 uint Iso::getFileNo()
@@ -160,7 +139,7 @@ void Iso::makeTree(SectorData *sector, uint offset, FileNode *&node)
 		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
 			_defaultXex = fileInfo;
 
-	if((node->file->type & 16) != 0 && fileInfo->size > 0)         //This is a directory, read the sector and begin
+	if(fileInfo->isDir() && !fileInfo->isEmpty())                  //This is a directory, read the sector and begin
 	{
 		SectorData *dirSector = _disc->getSector(fileInfo->sector, fileInfo->size);
 		if(dirSector->isInit())                                    //Sanity check for allocation

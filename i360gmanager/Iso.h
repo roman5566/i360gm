@@ -65,7 +65,7 @@ private:
 	void cleanupIso();
 	void walkFile(uint offset);
 	void makeTree(SectorData *sector, uint offset, FileNode *&node);
-	void extractFile(QString output, FileNode *node, HANDLE isoMap);
+	void extractFile(QString output, FileNode *node);
 
 	//Helper data
 	QThread *_thread;

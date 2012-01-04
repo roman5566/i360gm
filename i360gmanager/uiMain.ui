@@ -83,6 +83,9 @@
      </property>
      <item>
       <widget class="QTreeWidget" name="treeWidget">
+       <property name="contextMenuPolicy">
+        <enum>Qt::ActionsContextMenu</enum>
+       </property>
        <property name="editTriggers">
         <set>QAbstractItemView::NoEditTriggers</set>
        </property>
@@ -205,6 +208,8 @@
     <addaction name="separator"/>
     <addaction name="actionExtractIso"/>
     <addaction name="actionSaveDot"/>
+    <addaction name="separator"/>
+    <addaction name="actionExtractFile"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
@@ -327,6 +332,11 @@
   <action name="actionCheckHashCollision">
    <property name="text">
     <string>Check hash collision</string>
+   </property>
+  </action>
+  <action name="actionExtractFile">
+   <property name="text">
+    <string>Extract file</string>
    </property>
   </action>
  </widget>

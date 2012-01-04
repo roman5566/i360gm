@@ -80,6 +80,16 @@ typedef struct XboxFileInfoStruct
 	uchar length;
 	uchar name[MAX_PATH];		//This is nasty! But there is no other way i can think of...
 
+	bool isDir()
+	{
+		return ((type & 16) != 0);
+	}
+
+	bool isEmpty()
+	{
+		return (size == 0);
+	}
+
 	uint getLOffset()
 	{
 		return (uint)ltable*TABLE_TO_ADDRESS;
@@ -161,14 +171,16 @@ public:
 
 	//XboxFileInfo functions
 	bool isXex(XboxFileInfo *file);
-
+	void *getMapOfFile(uint64 address, uint size, void *outOffset = NULL);
+	int64 saveFile(string &path, XboxFileInfo *file);
 	
 	uint hashTime;
 private:
 	//Disc data
 	HANDLE _realHandle;
+	HANDLE _mapHandle;
 	int _handle;
-
+	uint _granularity;
 	uint _hash;
 
 	DiscType _type;

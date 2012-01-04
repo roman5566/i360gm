@@ -7,10 +7,18 @@
  */
 XboxDisc::XboxDisc(string path)
 {
+	//Default values
 	_hash = 0;
 	_realHandle = NULL;
 	_type = NO;
+
+	//Some extra logic
+	SYSTEM_INFO info;
+	GetSystemInfo(&info);
+	_granularity = info.dwAllocationGranularity;
+
 	_handle = _open(path.c_str(), _O_BINARY | _O_RDONLY);
+	_mapHandle = CreateFileMapping(getHandle(), NULL, PAGE_READONLY, 0, 0, NULL);
 	isValidMedia();
 }
 
@@ -22,9 +30,15 @@ XboxDisc::~XboxDisc()
 	map<uint,SectorData*>::iterator it;
 	for(it = _sectors.begin(); it != _sectors.end(); it++)
 		delete it->second;
-	_close(_handle);  //Close the handle to the iso
+
+	CloseHandle(_mapHandle);
+	_close(_handle);  //Close the handle to the iso, (this will also close the get_osfhandle)
 }
 
+/**
+ * getHandle opens up a real handle to the iso, it does its own caching so you can call this many times
+ * @return HANDLE to the iso
+ */
 HANDLE XboxDisc::getHandle()
 {
 	if(_realHandle == NULL)
@@ -32,36 +46,87 @@ HANDLE XboxDisc::getHandle()
 	return _realHandle;
 }
 
+/**
+ * getMapOfFile creates a View of a file starting from address with a size
+ * WARNING!!! Because of granularity the address can be off,
+ * use outOffset to see how much offset you have and add that to the address.
+ * @param address a uint64 address
+ * @param size the size to read (this can get changed by this function)
+ * @param outOffset a pointer to a uint where we can store the offset in
+ * @return a pointer to the beginning of the file map
+ */
+void *XboxDisc::getMapOfFile(uint64 address, uint size, void *outOffset)
+{
+	uint offset = address % _granularity;
+	address -= offset;
+	size += offset; 
+	DWORD high = HIDWORD(address);
+	DWORD low = LODWORD(address);
+
+	if(outOffset != NULL)
+		*(uint*)outOffset = offset;
+
+	return MapViewOfFile(_mapHandle, FILE_MAP_READ, high, low, size);
+}
+
+/**
+ * saveFile will save a file, to identify what file pass a XboxFileInfo struct to this function
+ * @param out string path where to save (note this will note make directories)
+ * @param file a pointer to a XboxFileInfo struct
+ * @returns bytes written, or -1 if it was a dir
+ */
+int64 XboxDisc::saveFile(string &path, XboxFileInfo *file)
+{
+	path.append("/");
+	path.append((char*)file->name, file->length);
+
+	if(file->isDir())
+	{
+		if(CreateDirectoryA(path.c_str(), NULL))
+			return 0;
+	}
+	else
+	{
+		uint offset;
+		DWORD written;
+		
+		void *data = getMapOfFile(getAddress(file->sector), file->size, &offset);
+		HANDLE fileOut = CreateFileA(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, NULL, NULL);
+		if(!WriteFile(fileOut, (void*)((char*)data+offset), file->size, &written, NULL))
+			written = -1;
+
+		//Cleanup
+		CloseHandle(fileOut);
+		UnmapViewOfFile(data);
+		return written;
+	}
+}
+
+/**
+ * getHash will return a murmer3 hash for this disc iso
+ * @return uint hash
+ */
 uint XboxDisc::getHash()
 {
 	if(_hash != 0)    //Cache
 		return _hash;
 
-	//Get Granularity
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-
 	//We read from the video offset -64 sectors to +64 sectors, why? Because currently (04-01-12) abgx uses 16 stealth sectors and we allow it to increase a lot more and
 	//the game sector starts at video offset + 32 sectors so we read also 32 sectors of the game partition. So as far as i know i have covered my bases. And jeez my grammar sucks so much!
 	uint size = 128*SECTOR_SIZE;
-	uint align = (_type - (size/2)) % info.dwAllocationGranularity;
-	uint offset = (_type - (size/2)) - align;
-	size += align;
-
+	uint address = (_type - (size/2));
+	uint offset;
 	//Get data pointer
-	HANDLE mapping = CreateFileMapping(getHandle(), NULL, PAGE_READONLY, 0, 0, NULL);
-	void *data = MapViewOfFile(mapping, FILE_MAP_READ, 0, offset, size);
+	void *data = getMapOfFile(address, size, &offset);
 
 	//Calculate hash
 	_hash = 42;
 	long clk = clock();
-	MurmurHash3_x86_32(data, size, 42, &_hash);
+	MurmurHash3_x86_32(data, (size+offset), 42, &_hash);
 	hashTime = clock()-clk;
 
 	//Cleanup
 	UnmapViewOfFile(data);
-	CloseHandle(mapping);
-	
 	return _hash;
 }
 

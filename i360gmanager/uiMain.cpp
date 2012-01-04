@@ -22,9 +22,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	ui.treeWidget->header()->resizeSection(2, 70);
 
 	//Directories
-	_lastDotPath = settings->value("paths/dotPath", QDir::currentPath()).toString();
-	_lastIsoPath = settings->value("paths/isoPath", QDir::currentPath()).toString();
-	_gamePath = settings->value("paths/gamePath", QDir::currentPath()).toString();
+	_lastDotPath = settings->value("paths/dot", QDir::currentPath()).toString();
+	_lastIsoPath = settings->value("paths/iso", QDir::currentPath()).toString();
+	_gamePath = settings->value("paths/file", QDir::currentPath()).toString();
+	_filePath = settings->value("paths/game", QDir::currentPath()).toString();
 
 	//Create connections
 	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
@@ -33,6 +34,7 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	connect(ui.actionSaveDot, SIGNAL(triggered()), this, SLOT(saveDot()));
 	connect(ui.actionExtractIso, SIGNAL(triggered()), this, SLOT(extractIso()));
 	connect(ui.actionSetGamePath, SIGNAL(triggered()), this, SLOT(setGamePath()));
+	connect(ui.actionExtractFile, SIGNAL(triggered()), this, SLOT(extractFile()));
 	connect(ui.actionCheckHashCollision, SIGNAL(triggered()), this, SLOT(checkHashCollision()));
 
 	//Show events for docks
@@ -42,6 +44,8 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	//Set come custom menu's
 	getUi()->tableView->addAction(getUi()->actionExtractIso);
 	getUi()->tableView->addAction(getUi()->actionSaveDot);
+
+	getUi()->treeWidget->addAction(getUi()->actionExtractFile);
 
 	//Some fancy style setting
 	getUi()->progressBar->setStyle(new QPlastiqueStyle);
@@ -56,11 +60,13 @@ Main::~Main()
 {
 	//Save settings
 	if(QDir::currentPath() != _lastDotPath)
-		settings->setValue("paths/dotPath", _lastDotPath);
+		settings->setValue("paths/dot", _lastDotPath);
 	if(QDir::currentPath() != _lastIsoPath)
-		settings->setValue("paths/isoPath", _lastIsoPath);
+		settings->setValue("paths/iso", _lastIsoPath);
 	if(QDir::currentPath() != _gamePath)
-		settings->setValue("paths/gamePath", _gamePath);
+		settings->setValue("paths/game", _gamePath);
+	if(QDir::currentPath() != _filePath)
+		settings->setValue("paths/file", _filePath);
 	delete settings;
 }
 
@@ -137,6 +143,7 @@ uint64 Main::addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node)
 	item->setText(0, QString::fromAscii((const char*)node->file->name, node->file->length));
 	item->setText(1, str.sprintf("%02X", node->file->type));
 	item->setText(3, str.sprintf("%04X", node->file->sector));
+	item->setData(999, Qt::DisplayRole, VPtr<XboxFileInfo>::asQVariant(node->file));             //Give this item a pointer to its own node
 
 	uint64 totalSize = node->file->size;
 	item->setText(2, getHumenSize(node->file->size));
@@ -171,6 +178,24 @@ void Main::addLog(QString log)
 	getUi()->textLog->setPlainText(log.append("\n"+getUi()->textLog->toPlainText()));
 
 }
+
+void Main::extractFile()
+{
+	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
+	if(iso == NULL)
+		return;
+	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->treeWidget->currentItem()->data(999, Qt::DisplayRole));
+
+	QString dir = QFileDialog::getExistingDirectory(this, NULL, _filePath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+	if(dir.length() <= 0)
+		return;
+	_filePath = dir;
+
+	string path = _filePath.toStdString();
+	iso->getDisc()->saveFile(path, file);
+	addLog(QString::fromStdString(string("File saved ") + path));
+}
+
 void Main::extractIso()
 {
 	//Get the iso

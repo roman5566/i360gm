@@ -10,6 +10,20 @@
 
 using std::vector;
 
+template <class T> class VPtr
+{
+public:
+	static T* asPtr(QVariant v)
+	{
+		return  (T *) v.value<void *>();
+	}
+
+	static QVariant asQVariant(T* ptr)
+	{
+		return qVariantFromValue((void *) ptr);
+	}
+};
+
 class Main : public QMainWindow
 {
 	Q_OBJECT
@@ -31,6 +45,7 @@ public:
 		void extractIso();
 		void setGamePath();
 		void checkHashCollision();
+		void extractFile();
 
 		//Extraction
 		void fileExtracted(QString name, uint size);
@@ -51,5 +66,6 @@ private:
 	QString _lastDotPath;
 	QString _lastIsoPath;
 	QString _gamePath;
+	QString _filePath;
 };
 #endif // UIMAIN_H
