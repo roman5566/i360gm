@@ -22,6 +22,7 @@ public:
 	void addIso(Iso *iso);
 	void clearIsos();
 	Iso* getIso(int index);
+	vector<Iso*> *getIsos();
 
 protected:
 	vector<Iso*> _isos;

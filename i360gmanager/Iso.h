@@ -49,6 +49,7 @@ public:
 	bool isDefaultXex();
 	bool isValidMedia();
 	XboxFileInfo* getFile(char* name, int length);
+	XboxDisc *getDisc();
 	
 public slots:
 	bool setPath(QString path);

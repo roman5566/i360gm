@@ -201,6 +201,11 @@ bool Iso::isDefaultXex()
 	return (_isValidXex == 1);
 }
 
+XboxDisc *Iso::getDisc()
+{
+	return _disc;
+}
+
 /**
  * getField returns data based on colum number, this is used for the ItemWidget of Qt
  * @param column referencing to what colum we want the data
@@ -208,14 +213,16 @@ bool Iso::isDefaultXex()
  */
 QVariant Iso::getField(int column)
 {
+	QString str;
 	switch(column)
 	{
 	case 0:
 		return _binTree;
 	case 1:
-		return _fileNo;
+		return _disc->hashTime;
 	case 2:
-		return QVariant();
+		str = str.sprintf("0x%08X", _disc->getHash());
+		return str;
 	case 3:
 		return getIso();
 	case 4:

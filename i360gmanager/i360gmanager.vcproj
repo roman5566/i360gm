@@ -59,6 +59,7 @@
 				AdditionalDependencies="qtmain.lib QtCore4.lib QtGui4.lib QtXml4.lib QtSql4.lib"
 				OutputFile="$(OutDir)\$(ProjectName).exe"
 				AdditionalLibraryDirectories="$(QTDIR)\lib"
+				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="false"
 				SubSystem="2"
 			/>
@@ -412,6 +413,18 @@
 			</File>
 			<File
 				RelativePath=".\IsoList.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Helpers"
+			>
+			<File
+				RelativePath=".\Helpers\MurmurHash3.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Helpers\MurmurHash3.h"
 				>
 			</File>
 		</Filter>

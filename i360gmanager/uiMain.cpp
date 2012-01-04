@@ -14,7 +14,7 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	//Set model for iso list
 	_model = new IsoList();
 	ui.tableView->setModel(_model);
-	ui.tableView->verticalHeader()->setResizeMode(QHeaderView::ResizeToContents);
+	ui.tableView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
 	//Fancy the file explorer
 	ui.treeWidget->header()->resizeSection(0, 400);
@@ -33,6 +33,7 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	connect(ui.actionSaveDot, SIGNAL(triggered()), this, SLOT(saveDot()));
 	connect(ui.actionExtractIso, SIGNAL(triggered()), this, SLOT(extractIso()));
 	connect(ui.actionSetGamePath, SIGNAL(triggered()), this, SLOT(setGamePath()));
+	connect(ui.actionCheckHashCollision, SIGNAL(triggered()), this, SLOT(checkHashCollision()));
 
 	//Show events for docks
 	connect(ui.actionFileExplorer, SIGNAL(triggered()), getUi()->DockFileExplorer, SLOT(show()));
@@ -61,6 +62,24 @@ Main::~Main()
 	if(QDir::currentPath() != _gamePath)
 		settings->setValue("paths/gamePath", _gamePath);
 	delete settings;
+}
+
+void Main::checkHashCollision()
+{
+	map<uint, uint> hashes;
+	vector<Iso*> *isos = _model->getIsos();
+	for(int i = 0; i < isos->size(); i++)
+	{
+		Iso *iso = isos->at(i);
+		hashes[iso->getDisc()->getHash()]++;
+
+		if(hashes[iso->getDisc()->getHash()] > 1)
+		{
+			addLog("Found a collision!!!!!!!!");
+			return;
+		}
+	}
+	addLog("No collision found!");
 }
 
 void Main::setGamePath()
@@ -185,7 +204,7 @@ void Main::saveDot()
 
 	//Ask user for save
 	QString file = iso->getShortIso();
-	QString fileName = QFileDialog::getSaveFileName(this, NULL, _lastDotPath + QDir::separator() + file.append(".gv"), "DOT Graph (*.gv *.dot)");      //Default file extension is .gv as .dot is in use by office
+	QString fileName = QFileDialog::getSaveFileName(this, NULL, _lastDotPath + QDir::separator() + file + QString(".gv"), "DOT Graph (*.gv *.dot)");      //Default file extension is .gv as .dot is in use by office
 	_lastDotPath = QFileInfo(fileName).absoluteDir().absolutePath();
 	
 	//Make the dot file

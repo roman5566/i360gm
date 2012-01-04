@@ -2,9 +2,9 @@
 
 IsoList::IsoList() : QAbstractTableModel()
 {
-	_header.push_back(QString("Icon"));          //0
-	_header.push_back(QString("Title"));         //1
-	_header.push_back(QString("MediaID"));       //2
+	_header.push_back(QString("Bin (ms)"));          //0
+	_header.push_back(QString("Hash (ms)"));         //1
+	_header.push_back(QString("Hash"));       //2
 	_header.push_back(QString("Iso"));           //3
 	_header.push_back(QString("Defaul.xex"));    //4
 }
@@ -32,6 +32,11 @@ int IsoList::rowCount(const QModelIndex& parent) const
 int IsoList::columnCount(const QModelIndex& parent) const
 {
 	return _header.size();
+}
+
+vector<Iso*> *IsoList::getIsos()
+{
+	return &_isos;
 }
 
 Iso* IsoList::getIso(int index)

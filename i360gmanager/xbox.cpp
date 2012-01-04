@@ -1,3 +1,4 @@
+#include <Windows.h>
 #include "xbox.h"
 
 /**
@@ -6,6 +7,8 @@
  */
 XboxDisc::XboxDisc(string path)
 {
+	_hash = 0;
+	_realHandle = NULL;
 	_type = NO;
 	_handle = _open(path.c_str(), _O_BINARY | _O_RDONLY);
 	isValidMedia();
@@ -20,6 +23,46 @@ XboxDisc::~XboxDisc()
 	for(it = _sectors.begin(); it != _sectors.end(); it++)
 		delete it->second;
 	_close(_handle);  //Close the handle to the iso
+}
+
+HANDLE XboxDisc::getHandle()
+{
+	if(_realHandle == NULL)
+		_realHandle = (HANDLE)_get_osfhandle(_handle);
+	return _realHandle;
+}
+
+uint XboxDisc::getHash()
+{
+	if(_hash != 0)    //Cache
+		return _hash;
+
+	//Get Granularity
+	SYSTEM_INFO info;
+	GetSystemInfo(&info);
+
+	//We read from the video offset -64 sectors to +64 sectors, why? Because currently (04-01-12) abgx uses 16 stealth sectors and we allow it to increase a lot more and
+	//the game sector starts at video offset + 32 sectors so we read also 32 sectors of the game partition. So as far as i know i have covered my bases. And jeez my grammar sucks so much!
+	uint size = 128*SECTOR_SIZE;
+	uint align = (_type - (size/2)) % info.dwAllocationGranularity;
+	uint offset = (_type - (size/2)) - align;
+	size += align;
+
+	//Get data pointer
+	HANDLE mapping = CreateFileMapping(getHandle(), NULL, PAGE_READONLY, 0, 0, NULL);
+	void *data = MapViewOfFile(mapping, FILE_MAP_READ, 0, offset, size);
+
+	//Calculate hash
+	_hash = 42;
+	long clk = clock();
+	MurmurHash3_x86_32(data, size, 42, &_hash);
+	hashTime = clock()-clk;
+
+	//Cleanup
+	UnmapViewOfFile(data);
+	CloseHandle(mapping);
+	
+	return _hash;
 }
 
 /**

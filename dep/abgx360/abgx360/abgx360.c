@@ -4,12 +4,12 @@ abgx360.c
 
 The ultimate tool for Xbox 360 ISOs and Stealth files!
 
-Copyright 2008-2010 by Seacrest <Seacrest[at]abgx360[dot]net>
+Copyright 2008-2012 by Seacrest <Seacrest[at]abgx360[dot]net>
 
 ******************************************************************************/
 
 #if (defined(_WIN32) || defined(__WIN32__)) && !defined(WIN32)
-#define WIN32
+    #define WIN32
 #endif
 
 #define _LARGEFILE_SOURCE
@@ -20,45 +20,65 @@ Copyright 2008-2010 by Seacrest <Seacrest[at]abgx360[dot]net>
 #define PFI_HEX 1
 #define DMI_HEX 2
 
-#define WEB_INIDIR 1
-#define WEB_CSV 2
-#define WEB_DAT 3
-#define WEB_STEALTHDIR 4
-#define WEB_AUTOUPLOAD 5
-#define WEB_UNVERIFIEDINIDIR 6
+#define WEB_INIDIR           1
+#define WEB_CSV              2
+#define WEB_DAT              3
+#define WEB_TOPOLOGY         4
+#define WEB_STEALTHDIR       5
+#define WEB_AUTOUPLOAD       6
+#define WEB_UNVERIFIEDINIDIR 7
+//#define WEB_AP25AUTOUPLOAD   8
+//#define WEB_DAE              9
+
 
 #define XEX_INI                  1
 #define SSXEX_INI                2
 #define SSXEX_INI_FROM_XEX_INI   3
 #define UNVERIFIED_INI           4
 #define SS_FILE                  5
-#define STEALTH_FILE             6
-#define GIANT_VIDEO_FILE         7
-#define SMALL_VIDEO_FILE         8
-#define AP25_BIN_FILE            9
-#define AP25_HASH_FILE           10
+#define SS_FILE_OK_IF_MISSING    6
+#define STEALTH_FILE             7
+#define GIANT_VIDEO_FILE         8
+#define SMALL_VIDEO_FILE         9
+#define TOP_BIN_FILE            10
+#define TOP_HASH_FILE           11
 
 #define	MAX_FILENAMES 100000
 
 // MAX_DIR_LEVELS * MAX_DIR_SECTORS * 2048 will be the maximum size of fsbuffer during execution
 #define MIN_DIR_SECTORS 20
-#define MAX_DIR_SECTORS 200  // needs to be an even multiple of MIN_DIR_SECTORS; largest observed was cod4 (53)
-#define MIN_DIR_LEVELS 5
-#define MAX_DIR_LEVELS 150  // needs to be an even multiple of MIN_DIR_LEVELS; largest observed was dark messiah (22)
+#define MAX_DIR_SECTORS 300  // needs to be an even multiple of MIN_DIR_SECTORS; largest observed was cod4 (53)
+#define MIN_DIR_LEVELS  10
+#define MAX_DIR_LEVELS  150  // needs to be an even multiple of MIN_DIR_LEVELS; largest observed was dark messiah (22)
 
 #define WOW_THATS_A_LOT_OF_RAM 134217728  // 128 MB
 
-#include <stdio.h> // standard i/o
-#include <stddef.h> // for offsetof
-#include <stdbool.h> // true/false macro for bools
-#include <stdlib.h> // standard library definitions
-#include <string.h> // for string operations
-#include <strings.h> // for more string operations
-#include <errno.h> // for errors
+// values for extended c/r
+#define NUM_SS_CR_SAMPLES   51  // should be an odd number, may cause poor formatting of bar graphs if greater than 59
+//#define NUM_AP25_CR_SAMPLES 31  // should be an odd number, may cause poor formatting of bar graphs if greater than 57
+//#define AP25_HIGH_ANGLE     9   // don't change this
+//#define AP25_MEDIUM_ANGLE   5
+#define SS_TOLERANCE        15
+#define SS_HIGH_ANGLE       9
+#define SS_MEDIUM_ANGLE     5
+
+//#define DAE_HEADER_SIZE 336
+//#define DAE_SEARCH_MID  0
+//#define DAE_SEARCH_DID  1
+//#define DAE_SEARCH_TID  2
+
+#include <stdio.h>     // standard i/o
+#include <stddef.h>    // for offsetof
+#include <stdbool.h>   // true/false macro for bools
+#include <stdlib.h>    // standard library definitions
+#include <string.h>    // for string operations
+#include <strings.h>   // for more string operations
+#include <errno.h>     // for errors
 #include <sys/types.h> // type definitions like off_t
-#include <time.h> // for time()
-#include <dirent.h> // for opendir, readdir
-#include <sys/stat.h> // for stat(), bsd/posix mkdir()
+#include <time.h>      // for time()
+#include <dirent.h>    // for opendir, readdir
+#include <sys/stat.h>  // for stat(), bsd/posix mkdir()
+#include <math.h>      // for pow, roundf
 #include "rijndael-alg-fst.h"
 #include "sha1.h"
 #include "mspack/mspack.h"
@@ -69,13 +89,13 @@ Copyright 2008-2010 by Seacrest <Seacrest[at]abgx360[dot]net>
     #define ABGX360_OS "Windows"
     #include "zlib.h"
     #include "curl/curl.h"
-    #include "fnmatch.h" // for fnmatch
-    #include <windows.h> // for GetTickCount, SetConsoleTextAttribute, ReadFile, RegOpenKeyEx, RegQueryValueEx, CreateFile, SetFilePointerEx, SetEndOfFile, ...
-    #include <conio.h> // for getch
-    #include <direct.h> // for _mkdir
+    #include "fnmatch.h"      // for fnmatch
+    #include <windows.h>      // for GetTickCount, SetConsoleTextAttribute, ReadFile, RegOpenKeyEx, RegQueryValueEx, CreateFile, SetFilePointerEx, SetEndOfFile, ...
+    #include <conio.h>        // for getch
+    #include <direct.h>       // for _mkdir
     #include <ddk/ntddstor.h> // device i/o stuff
     #include <ddk/ntddscsi.h> // SCSI_PASS_THROUGH_DIRECT
-    #include "spti.h" // SCSI_PASS_THROUGH_DIRECT_WITH_BUFFER
+    #include "spti.h"         // SCSI_PASS_THROUGH_DIRECT_WITH_BUFFER
     char winbuffer[2048];
     HANDLE hDevice = INVALID_HANDLE_VALUE;
     #define mkdir(a,b) _mkdir(a)
@@ -91,16 +111,16 @@ Copyright 2008-2010 by Seacrest <Seacrest[at]abgx360[dot]net>
     #define LL "ll"
     #include <zlib.h>
     #include <curl/curl.h>
-    #include <fnmatch.h> // for fnmatch
-    #include <sys/time.h> // for gettimeofday
-    #include <pwd.h> // for getpwuid
-    #include <unistd.h> // for getuid, read()
-    #include <fcntl.h> // for open()
+    #include <fnmatch.h>  // for fnmatch()
+    #include <sys/time.h> // for gettimeofday()
+    #include <pwd.h>      // for getpwuid()
+    #include <unistd.h>   // for getuid(), getpid(), read()
+    #include <fcntl.h>    // for open(), fcntl()
     int fd;
     #if defined(__linux__)
         #define ABGX360_OS "Linux"
-        #include <scsi/sg.h> // for sg_io_hdr
-        #include <sys/ioctl.h> // for ioctl
+        #include <scsi/sg.h>   // for sg_io_hdr
+        #include <sys/ioctl.h> // for ioctl()
         struct sg_io_hdr sgio;
         #define DATA_NONE SG_DXFER_NONE
         #define DATA_IN   SG_DXFER_FROM_DEV
@@ -155,49 +175,66 @@ Copyright 2008-2010 by Seacrest <Seacrest[at]abgx360[dot]net>
 
 #define BIGBUF_SIZE 32768  // 32 KB, changing this could cause some problems
 
-#define NUM_CURRENTPFIENTRIES   5  // update this when adding new pfi entries
-#define NUM_CURRENTVIDEOENTRIES 9  // update this when adding new video entries
+#define NUM_CURRENTPFIENTRIES   9  // update this when adding new pfi entries
+#define NUM_CURRENTVIDEOENTRIES 13 // update this when adding new video entries
 
-#define NUM_CURRENTAP25MEDIAIDS 6  // update this when adding new AP25 media ids for games that have no AP25 flag in the default.xex
+#define NUM_CURRENTAP25MEDIAIDS       25  // update this when adding new AP25 media ids for discs that have no AP25 flag in the default.xex
+#define NUM_CURRENTAP25TITLEIDS        2  // update this when adding new AP25 title ids for discs that have no AP25 flag in the default.xex
+#define NUM_CURRENTAP25DISCPROFILEIDS 11  // update this when adding new AP25 disc profile ids
+//#define NUM_CURRENTDAEVERSIONS        5   // update this when adding new DAE versions and descriptions
+
+#define TOPOLOGY_SIZE 26624
 
 // update version values here
-char *headerversion = "v1.0.5";
-char *curluseragent = "abgx360 v1.0.5 ("ABGX360_OS")";
-unsigned long currentversion = 0x010005L;  // MSB (1.2.3 = 0x010203)
+char *headerversion = "v1.0.6";
+char *curluseragent = "abgx360 v1.0.6 ("ABGX360_OS")";
+unsigned long currentversion = 0x010006L;  // MSB (1.2.3 = 0x010203)
 
 // this will be replaced with the value from abgx360.dat if it exists
 unsigned long latestversion = 0L;
 
-// update this value before release (unrecognized pfi/video on a game authored before this date is labeled almost certainly corrupt, otherwise it might be a brand new wave)
+// update this value before release (unrecognized pfi/video on a game authored before this date is labeled almost
+// certainly corrupt, otherwise it might be a brand new wave)
 // this will be replaced with the value from abgx360.dat if it exists
-unsigned long long lastknownwave = 0x01CA3FCE9F2FC000LL;  // 2009-09-28
+unsigned long long lastknownwave = 0x01CC6C27EBA6C000LL;  // 2011-09-06
 
-// update this value if additional stealth sectors are needed in our ISOs (in the area between L0 video padding
-// and AP25) so that older versions of abgx360 will not blank them out if fixing video padding is enabled
+// update this value if additional stealth sectors are needed in our ISOs so that older versions
+// of abgx360 will not blank them out if fixing video padding is enabled (works for XGD2 or XGD3)
 // this will be replaced with the value from abgx360.dat if it exists
-unsigned long total_sectors_available_for_video_data = 129820;  // decrease if needed, never increase
+unsigned long number_of_stealth_sectors = 16L;  // increase if needed, never decrease (13 sectors for topology data plus 1 sector each for PFI, DMI, SS)
+
+// update this value if stealth sectors or data ever needs to be placed in the 16 sectors between an XGD3 SS and the game partition
+// xgd3_stealth_padding_bitfield is 16 bits, one for each of the 16 sectors
+// a bit value of 1 indicates a padding sector, 0 indicates a data sector
+// Example: 0x7EFE = 0111111011111110 means that only sectors 2-7 and 9-15 will be checked for blank padding if check/fix padding is enabled
+// all bits are currently set to 1 (1111111111111111 = 0xFFFF) which means that all 16 sectors will be checked for blank padding
+// this will be replaced with the value from abgx360.dat if it exists
+unsigned short xgd3_stealth_padding_bitfield = 0xFFFF;
 
 // local directories
 char homedir[2048];
 #ifdef WIN32
-    char *abgxdir = "\\abgx360\\";
-    char *stealthdir = "StealthFiles\\";
+    char *abgxdir =        "\\abgx360\\";
+    char *stealthdir =     "StealthFiles\\";
     char *userstealthdir = "UserStealthFiles\\";
-    char *imagedir = "Images\\";
+    char *imagedir =       "Images\\";
 #else
-    char *abgxdir = "/.abgx360/";
-    char *stealthdir = "StealthFiles/";
+    char *abgxdir =        "/.abgx360/";
+    char *stealthdir =     "StealthFiles/";
     char *userstealthdir = "UserStealthFiles/";
-    char *imagedir = "Images/";
+    char *imagedir =       "Images/";
 #endif
 
 // load replacements from abgx360.ini if it exists (make sure to update checkini() if these addresses are changed)
-char *webinidir = "http://abgx360.net/Apps/verified/";  // dir that contains verified ini files
-char *webunverifiedinidir = "http://abgx360.net/Apps/unverified/";  // dir that contains unverified ini files
-char *webcsv = "http://abgx360.net/Apps/Stealth360/GameNameLookup.csv";  // http path to GameNameLookup.csv
-char *webdat = "http://abgx360.net/Apps/Stealth360/abgx360.dat";  // http path to abgx360.dat
-char *webstealthdir = "http://abgx360.net/Apps/StealthFiles/";  // dir that contains SS/DMI/PFI/Video stealth files
-char *autouploadwebaddress = "http://abgx360.net/Apps/Control/AutoUpload.php";  // form for submitting AutoUploads
+char *webinidir =            "http://abgx360.net/Apps/verified/";                       // dir that contains verified ini files
+char *webunverifiedinidir =  "http://abgx360.net/Apps/unverified/";                     // dir that contains unverified ini files
+char *webcsv =               "http://abgx360.net/Apps/Stealth360/GameNameLookup.csv";   // http path to GameNameLookup.csv
+char *webdat =               "http://abgx360.net/Apps/Stealth360/abgx360.dat";          // http path to abgx360.dat
+char *webtopology =          "http://abgx360.net/Apps/topology.php";                    // http path to topology.php
+char *webstealthdir =        "http://abgx360.net/Apps/StealthFiles/";                   // dir that contains SS/DMI/PFI/Video stealth files
+char *autouploadwebaddress = "http://abgx360.net/Apps/Control/AutoUpload.php";          // form for submitting AutoUploads
+//char *ap25autouploadwebaddress = "http://abgx360.net/Apps/Control/AP25AutoUpload.php";  // form for submitting AP25 AutoUploads
+//char *webdae = "http://abgx360.net/Apps/Stealth360/dae.bin";                            // http path to dae.bin
 
 struct waveentry {unsigned long crc; uchar sha1[20]; char *description; bool hosted;};
 struct waveentry currentpfientries[NUM_CURRENTPFIENTRIES];
@@ -219,17 +256,32 @@ struct mediaidshort *mostrecentap25mediaids;
 struct mediaidshort *datfileap25mediaids;
 unsigned long num_ap25mediaids;
 
+struct mediaidshort currentap25titleids[NUM_CURRENTAP25TITLEIDS];
+struct mediaidshort *mostrecentap25titleids;
+struct mediaidshort *datfileap25titleids;
+unsigned long num_ap25titleids;
+
+struct mediaidshort currentap25discprofileids[NUM_CURRENTAP25DISCPROFILEIDS];
+struct mediaidshort *mostrecentap25discprofileids;
+struct mediaidshort *datfileap25discprofileids;
+unsigned long num_ap25discprofileids;
+
+//struct flagverdescription {unsigned char flags; unsigned short version; char *description;};
+//struct flagverdescription currentdaeversions[NUM_CURRENTDAEVERSIONS];
+//struct flagverdescription *mostrecentdaeversions;
+//struct flagverdescription *datfiledaeversions;
+//unsigned long num_daeversions;
+
 int mediumangledev_value = 3, highangledev_value = 9, fixangledev_value = 3;
 
 bool verbose = true, stealthcheck = true, autofix = true, autofixuncertain = true, verify = true, onlineupdate = true, csvupdate = false;
-bool checkdvdfile = true, checkpadding = false, fixdeviation = true, fixDRT = true, increasescreenbuffersize = true;
+bool checkdvdfile = true, checkpadding = false, padL0 = false, fixdeviation = true, fixDRT = true, increasescreenbuffersize = true;
 bool autofixalways = false, autoupload = false, keeporiginaliso = false, dontparsefs = false;
-bool extraverbose = false, debug = false, debugfs = false, altlayerbreak = false;
+bool extraverbose = false, debug = false, debugfs = false;
 bool noheader = false, justheader = false, justfooter = false;
 bool minimal = false, html = false, stripcolors = false, script = false, justhelp = false;
-bool terminal = false, stayoffline = false;
-bool pauseshell = false, maximize = false;
-bool addsplitvid = true, showfiles = false;
+bool terminal = false, stayoffline = false, showsstable = false;
+bool pauseshell = false, maximize = false, showfiles = false;
 bool fixangle359 = false, showfulltable = false;
 bool homeless = false, makedatfile = false;
 bool patchvalidfilesonly = true, patchifstealthpasses = false, manualpatch = false, manualextract = false;
@@ -241,16 +293,19 @@ bool skiplayerboundaryinfo = false, devkey = false, trustssv2angles = true, usei
 struct badshit {unsigned char c[21], d[21], data[21]; int count; char* explanation;};
 char unrecognizedRTarray[21];
 // don't forget to add new args to the list before stat()
-int truncatearg = 0, userregionarg = 0, folderarg = 0, matcharg = 0, specialarg = 0, readretryarg = 0, layerbreakarg = 0;
+int truncatearg = 0, userregionarg = 0, folderarg = 0, matcharg = 0, specialarg = 0, readretryarg = 0;
 int patchvideoarg = 0, patchpfiarg = 0, patchdmiarg = 0, patchssarg = 0;
-int extractvideoarg = 0, extractvideopartitionarg = 0, extractpfiarg = 0, extractdmiarg = 0, extractssarg = 0;
-int autouploaduserarg = 0, autouploadpassarg = 0, fixangledevarg = 0, connectiontimeoutarg = 0, dvdtimeoutarg = 0, dvdarg = 0, userlangarg = 0;
+int extractvideoarg = 0, extractpfiarg = 0, extractdmiarg = 0, extractssarg = 0;
+int autouploaduserarg = 0, autouploadpassarg = 0, fixangledevarg = 0, connectiontimeoutarg = 0, dvdtimeoutarg = 0;
+int dvdarg = 0, userlangarg = 0, origarg = 0, speedarg = 0;
 //int riparg = 0, ripdestarg = 0;
-long connectiontimeout = 20, dvdtimeout = 20, layerbreak = 1913760, userlang = 0;
+long connectiontimeout = 20, dvdtimeout = 20, userlang = 0;
+float speed = 0.0;
 unsigned long curlprogressstartmsecs, userregion = 0L;
 char *green = "\033[1;32;40m", *yellow = "\033[1;33;40m", *red = "\033[1;31;40m", *cyan = "\033[1;36;40m", *blue = "\033[1;34;40m";
 char *darkblue = "\033[0;34;40m", *white = "\033[1;37;40m", *arrow = "\033[1;34;40m", *box = "\033[1;34;40m", *normal = "\033[0;37;40m";
 char *wtfhexcolor = "\033[1;31;40m", *wtfcharcolor = "\033[1;37;41m", *reset = "\033[0m", *brown = "\033[0;33;40m", *filename = "\033[0;37;44m";
+char *blackonyellow = "\033[0;30;43m", *blackonred = "\033[0;30;41m";
 #ifdef __APPLE__
     char *hexoffsetcolor = "\033[0;37;40m", *darkgray = "\033[0;37;40m";  // can't do dark gray apparently (shows completely black) so just use normal gray
 #else
@@ -285,15 +340,16 @@ static uchar videosha1[3][20] =
     {0xa3,0x95,0xd4,0x45,0x07,0x37,0x4e,0xea,0x04,0xd7,0x37,0xc9,0x4b,0x92,0xa7,0xd4,0x1a,0x41,0x16,0x77}
 };
 */
-unsigned char dmi_mediaid[16], ss_mediaid[16], xex_mediaid[16];
+unsigned char dmi_mediaid[16], ss_mediaid[16], xex_mediaid[16], xex_discprofileid[16], titleid[4];
 unsigned long pfi_sectorstotal, pfi_sectorsL0, pfi_sectorsL1;
 unsigned long long pfi_offsetL1, pfi_offsetL0end;
-unsigned long long dmi_authored, ss_authored, ss_mastered;
 void printhtmltop(int argc, char *argv[]), printhtmlbottom(), printheader(), color(char *color), printwtfhexcolor(), printwtfcharcolor();
 void printwin32filetime(unsigned long long win32filetime), printmediaid(unsigned char* mediaid), hexdump(unsigned char* ptr, int stealthtype, int bytes);
 void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkvideopadding), checkdmi(unsigned char *dmi), checkpfi(unsigned char *pfi);
-void checkap25();
-unsigned char ap25[2048];
+//void checkap25(char *argv[]);
+//unsigned char ap25[2048];
+void checktopology();
+unsigned char topology[TOPOLOGY_SIZE];
 int checkss(), doautofix(), doverify(), checkgame();
 unsigned long getzeros(unsigned char* ptr, unsigned long firstbyte, unsigned long lastbyte);
 bool lookslikepfi(unsigned char* pfi), lookslike360dmi(unsigned char* dmi), lookslikexbox1dmi(unsigned char* dmi);
@@ -314,7 +370,12 @@ int docheckgamecrc();
 int docheckdvdfile();
 void donecheckwrite(char *name), initcheckwrite();
 void domanualextraction(char *argv[]), domanualpatch(char *argv[]);
-int doautoupload(char *argv[]);
+bool isanxbox360rippingdrive(char *drivename, bool ap25supportneeded);
+int doextendedsscr(char *forced_cr_drive, unsigned char *median_ss);
+//int doextendedap25cr(char *forced_cr_drive, unsigned char *median_ap25);
+//unsigned short searchdaetable(unsigned char* daefilebuffer, unsigned short dae_tablesize, int search_type, unsigned char *search_id);
+//void showap25data(unsigned char *ap25bin);
+int doautoupload(char *argv[], bool upload_ss_only);
 int trytowritestealthfile(const void *ptr, size_t size, size_t nmemb, FILE *stream, char *filename, long long offset);
 int trytoreadstealthfile(void *ptr, size_t size, size_t nmemb, FILE *stream, char *filename, long long offset);
 int padzeros(FILE *stream, char *filename, long long startoffset, long long endoffset);
@@ -331,34 +392,37 @@ unsigned long long corruptionoffset[100];
 bool unverifiediniexists();
 int rebuildiso(char *filename);
 void printseekerror(char *filename, char *action);
-int doaddsplitvid();
 struct filesys { unsigned long datasector, datalength; } *filesystem, *holes;
 CURL *curl;
 CURLcode res;
 struct MyCurlFile { const char *filename; FILE *stream; };
 char curlerrorbuffer[CURL_ERROR_SIZE+1];
 struct stat buf;
-void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resourcesize, unsigned char *titleid);
+void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resourcesize);
 int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsize);
 size_t dontcare;
+bool valid_ssv2_exists_in_db();
+struct angledev {unsigned int angle; int dev;};
+int getangledeviation(int angle, int target);
 
-// global vars that might need to be reset after after every fileloop
+// global vars that might need to be reset after every fileloop
 bool writefile = true;
 bool checkgamecrcalways = false, checkgamecrcnever = false, gamecrcfailed = false, verifyfailed = false;
-bool stealthfailed = false, stealthuncertain = false, matchedbefore = false, xbox1iso = false;
+bool stealthfailed = false, stealthuncertain = false, xbox1iso = false;
 bool ss_stealthfailed = false, dmi_stealthfailed = false, pfi_stealthfailed = false, video_stealthfailed = false;
 bool dmi_stealthuncertain = false, ss_stealthuncertain = false, pfi_stealthuncertain = false, video_stealthuncertain = false;
-bool dmi_foundmediaid = false, ss_foundmediaid = false, xex_foundmediaid = false, foundregioncode = false, foundgamename = false;
+bool xex_foundmediaid = false, xex_founddiscprofileid = false, foundtitleid = false, foundregioncode = false, foundgamename = false;
 bool ss_foundtimestamp = false, usercancelledgamecrc = false;
 bool pfi_alreadydumped = false, pfi_foundsectorstotal = false, pfiexception = false;
 bool wtfhex = false, checkssbin = false;
 bool justastealthfile = false, isotoosmall = false;
-bool drtfucked = false, fixedss = false, fixedap25 = false;
+bool drtfucked = false, fixedss = false, fixedtopology = false; //fixedap25 = false;
 bool printstderr = false, rebuildfailed = false, curlheaderprinted = false;
 int unrecognizedRTcount = 0;
 //int videowave = 0, pfiwave = 0, truepfiwave = 0;
-unsigned long long video = 0;
-unsigned long game_crc32 = 0, xex_crc32 = 0, ss_crc32 = 0, ss_rawcrc32 = 0, dmi_crc32 = 0, pfi_crc32 = 0;
+unsigned long long video = 0, ss_authored = 0;
+unsigned long game_crc32 = 0, xex_crc32 = 0, ss_crc32 = 0, ss_rawcrc32 = 0, ss_staticcrc32 = 0, dmi_crc32 = 0, pfi_crc32 = 0;
+unsigned int ss_num_angles, ss_num_targets, ss_angleaddresses[4], ss_targets[4];
 unsigned long video_crc32 = 0, videoL0_crc32 = 0, videoL1_crc32 = 0;
 //uchar xex_sha1[20] = {0};
 uchar pfi_sha1[20] = {0};
@@ -378,34 +442,40 @@ long long L0capacity = -1;
 int level = 0;
 bool parsingfsfailed = false;
 bool extractimages = false, embedimages = false, noxexiniavailable = false, offlinewarningprinted = false;
+bool ssv2 = false, iso_has_ssv2 = false;
 bool verify_found_bad_pfi_or_video = false;
-bool game_has_ap25 = false;
+bool game_has_ap25 = false, xgd3 = false, topology_was_verified = false;
+bool drive_speed_needs_to_be_reset = false;
+unsigned int ss_replay_table_offset = 0, ss_replay_table_length = 0;
+long layerbreak = -1;
 
 // reset these global vars after every fileloop and parse cmd line again
 void resetvars() {
+    int i;
     writefile = true;
     checkgamecrcalways = false; checkgamecrcnever = false; gamecrcfailed = false; verifyfailed = false;
-    stealthfailed = false; stealthuncertain = false; matchedbefore = false; xbox1iso = false;
+    stealthfailed = false; stealthuncertain = false; xbox1iso = false;
     ss_stealthfailed = false; dmi_stealthfailed = false; pfi_stealthfailed = false; video_stealthfailed = false;
     dmi_stealthuncertain = false; ss_stealthuncertain = false; pfi_stealthuncertain = false; video_stealthuncertain = false;
-    dmi_foundmediaid = false; ss_foundmediaid = false; xex_foundmediaid = false; foundregioncode = false; foundgamename = false;
+    xex_foundmediaid = false; xex_founddiscprofileid = false; foundtitleid = false; foundregioncode = false; foundgamename = false;
     ss_foundtimestamp = false; usercancelledgamecrc = false;
     pfi_alreadydumped = false; pfi_foundsectorstotal = false; pfiexception = false;
     wtfhex = false; checkssbin = false;
     justastealthfile = false; isotoosmall = false;
-    drtfucked = false; fixedss = false, fixedap25 = false;
+    drtfucked = false; fixedss = false; fixedtopology = false; //fixedap25 = false;
     printstderr = false; rebuildfailed = false; curlheaderprinted = false;
     unrecognizedRTcount = 0;
     //videowave = 0; pfiwave = 0; truepfiwave = 0;
-    video = 0;
-    game_crc32 = 0; xex_crc32 = 0; ss_crc32 = 0; ss_rawcrc32 = 0; dmi_crc32 = 0; pfi_crc32 = 0;
+    video = 0; ss_authored = 0;
+    game_crc32 = 0; xex_crc32 = 0; ss_crc32 = 0; ss_rawcrc32 = 0; ss_staticcrc32 = 0; dmi_crc32 = 0; pfi_crc32 = 0;
+    ss_num_angles = 0; ss_num_targets = 0;
+    for(i=0;i<4;i++) { ss_angleaddresses[i] = 0; ss_targets[i] = 0; }
     video_crc32 = 0; videoL0_crc32 = 0; videoL1_crc32 = 0;
     //memset(xex_sha1, 0, 20);
     memset(pfi_sha1, 0, 20);
     //memset(video_sha1, 0, 20);
     ini_dmi_count = 0;
     ini_ss = 0; ini_pfi = 0; ini_video = 0; ini_rawss = 0; ini_v0 = 0; ini_v1 = 0; ini_game = 0; ini_xexhash = 0;
-    int i;
     for(i=0;i<30;i++) ini_dmi[i] = 0L;
     corruptionoffsetcount = 0;
     fp = NULL; csvfile = NULL; inifile = NULL; xexinifile = NULL;
@@ -418,8 +488,12 @@ void resetvars() {
     level = 0;
     parsingfsfailed = false;
     extractimages = false; embedimages = false; noxexiniavailable = false; offlinewarningprinted = false;
+    ssv2 = false; iso_has_ssv2 = false;
     verify_found_bad_pfi_or_video = false;
-    game_has_ap25 = false;
+    game_has_ap25 = false; xgd3 = false; topology_was_verified = false;
+    drive_speed_needs_to_be_reset = false;
+    ss_replay_table_offset = 0; ss_replay_table_length = 0;
+    layerbreak = -1;
   return;
 }
 
@@ -810,7 +884,8 @@ void doexitfunction() {
     if (fp != NULL) fclose(fp);
     if (curl != NULL) curl_easy_cleanup(curl);
     if (!html && pauseshell) {
-        printstderr = true; color(normal);
+        printstderr = true;
+        color(normal);
         #ifdef WIN32
             fprintf(stderr, "\nPress any key to exit . . . ");
             getch();
@@ -833,6 +908,12 @@ void doexitfunction() {
 
 static int filesort(const void *f1, const void *f2) {
   return strcasecmp(* (char * const *) f1, * (char * const *) f2);
+}
+
+int cmpangledev(const void *a, const void *b) {
+    struct angledev *i = (struct angledev *) a;
+    struct angledev *j = (struct angledev *) b;
+  return i->dev - j->dev;
 }
 
 unsigned long getmsecs() {
@@ -967,7 +1048,7 @@ void createsecretpng(char *secretpngpath) {
       return;
     }
     initcheckwrite();
-    if (checkwriteandprinterrors(secretpngdata, 1, 357, secretpng, 0, 0, secretpngpath, "creating secret.png") != 0) {
+    if (checkwriteandprinterrors(secretpngdata, 1, 357, secretpng, 0, 0, secretpngpath, "Creating secret.png") != 0) {
         fclose(secretpng);
       return;
     }
@@ -1037,7 +1118,7 @@ void createcheckedpng(char *checkedpngpath) {
       return;
     }
     initcheckwrite();
-    if (checkwriteandprinterrors(checkedpngdata, 1, 810, checkedpng, 0, 0, checkedpngpath, "creating checked.png") != 0) {
+    if (checkwriteandprinterrors(checkedpngdata, 1, 810, checkedpng, 0, 0, checkedpngpath, "Creating checked.png") != 0) {
         fclose(checkedpng);
       return;
     }
@@ -1199,336 +1280,686 @@ void printbadgamecrcerror() {
 }
 
 char* cdberror(char *sense) {
-    int i;
-    int match = -1;
-    struct { char *sensecode; char *string; } error[249];
-    error[0].sensecode = "00/00/00"; error[0].string = "NO ADDITIONAL SENSE INFORMATION";
-    error[1].sensecode = "00/04/04"; error[1].string = "LOGICAL UNIT NOT READY, FORMAT IN PROGRESS";
-    error[2].sensecode = "00/34/00"; error[2].string = "ENCLOSURE FAILURE";
-    error[3].sensecode = "00/35/00"; error[3].string = "ENCLOSURE SERVICES FAILURE";
-    error[4].sensecode = "00/35/01"; error[4].string = "UNSUPPORTED ENCLOSURE FUNCTION";
-    error[5].sensecode = "00/35/02"; error[5].string = "ENCLOSURE SERVICES UNAVAILABLE";
-    error[6].sensecode = "00/35/03"; error[6].string = "ENCLOSURE SERVICES TRANSFER FAILURE";
-    error[7].sensecode = "00/35/04"; error[7].string = "ENCLOSURE SERVICES TRANSFER REFUSED";
-    error[8].sensecode = "00/35/05"; error[8].string = "ENCLOSURE SERVICES CHECKSUM ERROR";
-    error[9].sensecode = "01/0B/00"; error[9].string = "WARNING";
-    error[10].sensecode = "01/0B/01"; error[10].string = "WARNING - SPECIFIED TEMPERATURE EXCEEDED";
-    error[11].sensecode = "01/0B/02"; error[11].string = "WARNING - ENCLOSURE DEGRADED";
-    error[12].sensecode = "01/0B/03"; error[12].string = "WARNING - BACKGROUND SELF-TEST FAILED";
-    error[13].sensecode = "01/0B/04"; error[13].string = "WARNING - BACKGROUND PRE-SCAN DETECTED MEDIUM ERROR";
-    error[14].sensecode = "01/0B/05"; error[14].string = "WARNING - BACKGROUND MEDIUM SCAN DETECTED MEDIUM ERROR";
-    error[15].sensecode = "01/0C/01"; error[15].string = "WRITE ERROR - RECOVERED WITH AUTO-REALLOCATION";
-    error[16].sensecode = "01/17/00"; error[16].string = "RECOVERED DATA WITH NO ERROR CORRECTION APPLIED";
-    error[17].sensecode = "01/17/01"; error[17].string = "RECOVERED DATA WITH RETRIES";
-    error[18].sensecode = "01/17/02"; error[18].string = "RECOVERED DATA WITH POSITIVE HEAD OFFSET";
-    error[19].sensecode = "01/17/03"; error[19].string = "RECOVERED DATA WITH NEGATIVE HEAD OFFSET";
-    error[20].sensecode = "01/17/04"; error[20].string = "RECOVERED DATA WITH RETRIES AND/OR CIRC APPLIED";
-    error[21].sensecode = "01/17/05"; error[21].string = "RECOVERED DATA USING PREVIOUS SECTOR ID";
-    error[22].sensecode = "01/17/07"; error[22].string = "RECOVERED DATA WITHOUT ECC - RECOMMEND REASSIGNMENT";
-    error[23].sensecode = "01/17/08"; error[23].string = "RECOVERED DATA WITHOUT ECC - RECOMMEND REWRITE";
-    error[24].sensecode = "01/17/09"; error[24].string = "RECOVERED DATA WITHOUT ECC - DATA REWRITTEN";
-    error[25].sensecode = "01/18/00"; error[25].string = "RECOVERED DATA WITH ERROR CORRECTION APPLIED";
-    error[26].sensecode = "01/18/01"; error[26].string = "RECOVERED DATA WITH ERROR CORR. & RETRIES APPLIED";
-    error[27].sensecode = "01/18/02"; error[27].string = "RECOVERED DATA - DATA AUTO-REALLOCATED";
-    error[28].sensecode = "01/18/03"; error[28].string = "RECOVERED DATA WITH CIRC";
-    error[29].sensecode = "01/18/04"; error[29].string = "RECOVERED DATA WITH L-EC";
-    error[30].sensecode = "01/18/05"; error[30].string = "RECOVERED DATA - RECOMMEND REASSIGNMENT";
-    error[31].sensecode = "01/18/06"; error[31].string = "RECOVERED DATA - RECOMMEND REWRITE";
-    error[32].sensecode = "01/18/08"; error[32].string = "RECOVERED DATA WITH LINKING";
-    error[33].sensecode = "01/37/00"; error[33].string = "ROUNDED PARAMETER";
-    error[34].sensecode = "01/5D/00"; error[34].string = "FAILURE PREDICTION THRESHOLD EXCEEDED";
-    error[35].sensecode = "01/5D/01"; error[35].string = "MEDIA FAILURE PREDICTION THRESHOLD EXCEEDED";
-    error[36].sensecode = "01/5D/02"; error[36].string = "LOGICAL UNIT FAILURE PREDICTION THRESHOLD EXCEEDED";
-    error[37].sensecode = "01/5D/03"; error[37].string = "SPARE AREA EXHAUSTION FAILURE PREDICTION THRESHOLD EXCEEDED";
-    error[38].sensecode = "01/5D/FF"; error[38].string = "FAILURE PREDICTION THRESHOLD EXCEEDED (FALSE)";
-    error[39].sensecode = "01/73/01"; error[39].string = "POWER CALIBRATION AREA ALMOST FULL";
-    error[40].sensecode = "01/73/06"; error[40].string = "RMA/PMA IS ALMOST FULL";
-    error[41].sensecode = "02/04/00"; error[41].string = "LOGICAL UNIT NOT READY, CAUSE NOT REPORTABLE";
-    error[42].sensecode = "02/04/01"; error[42].string = "LOGICAL UNIT IS IN PROCESS OF BECOMING READY";
-    error[43].sensecode = "02/04/02"; error[43].string = "LOGICAL UNIT NOT READY, INITIALIZING CMD. REQUIRED";
-    error[44].sensecode = "02/04/03"; error[44].string = "LOGICAL UNIT NOT READY, MANUAL INTERVENTION REQUIRED";
-    error[45].sensecode = "02/04/04"; error[45].string = "LOGICAL UNIT NOT READY, FORMAT IN PROGRESS";
-    error[46].sensecode = "02/04/07"; error[46].string = "LOGICAL UNIT NOT READY, OPERATION IN PROGRESS";
-    error[47].sensecode = "02/04/08"; error[47].string = "LOGICAL UNIT NOT READY, LONG WRITE IN PROGRESS";
-    error[48].sensecode = "02/04/09"; error[48].string = "LOGICAL UNIT NOT READY, SELF-TEST IN PROGRESS";
-    error[49].sensecode = "02/0C/07"; error[49].string = "WRITE ERROR - RECOVERY NEEDED";
-    error[50].sensecode = "02/0C/0F"; error[50].string = "DEFECTS IN ERROR WINDOW";
-    error[51].sensecode = "02/30/00"; error[51].string = "INCOMPATIBLE MEDIUM INSTALLED";
-    error[52].sensecode = "02/30/01"; error[52].string = "CANNOT READ MEDIUM - UNKNOWN FORMAT";
-    error[53].sensecode = "02/30/02"; error[53].string = "CANNOT READ MEDIUM - INCOMPATIBLE FORMAT";
-    error[54].sensecode = "02/30/03"; error[54].string = "CLEANING CARTRIDGE INSTALLED";
-    error[55].sensecode = "02/30/04"; error[55].string = "CANNOT WRITE MEDIUM - UNKNOWN FORMAT";
-    error[56].sensecode = "02/30/05"; error[56].string = "CANNOT WRITE MEDIUM - INCOMPATIBLE FORMAT";
-    error[57].sensecode = "02/30/06"; error[57].string = "CANNOT FORMAT MEDIUM - INCOMPATIBLE MEDIUM";
-    error[58].sensecode = "02/30/07"; error[58].string = "CLEANING FAILURE";
-    error[59].sensecode = "02/30/11"; error[59].string = "CANNOT WRITE MEDIUM - UNSUPPORTED MEDIUM VERSION";
-    error[60].sensecode = "02/3A/00"; error[60].string = "MEDIUM NOT PRESENT";
-    error[61].sensecode = "02/3A/01"; error[61].string = "MEDIUM NOT PRESENT - TRAY CLOSED";
-    error[62].sensecode = "02/3A/02"; error[62].string = "MEDIUM NOT PRESENT - TRAY OPEN";
-    error[63].sensecode = "02/3A/03"; error[63].string = "MEDIUM NOT PRESENT - LOADABLE";
-    error[64].sensecode = "02/3E/00"; error[64].string = "LOGICAL UNIT HAS NOT SELF-CONFIGURED YET";
-    error[65].sensecode = "03/02/00"; error[65].string = "NO SEEK COMPLETE";
-    error[66].sensecode = "03/06/00"; error[66].string = "NO REFERENCE POSITION FOUND";
-    error[67].sensecode = "03/0C/00"; error[67].string = "WRITE ERROR";
-    error[68].sensecode = "03/0C/02"; error[68].string = "WRITE ERROR - AUTO-REALLOCATION FAILED";
-    error[69].sensecode = "03/0C/03"; error[69].string = "WRITE ERROR - RECOMMEND REASSIGNMENT";
-    error[70].sensecode = "03/0C/07"; error[70].string = "WRITE ERROR - RECOVERY NEEDED";
-    error[71].sensecode = "03/0C/08"; error[71].string = "WRITE ERROR - RECOVERY FAILED";
-    error[72].sensecode = "03/0C/09"; error[72].string = "WRITE ERROR - LOSS OF STREAMING";
-    error[73].sensecode = "03/0C/0A"; error[73].string = "WRITE ERROR - PADDING BLOCKS ADDED";
-    error[74].sensecode = "03/11/00"; error[74].string = "UNRECOVERED READ ERROR";
-    error[75].sensecode = "03/11/01"; error[75].string = "READ RETRIES EXHAUSTED";
-    error[76].sensecode = "03/11/02"; error[76].string = "ERROR TOO LONG TO CORRECT";
-    error[77].sensecode = "03/11/05"; error[77].string = "L-EC UNCORRECTABLE ERROR";
-    error[78].sensecode = "03/11/06"; error[78].string = "CIRC UNRECOVERED ERROR";
-    error[79].sensecode = "03/11/0F"; error[79].string = "ERROR READING UPC/EAN NUMBER";
-    error[80].sensecode = "03/11/10"; error[80].string = "ERROR READING ISRC NUMBER";
-    error[81].sensecode = "03/15/00"; error[81].string = "RANDOM POSITIONING ERROR";
-    error[82].sensecode = "03/15/01"; error[82].string = "MECHANICAL POSITIONING ERROR";
-    error[83].sensecode = "03/15/02"; error[83].string = "POSITIONING ERROR DETECTED BY READ OF MEDIUM";
-    error[84].sensecode = "03/31/00"; error[84].string = "MEDIUM FORMAT CORRUPTED";
-    error[85].sensecode = "03/31/01"; error[85].string = "FORMAT COMMAND FAILED";
-    error[86].sensecode = "03/31/02"; error[86].string = "ZONED FORMATTING FAILED DUE TO SPARE LINKING";
-    error[87].sensecode = "03/51/00"; error[87].string = "ERASE FAILURE";
-    error[88].sensecode = "03/51/01"; error[88].string = "ERASE FAILURE - INCOMPLETE ERASE OPERATION DETECTED";
-    error[89].sensecode = "03/57/00"; error[89].string = "UNABLE TO RECOVER TABLE-OF-CONTENTS";
-    error[90].sensecode = "03/72/00"; error[90].string = "SESSION FIXATION ERROR";
-    error[91].sensecode = "03/72/01"; error[91].string = "SESSION FIXATION ERROR WRITING LEAD-IN";
-    error[92].sensecode = "03/72/02"; error[92].string = "SESSION FIXATION ERROR WRITING LEAD-OUT";
-    error[93].sensecode = "03/73/00"; error[93].string = "CD CONTROL ERROR";
-    error[94].sensecode = "03/73/02"; error[94].string = "POWER CALIBRATION AREA IS FULL";
-    error[95].sensecode = "03/73/03"; error[95].string = "POWER CALIBRATION AREA ERROR";
-    error[96].sensecode = "03/73/04"; error[96].string = "PROGRAM MEMORY AREA UPDATE FAILURE";
-    error[97].sensecode = "03/73/05"; error[97].string = "PROGRAM MEMORY AREA IS FULL";
-    error[98].sensecode = "03/73/06"; error[98].string = "RMA/PMA IS ALMOST FULL";
-    error[99].sensecode = "03/73/10"; error[99].string = "CURRENT POWER CALIBRATION AREA IS ALMOST FULL";
-    error[100].sensecode = "03/73/11"; error[100].string = "CURRENT POWER CALIBRATION AREA IS FULL";
-    error[101].sensecode = "04/00/17"; error[101].string = "CLEANING REQUESTED";
-    error[102].sensecode = "04/05/00"; error[102].string = "LOGICAL UNIT DOES NOT RESPOND TO SELECTION";
-    error[103].sensecode = "04/08/00"; error[103].string = "LOGICAL UNIT COMMUNICATION FAILURE";
-    error[104].sensecode = "04/08/01"; error[104].string = "LOGICAL UNIT COMMUNICATION TIMEOUT";
-    error[105].sensecode = "04/08/02"; error[105].string = "LOGICAL UNIT COMMUNICATION PARITY ERROR";
-    error[106].sensecode = "04/08/03"; error[106].string = "LOGICAL UNIT COMMUNICATION CRC ERROR (ULTRA-DMA/32)";
-    error[107].sensecode = "04/09/00"; error[107].string = "TRACK FOLLOWING ERROR";
-    error[108].sensecode = "04/09/01"; error[108].string = "TRACKING SERVO FAILURE";
-    error[109].sensecode = "04/09/02"; error[109].string = "FOCUS SERVO FAILURE";
-    error[110].sensecode = "04/09/03"; error[110].string = "SPINDLE SERVO FAILURE";
-    error[111].sensecode = "04/09/04"; error[111].string = "HEAD SELECT FAULT";
-    error[112].sensecode = "04/15/00"; error[112].string = "RANDOM POSITIONING ERROR";
-    error[113].sensecode = "04/15/01"; error[113].string = "MECHANICAL POSITIONING ERROR";
-    error[114].sensecode = "04/1B/00"; error[114].string = "SYNCHRONOUS DATA TRANSFER ERROR";
-    error[115].sensecode = "04/3B/16"; error[115].string = "MECHANICAL POSITIONING OR CHANGER ERROR";
-    error[116].sensecode = "04/3E/01"; error[116].string = "LOGICAL UNIT FAILURE";
-    error[117].sensecode = "04/3E/02"; error[117].string = "TIMEOUT ON LOGICAL UNIT";
-    error[118].sensecode = "04/44/00"; error[118].string = "INTERNAL TARGET FAILURE";
-    error[119].sensecode = "04/46/00"; error[119].string = "UNSUCCESSFUL SOFT RESET";
-    error[120].sensecode = "04/47/00"; error[120].string = "SCSI PARITY ERROR";
-    error[121].sensecode = "04/4A/00"; error[121].string = "COMMAND PHASE ERROR";
-    error[122].sensecode = "04/4B/00"; error[122].string = "DATA PHASE ERROR";
-    error[123].sensecode = "04/4C/00"; error[123].string = "LOGICAL UNIT FAILED SELF-CONFIGURATION";
-    error[124].sensecode = "04/53/00"; error[124].string = "MEDIA LOAD OR EJECT FAILED";
-    error[125].sensecode = "04/65/00"; error[125].string = "VOLTAGE FAULT";
-    error[126].sensecode = "05/00/11"; error[126].string = "AUDIO PLAY OPERATION IN PROGRESS";
-    error[127].sensecode = "05/00/12"; error[127].string = "AUDIO PLAY OPERATION PAUSED";
-    error[128].sensecode = "05/00/13"; error[128].string = "AUDIO PLAY OPERATION SUCCESSFULLY COMPLETED";
-    error[129].sensecode = "05/00/14"; error[129].string = "AUDIO PLAY OPERATION STOPPED DUE TO ERROR";
-    error[130].sensecode = "05/00/15"; error[130].string = "NO CURRENT AUDIO STATUS TO RETURN";
-    error[131].sensecode = "05/00/16"; error[131].string = "OPERATION IN PROGRESS";
-    error[132].sensecode = "05/07/00"; error[132].string = "MULTIPLE PERIPHERAL DEVICES SELECTED";
-    error[133].sensecode = "05/1A/00"; error[133].string = "PARAMETER LIST LENGTH ERROR";
-    error[134].sensecode = "05/20/00"; error[134].string = "INVALID COMMAND OPERATION CODE";
-    error[135].sensecode = "05/21/00"; error[135].string = "LOGICAL BLOCK ADDRESS OUT OF RANGE";
-    error[136].sensecode = "05/21/01"; error[136].string = "INVALID ELEMENT ADDRESS";
-    error[137].sensecode = "05/21/02"; error[137].string = "INVALID ADDRESS FOR WRITE";
-    error[138].sensecode = "05/21/03"; error[138].string = "INVALID WRITE CROSSING LAYER JUMP";
-    error[139].sensecode = "05/22/00"; error[139].string = "ILLEGAL FUNCTION";
-    error[140].sensecode = "05/24/00"; error[140].string = "INVALID FIELD IN CDB";
-    error[141].sensecode = "05/25/00"; error[141].string = "LOGICAL UNIT NOT SUPPORTED";
-    error[142].sensecode = "05/26/00"; error[142].string = "INVALID FIELD IN PARAMETER LIST";
-    error[143].sensecode = "05/26/01"; error[143].string = "PARAMETER NOT SUPPORTED";
-    error[144].sensecode = "05/26/02"; error[144].string = "PARAMETER VALUE INVALID";
-    error[145].sensecode = "05/26/03"; error[145].string = "THRESHOLD PARAMETERS NOT SUPPORTED";
-    error[146].sensecode = "05/26/04"; error[146].string = "INVALID RELEASE OF PERSISTENT RESERVATION";
-    error[147].sensecode = "05/27/00"; error[147].string = "WRITE PROTECTED";
-    error[148].sensecode = "05/27/01"; error[148].string = "HARDWARE WRITE PROTECTED";
-    error[149].sensecode = "05/27/02"; error[149].string = "LOGICAL UNIT SOFTWARE WRITE PROTECTED";
-    error[150].sensecode = "05/27/03"; error[150].string = "ASSOCIATED WRITE PROTECT";
-    error[151].sensecode = "05/27/04"; error[151].string = "PERSISTENT WRITE PROTECT";
-    error[152].sensecode = "05/27/05"; error[152].string = "PERMANENT WRITE PROTECT";
-    error[153].sensecode = "05/2B/00"; error[153].string = "COPY CANNOT EXECUTE SINCE INITIATOR CANNOT DISCONNECT";
-    error[154].sensecode = "05/2C/00"; error[154].string = "COMMAND SEQUENCE ERROR";
-    error[155].sensecode = "05/2C/03"; error[155].string = "CURRENT PROGRAM AREA IS NOT EMPTY";
-    error[156].sensecode = "05/2C/04"; error[156].string = "CURRENT PROGRAM AREA IS EMPTY";
-    error[157].sensecode = "05/30/00"; error[157].string = "INCOMPATIBLE MEDIUM INSTALLED";
-    error[158].sensecode = "05/30/01"; error[158].string = "CONNOT READ MEDIUM - UNKNOWN FORMAT";
-    error[159].sensecode = "05/30/02"; error[159].string = "CANNOT READ MEDIUM - INCOMPATIBLE FORMAT";
-    error[160].sensecode = "05/30/03"; error[160].string = "CLEANING CARTRIDGE INSTALLED";
-    error[161].sensecode = "05/30/04"; error[161].string = "CANNOT WRITE MEDIUM - UNKNOWN FORMAT";
-    error[162].sensecode = "05/30/05"; error[162].string = "CANNOT WRITE MEDIUM - INCOMPATIBLE FORMAT";
-    error[163].sensecode = "05/30/06"; error[163].string = "CANNOT FORMAT MEDIUM - INCOMPATIBLE MEDIUM";
-    error[164].sensecode = "05/30/07"; error[164].string = "CLEANING FAILURE";
-    error[165].sensecode = "05/30/08"; error[165].string = "CANNOT WRITE - APPLICATION CODE MISMATCH";
-    error[166].sensecode = "05/30/09"; error[166].string = "CURRENT SESSION NOT FIXATED FOR APPEND";
-    error[167].sensecode = "05/30/10"; error[167].string = "MEDIUM NOT FORMATTED";
-    error[168].sensecode = "05/30/11"; error[168].string = "CANNOT WRITE MEDIUM - UNSUPPORTED MEDIUM VERSION";
-    error[169].sensecode = "05/39/00"; error[169].string = "SAVING PARAMETERS NOT SUPPORTED";
-    error[170].sensecode = "05/3D/00"; error[170].string = "INVALID BITS IN IDENTIFY MESSAGE";
-    error[171].sensecode = "05/43/00"; error[171].string = "MESSAGE ERROR";
-    error[172].sensecode = "05/53/02"; error[172].string = "MEDIUM REMOVAL PREVENTED";
-    error[173].sensecode = "05/55/00"; error[173].string = "SYSTEM RESOURCE FAILURE";
-    error[174].sensecode = "05/63/00"; error[174].string = "END OF USER AREA ENCOUNTERED ON THIS TRACK";
-    error[175].sensecode = "05/63/01"; error[175].string = "PACKET DOES NOT FIT IN AVAILABLE SPACE";
-    error[176].sensecode = "05/64/00"; error[176].string = "ILLEGAL MODE FOR THIS TRACK";
-    error[177].sensecode = "05/64/01"; error[177].string = "INVALID PACKET SIZE";
-    error[178].sensecode = "05/6F/00"; error[178].string = "COPY PROTECTION KEY EXCHANGE FAILURE - AUTHENTICATION FAILURE";
-    error[179].sensecode = "05/6F/01"; error[179].string = "COPY PROTECTION KEY EXCHANGE FAILURE - KEY NOT PRESENT";
-    error[180].sensecode = "05/6F/02"; error[180].string = "COPY PROTECTION KEY EXCHANGE FAILURE - KEY NOT ESTABLISHED";
-    error[181].sensecode = "05/6F/03"; error[181].string = "READ OF SCRAMBLED SECTOR WITHOUT AUTHENTICATION";
-    error[182].sensecode = "05/6F/04"; error[182].string = "MEDIA REGION CODE IS MISMATCHED TO LOGICAL UNIT REGION";
-    error[183].sensecode = "05/6F/05"; error[183].string = "DRIVE REGION MUST BE PERMANENT/REGION RESET COUNT ERROR";
-    error[184].sensecode = "05/6F/06"; error[184].string = "INSUFFICIENT BLOCK COUNT FOR BINDING NONCE RECORDING";
-    error[185].sensecode = "05/6F/07"; error[185].string = "CONFLICT IN BINDING NONCE RECORDING";
-    error[186].sensecode = "05/72/03"; error[186].string = "SESSION FIXATION ERROR - INCOMPLETE TRACK IN SESSION";
-    error[187].sensecode = "05/72/04"; error[187].string = "EMPTY OR PARTIALLY WRITTEN RESERVED TRACK";
-    error[188].sensecode = "05/72/05"; error[188].string = "NO MORE TRACK RESERVATIONS ALLOWED";
-    error[189].sensecode = "05/72/06"; error[189].string = "RMZ EXTENSION IS NOT ALLOWED";
-    error[190].sensecode = "05/72/07"; error[190].string = "NO MORE TEST ZONE EXTENSIONS ARE ALLOWED";
-    error[191].sensecode = "05/73/17"; error[191].string = "RDZ IS FULL";
-    error[192].sensecode = "06/0A/00"; error[192].string = "ERROR LOG OVERFLOW";
-    error[193].sensecode = "06/28/00"; error[193].string = "NOT READY TO READY CHANGE, MEDIUM MAY HAVE CHANGED";
-    error[194].sensecode = "06/28/01"; error[194].string = "IMPORT OR EXPORT ELEMENT ACCESSED";
-    error[195].sensecode = "06/28/02"; error[195].string = "FORMAT-LAYER MAY HAVE CHANGED";
-    error[196].sensecode = "06/29/00"; error[196].string = "POWER ON, RESET, OR BUS DEVICE RESET OCCURRED";
-    error[197].sensecode = "06/29/01"; error[197].string = "POWER ON OCCURRED";
-    error[198].sensecode = "06/29/02"; error[198].string = "BUS RESET OCCURRED";
-    error[199].sensecode = "06/29/03"; error[199].string = "BUS DEVICE RESET FUNCTION OCCURRED";
-    error[200].sensecode = "06/29/04"; error[200].string = "DEVICE INTERNAL RESET";
-    error[201].sensecode = "06/2A/00"; error[201].string = "PARAMETERS CHANGED";
-    error[202].sensecode = "06/2A/01"; error[202].string = "MODE PARAMETERS CHANGED";
-    error[203].sensecode = "06/2A/02"; error[203].string = "LOG PARAMETERS CHANGED";
-    error[204].sensecode = "06/2A/03"; error[204].string = "RESERVATIONS PREEMPTED";
-    error[205].sensecode = "06/2E/00"; error[205].string = "INSUFFICIENT TIME FOR OPERATION";
-    error[206].sensecode = "06/2F/00"; error[206].string = "COMMANDS CLEARED BY ANOTHER INITIATOR";
-    error[207].sensecode = "06/3B/0D"; error[207].string = "MEDIUM DESTINATION ELEMENT FULL";
-    error[208].sensecode = "06/3B/0E"; error[208].string = "MEDIUM SOURCE ELEMENT EMPTY";
-    error[209].sensecode = "06/3B/0F"; error[209].string = "END OF MEDIUM REACHED";
-    error[210].sensecode = "06/3B/11"; error[210].string = "MEDIUM MAGAZINE NOT ACCESSIBLE";
-    error[211].sensecode = "06/3B/12"; error[211].string = "MEDIUM MAGAZINE REMOVED";
-    error[212].sensecode = "06/3B/13"; error[212].string = "MEDIUM MAGAZINE INSERTED";
-    error[213].sensecode = "06/3B/14"; error[213].string = "MEDIUM MAGAZINE LOCKED";
-    error[214].sensecode = "06/3B/15"; error[214].string = "MEDIUM MAGAZINE UNLOCKED";
-    error[215].sensecode = "06/3F/00"; error[215].string = "TARGET OPERATING CONDITIONS HAVE CHANGED";
-    error[216].sensecode = "06/3F/01"; error[216].string = "MICROCODE HAS BEEN CHANGED";
-    error[217].sensecode = "06/3F/02"; error[217].string = "CHANGED OPERATING DEFINITION";
-    error[218].sensecode = "06/3F/03"; error[218].string = "INQUIRY DATA HAS CHANGED";
-    error[219].sensecode = "06/5A/00"; error[219].string = "OPERATOR REQUEST OR STATE CHANGE INPUT";
-    error[220].sensecode = "06/5A/01"; error[220].string = "OPERATOR MEDIUM REMOVAL REQUEST";
-    error[221].sensecode = "06/5A/02"; error[221].string = "OPERATOR SELECTED WRITE PROTECT";
-    error[222].sensecode = "06/5A/03"; error[222].string = "OPERATOR SELECTED WRITE PERMIT";
-    error[223].sensecode = "06/5B/00"; error[223].string = "LOG EXCEPTION";
-    error[224].sensecode = "06/5B/01"; error[224].string = "THRESHOLD CONDITION MET";
-    error[225].sensecode = "06/5B/02"; error[225].string = "LOG COUNTER AT MAXIMUM";
-    error[226].sensecode = "06/5B/03"; error[226].string = "LOG LIST CODES EXHAUSTED";
-    error[227].sensecode = "06/5D/00"; error[227].string = "FAILURE PREDICTION THRESHOLD EXCEEDED";
-    error[228].sensecode = "06/5D/FF"; error[228].string = "FAILURE PREDICTION THRESHOLD EXCEEDED (FALSE)";
-    error[229].sensecode = "06/5E/00"; error[229].string = "LOW POWER CONDITION ON";
-    error[230].sensecode = "06/5E/01"; error[230].string = "IDLE CONDITION ACTIVATED BY TIMER";
-    error[231].sensecode = "06/5E/02"; error[231].string = "STANDBY CONDITION ACTIVATED BY TIMER";
-    error[232].sensecode = "06/5E/03"; error[232].string = "IDLE CONDITION ACTIVATED BY COMMAND";
-    error[233].sensecode = "06/5E/04"; error[233].string = "STANDBY CONDITION ACTIVATED BY COMMAND";
-    error[234].sensecode = "07/27/00"; error[234].string = "WRITE PROTECTED";
-    error[235].sensecode = "07/27/01"; error[235].string = "HARDWARE WRITE PROTECTED";
-    error[236].sensecode = "07/27/02"; error[236].string = "LOGICAL UNIT SOFTWARE WRITE PROTECTED";
-    error[237].sensecode = "07/27/03"; error[237].string = "ASSOCIATED WRITE PROTECT";
-    error[238].sensecode = "07/27/04"; error[238].string = "PERSISTENT WRITE PROTECT";
-    error[239].sensecode = "07/27/05"; error[239].string = "PERMANENT WRITE PROTECT";
-    error[240].sensecode = "07/27/06"; error[240].string = "CONDITIONAL WRITE PROTECT";
-    error[241].sensecode = "0A/1D/00"; error[241].string = "MISCOMPARE DURING VERIFY OPERATION";
-    error[242].sensecode = "0B/00/06"; error[242].string = "I/O PROCESS TERMINATED";
-    error[243].sensecode = "0B/11/11"; error[243].string = "READ ERROR - LOSS OF STREAMING";
-    error[244].sensecode = "0B/45/00"; error[244].string = "SELECT OR RESELECT FAILURE";
-    error[245].sensecode = "0B/48/00"; error[245].string = "INITIATOR DETECTED ERROR MESSAGE RECEIVED";
-    error[246].sensecode = "0B/49/00"; error[246].string = "INVALID MESSAGE ERROR";
-    error[247].sensecode = "0B/4E/00"; error[247].string = "OVERLAPPED COMMANDS ATTEMPTED";
-    error[248].sensecode = "UU/OO/SS"; error[248].string = "Unsupported Operating System";
-/*
-    // increase for loop iterations and error[249] if adding more sense errors
-    error[249].sensecode = ""; error[249].string = "";
-    error[250].sensecode = ""; error[250].string = "";
-    error[251].sensecode = ""; error[251].string = "";
-    error[252].sensecode = ""; error[252].string = "";
-    error[253].sensecode = ""; error[253].string = "";
-    error[254].sensecode = ""; error[254].string = "";
-    error[255].sensecode = ""; error[255].string = "";
-    error[256].sensecode = ""; error[256].string = "";
-    error[257].sensecode = ""; error[257].string = "";
-    error[258].sensecode = ""; error[258].string = "";
-    error[259].sensecode = ""; error[259].string = "";
-    error[260].sensecode = ""; error[260].string = "";
-    error[261].sensecode = ""; error[261].string = "";
-    error[262].sensecode = ""; error[262].string = "";
-    error[263].sensecode = ""; error[263].string = "";
-    error[264].sensecode = ""; error[264].string = "";
-    error[265].sensecode = ""; error[265].string = "";
-    error[266].sensecode = ""; error[266].string = "";
-    error[267].sensecode = ""; error[267].string = "";
-    error[268].sensecode = ""; error[268].string = "";
-    error[269].sensecode = ""; error[269].string = "";
-    error[270].sensecode = ""; error[270].string = "";
-    error[271].sensecode = ""; error[271].string = "";
-    error[272].sensecode = ""; error[272].string = "";
-    error[273].sensecode = ""; error[273].string = "";
-    error[274].sensecode = ""; error[274].string = "";
-    error[275].sensecode = ""; error[275].string = "";
-    error[276].sensecode = ""; error[276].string = "";
-    error[277].sensecode = ""; error[277].string = "";
-    error[278].sensecode = ""; error[278].string = "";
-    error[279].sensecode = ""; error[279].string = "";
-    error[280].sensecode = ""; error[280].string = "";
-    error[281].sensecode = ""; error[281].string = "";
-    error[282].sensecode = ""; error[282].string = "";
-    error[283].sensecode = ""; error[283].string = "";
-    error[284].sensecode = ""; error[284].string = "";
-    error[285].sensecode = ""; error[285].string = "";
-    error[286].sensecode = ""; error[286].string = "";
-    error[287].sensecode = ""; error[287].string = "";
-    error[288].sensecode = ""; error[288].string = "";
-    error[289].sensecode = ""; error[289].string = "";
-    error[290].sensecode = ""; error[290].string = "";
-    error[291].sensecode = ""; error[291].string = "";
-    error[292].sensecode = ""; error[292].string = "";
-    error[293].sensecode = ""; error[293].string = "";
-    error[294].sensecode = ""; error[294].string = "";
-    error[295].sensecode = ""; error[295].string = "";
-    error[296].sensecode = ""; error[296].string = "";
-    error[297].sensecode = ""; error[297].string = "";
-    error[298].sensecode = ""; error[298].string = "";
-    error[299].sensecode = ""; error[299].string = "";
-    error[300].sensecode = ""; error[300].string = "";
-*/
-    
-    if (memcmp(sense, "04/40/", 6) == 0) {
-        // 04/40/NN  DIAGNOSTIC FAILURE ON COMPONENT NN (80H-FFH)
-        sprintf(specialerror, "DIAGNOSTIC FAILURE ON COMPONENT %c%c", sense[6], sense[7]);
-      return specialerror;
-    }
-    if (memcmp(sense, "0B/4D/", 6) == 0) {
-        // 0B/4D/NN  TAGGED OVERLAPPED COMMANDS (NN = QUEUE TAG)
-        sprintf(specialerror, "TAGGED OVERLAPPED COMMANDS ON QUEUE TAG %c%c", sense[6], sense[7]);
-      return specialerror;
-    }
-    for (i=0;i<249;i++) {  // increase iterations if adding more sense errors
-        if (memcmp(sense, error[i].sensecode, 8) == 0) {
-            match = i;
-            break;
+    // errors are taken from INF-8090i v7 Revision 1.21 (March 19, 2010)
+    unsigned long ulsense;
+    char *nptr1, *nptr2, *nptr3;
+    ulsense  = (strtoul(sense,   &nptr1, 16) & 0xFF) << 16;
+    ulsense |= (strtoul(sense+3, &nptr2, 16) & 0xFF) << 8;
+    ulsense |= (strtoul(sense+6, &nptr3, 16) & 0xFF);
+    if (nptr1 != sense+2 || nptr2 != sense+5 || nptr3 != sense+8) {
+        // sense code is not in the format "ab/cd/ef" or a/b/c/d/e/f is not a valid base 16 digit (0-9,A-F)
+        if (memcmp(sense, "UU/OO/SS", 8) == 0) {
+            // this is a fake sense code i created
+          return "Unsupported Operating System";
+        }
+        else {
+            sprintf(specialerror, "Incorrectly formatted sense error: %s", sense); // hopefully it doesn't contain control characters
+          return specialerror;
         }
     }
-    if (match == -1) {
-        // no matching sensecode was found
-        sprintf(specialerror, "Unrecognized Sense Error: %s", sense);
+    if ((ulsense & 0x00FF00) >= 0x008000) {
+        // ASC 0x80-0xFF  VENDOR SPECIFIC
+        sprintf(specialerror, "Vendor specific sense error: %s", sense);
       return specialerror;
     }
-    else return error[match].string;
+    switch(ulsense & 0xFFFF00) {
+        // 04/40/NN  DIAGNOSTIC FAILURE ON COMPONENT NN (80H-FFH)
+        case 0x44000:
+            if ((ulsense & 0x0000FF) >= 0x80) {  // 0x80 - 0xFF only
+                sprintf(specialerror, "DIAGNOSTIC FAILURE ON COMPONENT %c%c", sense[6], sense[7]);
+              return specialerror;
+            }
+            else break;
+        // 0B/4D/NN  TAGGED OVERLAPPED COMMANDS (NN = QUEUE TAG)
+        case 0xB4D00:
+            sprintf(specialerror, "TAGGED OVERLAPPED COMMANDS ON QUEUE TAG %c%c", sense[6], sense[7]);
+          return specialerror;
+        // 03/70/NN  DECOMPRESSION EXCEPTION SHORT ALGORITHM ID OF NN
+        case 0x37000:
+            sprintf(specialerror, "DECOMPRESSION EXCEPTION SHORT ALGORITHM ID OF %c%c", sense[6], sense[7]);
+          return specialerror;
+    }
+    switch(ulsense & 0xFFFFFF) {
+        // put error codes that have a specific Sense Key here
+        case 0x80000: return "BLANK CHECK";
+        case 0x00000: return "NO ADDITIONAL SENSE INFORMATION";
+        case 0x00001: return "FILEMARK DETECTED";
+        case 0x00002: return "END-OF-PARTITION/MEDIUM DETECTED";
+        case 0x00003: return "SETMARK DETECTED";
+        case 0x00004: return "BEGINNING-OF-PARTITION/MEDIUM DETECTED";
+        case 0x00005: return "END-OF-DATA DETECTED";
+        case 0xB0006: return "I/O PROCESS TERMINATED, PLAY OPERATION ABORTED";
+        case 0x00011: return "AUDIO PLAY OPERATION IN PROGRESS";
+        case 0x00012: return "AUDIO PLAY OPERATION PAUSED";
+        case 0x00013: return "AUDIO PLAY OPERATION SUCCESSFULLY COMPLETED";
+        case 0x00014: return "AUDIO PLAY OPERATION STOPPED DUE TO ERROR";
+        case 0x00015: return "NO CURRENT AUDIO STATUS TO RETURN";
+        case 0x00016: return "OPERATION IN PROGRESS";
+        case 0x40017: return "CLEANING REQUESTED";
+        
+        case 0x40100: return "NO INDEX/SECTOR SIGNAL";
+        case 0x30200: return "NO SEEK COMPLETE";
+        case 0x30300: return "PERIPHERAL DEVICE WRITE FAULT";
+        case 0x30301: return "NO WRITE CURRENT";
+        case 0x30302: return "EXCESSIVE WRITE ERRORS";
+        case 0x20400: return "LOGICAL UNIT NOT READY, CAUSE NOT REPORTABLE";
+        case 0x20401: return "LOGICAL UNIT IS IN PROCESS OF BECOMING READY";
+        case 0x20402: return "LOGICAL UNIT NOT READY, INITIALIZING CMD. REQUIRED";
+        case 0x20403: return "LOGICAL UNIT NOT READY, MANUAL INTERVENTION REQUIRED";
+        case 0x20404: return "LOGICAL UNIT NOT READY, FORMAT IN PROGRESS";
+        case 0x20405: return "LOGICAL UNIT NOT READY, REBUILD IN PROGRESS";
+        case 0x20406: return "LOGICAL UNIT NOT READY, RECALCULATION IN PROGRESS";
+        case 0x20407: return "LOGICAL UNIT NOT READY, OPERATION IN PROGRESS";
+        case 0x20408: return "LOGICAL UNIT NOT READY, LONG WRITE IN PROGRESS";
+        
+        case 0x40500: return "LOGICAL UNIT DOES NOT RESPOND TO SELECTION";
+        case 0x20600: return "NO REFERENCE POSITION FOUND (medium may be upside down)";
+        case 0x50700: return "MULTIPLE PERIPHERAL DEVICES SELECTED";
+        case 0x40800: return "LOGICAL UNIT COMMUNICATION FAILURE";
+        case 0x40801: return "LOGICAL UNIT COMMUNICATION TIME-OUT";
+        case 0x40802: return "LOGICAL UNIT COMMUNICATION PARITY ERROR";
+        case 0x40803: return "LOGICAL UNIT COMMUNICATION CRC ERROR (ULTRA-DMA/32)";
+        
+        case 0x40900: return "TRACK FOLLOWING ERROR";
+        case 0x40901: return "TRACKING SERVO FAILURE";
+        case 0x40902: return "FOCUS SERVO FAILURE";
+        case 0x40903: return "SPINDLE SERVO FAILURE";
+        case 0x40904: return "HEAD SELECT FAULT";
+        case 0x60A00: return "ERROR LOG OVERFLOW";
+        case 0x10B00: return "WARNING";
+        case 0x10B01: return "WARNING - SPECIFIED TEMPERATURE EXCEEDED";
+        case 0x10B02: return "WARNING - ENCLOSURE DEGRADED";
+        
+        case 0x30C00: return "WRITE ERROR";
+        case 0x30C01: return "WRITE ERROR - RECOVERED WITH AUTO REALLOCATION";
+        case 0x30C02: return "WRITE ERROR - AUTO REALLOCATION FAILED";
+        case 0x30C03: return "WRITE ERROR - RECOMMEND REASSIGNMENT";
+        case 0x30C04: return "COMPRESSION CHECK MISCOMPARE ERROR";
+        case 0x30C05: return "DATA EXPANSION OCCURRED DURING COMPRESSION";
+        case 0x30C06: return "BLOCK NOT COMPRESSIBLE";
+        case 0x30C07: return "WRITE ERROR - RECOVERY NEEDED";
+        case 0x30C08: return "WRITE ERROR - RECOVERY FAILED";
+        case 0x30C09: return "WRITE ERROR - LOSS OF STREAMING";
+        case 0x10C0A: return "WRITE ERROR - PADDING BLOCKS ADDED";
+        
+        case 0x31000: return "ID CRC OR ECC ERROR";
+        
+        case 0x31100: return "UNRECOVERED READ ERROR";
+        case 0x31101: return "READ RETRIES EXHAUSTED";
+        case 0x31102: return "ERROR TOO LONG TO CORRECT";
+        case 0x31103: return "MULTIPLE READ ERRORS";
+        case 0x31104: return "UNRECOVERED READ ERROR - AUTO REALLOCATE FAILED";
+        case 0x31105: return "L-EC UNCORRECTABLE ERROR";
+        case 0x31106: return "CIRC UNRECOVERED ERROR";
+        case 0x31107: return "DATA RE-SYNCHRONIZATION ERROR";
+        case 0x31108: return "INCOMPLETE BLOCK READ";
+        case 0x31109: return "NO GAP FOUND";
+        case 0x3110A: return "MISCORRECTED ERROR";
+        case 0x3110B: return "UNRECOVERED READ ERROR - RECOMMEND REASSIGNMENT";
+        case 0x3110C: return "UNRECOVERED READ ERROR - RECOMMEND REWRITE THE DATA";
+        case 0x3110D: return "DE-COMPRESSION CRC ERROR";
+        case 0x3110E: return "CANNOT DECOMPRESS USING DECLARED ALGORITHM";
+        case 0x3110F: return "ERROR READING UPC/EAN NUMBER";
+        case 0x31110: return "ERROR READING ISRC NUMBER";
+        case 0xB1111: return "READ ERROR - LOSS OF STREAMING";
+        
+        case 0x31200: return "ADDRESS MARK NOT FOUND FOR ID FIELD";
+        case 0x31300: return "ADDRESS MARK NOT FOUND FOR DATA FIELD";
+        
+        case 0x31401: return "RECORD NOT FOUND";
+        case 0x31402: return "FILEMARK OR SETMARK NOT FOUND";
+        case 0x31403: return "END-OF-DATA NOT FOUND";
+        case 0x31404: return "BLOCK SEQUENCE ERROR";
+        case 0x31405: return "RECORD NOT FOUND - RECOMMEND REASSIGNMENT";
+        case 0x31406: return "RECORD NOT FOUND - DATA AUTO-REALLOCATED";
+        
+        case 0x31500: return "RANDOM POSITIONING ERROR";
+        case 0x31501: return "MECHANICAL POSITIONING ERROR";
+        case 0x31502: return "POSITIONING ERROR DETECTED BY READ OF MEDIUM";
+        case 0x31600: return "DATA SYNCHRONIZATION MARK ERROR";
+        case 0x31601: return "DATA SYNC ERROR - DATA REWRITTEN";
+        case 0x31602: return "DATA SYNC ERROR - RECOMMEND REWRITE";
+        case 0x31603: return "DATA SYNC ERROR - DATA AUTO-REALLOCATED";
+        case 0x31604: return "DATA SYNC ERROR - RECOMMEND REASSIGNMENT";
+        case 0x11700: return "RECOVERED DATA WITH NO ERROR CORRECTION APPLIED";
+        case 0x11701: return "RECOVERED DATA WITH RETRIES";
+        case 0x11702: return "RECOVERED DATA WITH POSITIVE HEAD OFFSET";
+        case 0x11703: return "RECOVERED DATA WITH NEGATIVE HEAD OFFSET";
+        case 0x11704: return "RECOVERED DATA WITH RETRIES AND/OR CIRC APPLIED";
+        case 0x11705: return "RECOVERED DATA USING PREVIOUS SECTOR ID";
+        case 0x11706: return "RECOVERED DATA WITHOUT ECC - DATA AUTO-REALLOCATED";
+        case 0x11707: return "RECOVERED DATA WITHOUT ECC - RECOMMEND REASSIGNMENT";
+        case 0x11708: return "RECOVERED DATA WITHOUT ECC - RECOMMEND REWRITE";
+        case 0x11709: return "RECOVERED DATA WITHOUT ECC - DATA REWRITTEN";
+        case 0x11800: return "RECOVERED DATA WITH ERROR CORRECTION APPLIED";
+        case 0x11801: return "RECOVERED DATA WITH ERROR CORR. & RETRIES APPLIED";
+        case 0x11802: return "RECOVERED DATA - DATA AUTO-REALLOCATED";
+        case 0x11803: return "RECOVERED DATA WITH CIRC";
+        case 0x11804: return "RECOVERED DATA WITH L-EC";
+        case 0x11805: return "RECOVERED DATA - RECOMMEND REASSIGNMENT";
+        case 0x11806: return "RECOVERED DATA - RECOMMEND REWRITE";
+        case 0x11807: return "RECOVERED DATA WITH ECC - DATA REWRITTEN";
+        case 0x11808: return "RECOVERED DATA WITH LINKING";
+        case 0x31900: return "DEFECT LIST ERROR";
+        case 0x31901: return "DEFECT LIST NOT AVAILABLE";
+        case 0x31902: return "DEFECT LIST ERROR IN PRIMARY LIST";
+        case 0x31903: return "DEFECT LIST ERROR IN GROWN LIST";
+        case 0x51A00: return "PARAMETER LIST LENGTH ERROR";
+        case 0x41B00: return "SYNCHRONOUS DATA TRANSFER ERROR";
+        case 0x41C00: return "DEFECT LIST NOT FOUND";
+        case 0x41C01: return "PRIMARY DEFECT LIST NOT FOUND";
+        case 0x41C02: return "GROWN DEFECT LIST NOT FOUND";
+        case 0xE1D00: return "MISCOMPARE DURING VERIFY OPERATION";
+        case 0x11E00: return "RECOVERED ID WITH ECC CORRECTION";
+        case 0x31F00: return "PARTIAL DEFECT LIST TRANSFER";
+        case 0x52000: return "INVALID COMMAND OPERATION CODE";
+        
+        case 0x52100: return "LOGICAL BLOCK ADDRESS OUT OF RANGE";
+        case 0x52101: return "INVALID ELEMENT ADDRESS";
+        case 0x52102: return "INVALID ADDRESS FOR WRITE";
+        case 0x52103: return "INVALID WRITE CROSSING LAYER JUMP";
+        case 0x52200: return "ILLEGAL FUNCTION";
+        
+        case 0x52400: return "INVALID FIELD IN CDB";
+        
+        case 0x52500: return "LOGICAL UNIT NOT SUPPORTED";
+        case 0x52600: return "INVALID FIELD IN PARAMETER LIST";
+        case 0x52601: return "PARAMETER NOT SUPPORTED";
+        case 0x52602: return "PARAMETER VALUE INVALID";
+        case 0x52603: return "THRESHOLD PARAMETERS NOT SUPPORTED";
+        case 0x52604: return "INVALID RELEASE OF ACTIVE PERSISTENT RESERVATION";
+        
+        case 0x72700: return "WRITE PROTECTED";
+        case 0x72701: return "HARDWARE WRITE PROTECTED";
+        case 0x72702: return "LOGICAL UNIT SOFTWARE WRITE PROTECTED";
+        case 0x72703: return "ASSOCIATED WRITE PROTECT";
+        case 0x72704: return "PERSISTENT WRITE PROTECT";
+        case 0x72705: return "PERMANENT WRITE PROTECT";
+        case 0x72706: return "CONDITIONAL WRITE PROTECT";
+        case 0x62800: return "NOT READY TO READY CHANGE, MEDIUM MAY HAVE CHANGED";
+        case 0x62801: return "IMPORT OR EXPORT ELEMENT ACCESSED";
+        case 0x62802: return "NOT READY TO READY CHANGE, FORMAT-LAYER MAY HAVE CHANGED";
+        case 0x62900: return "POWER ON, RESET, OR BUS DEVICE RESET OCCURRED";
+        case 0x62901: return "POWER ON OCCURRED";
+        case 0x62902: return "SCSI BUS RESET OCCURRED";
+        case 0x62903: return "BUS DEVICE RESET FUNCTION OCCURRED";
+        case 0x62904: return "DEVICE INTERNAL RESET";
+        
+        case 0x62A00: return "PARAMETERS CHANGED";
+        case 0x62A01: return "MODE PARAMETERS CHANGED";
+        case 0x62A02: return "LOG PARAMETERS CHANGED";
+        case 0x62A03: return "RESERVATIONS PREEMPTED";
+        
+        case 0x52B00: return "COPY CANNOT EXECUTE SINCE HOST CANNOT DISCONNECT";
+        case 0x52C00: return "COMMAND SEQUENCE ERROR";
+        case 0x52C01: return "TOO MANY WINDOWS SPECIFIED";
+        case 0x52C02: return "INVALID COMBINATION OF WINDOWS SPECIFIED";
+        case 0x52C03: return "CURRENT PROGRAM AREA IS NOT EMPTY";
+        case 0x52C04: return "CURRENT PROGRAM AREA IS EMPTY";
+        case 0x52C05: return "PERSISTENT PREVENT CONFLICT";
+        
+        case 0x32D00: return "OVERWRITE ERROR ON UPDATE IN PLACE";
+        case 0x62E00: return "INSUFFICIENT TIME FOR OPERATION";
+        case 0x62F00: return "COMMANDS CLEARED BY ANOTHER INITIATOR";
+        case 0x23000: return "INCOMPATIBLE MEDIUM INSTALLED";
+        case 0x23001: return "CANNOT READ MEDIUM - UNKNOWN FORMAT";
+        case 0x23002: return "CANNOT READ MEDIUM - INCOMPATIBLE FORMAT";
+        case 0x53002: return "CANNOT READ MEDIUM - INCOMPATIBLE FORMAT";
+        case 0x23003: return "CLEANING CARTRIDGE INSTALLED";
+        case 0x53004: return "CANNOT WRITE MEDIUM - UNKNOWN FORMAT";
+        case 0x53005: return "CANNOT WRITE MEDIUM - INCOMPATIBLE FORMAT";
+        case 0x53006: return "CANNOT FORMAT MEDIUM - INCOMPATIBLE MEDIUM";
+        case 0x23007: return "CLEANING FAILURE";
+        case 0x53008: return "CANNOT WRITE - APPLICATION CODE MISMATCH";
+        case 0x53009: return "CURRENT SESSION NOT FIXATED FOR APPEND";
+        
+        case 0x33100: return "MEDIUM FORMAT CORRUPTED";
+        case 0x33101: return "FORMAT COMMAND FAILED";
+        case 0x33102: return "ZONED FORMATTING FAILED DUE TO SPARE LINKING";
+        case 0x33200: return "NO DEFECT SPARE LOCATION AVAILABLE";
+        case 0x33201: return "DEFECT LIST UPDATE FAILURE";
+        case 0x33300: return "TAPE LENGTH ERROR";
+        case 0x43400: return "ENCLOSURE FAILURE";
+        case 0x43500: return "ENCLOSURE SERVICES FAILURE";
+        case 0x53501: return "UNSUPPORTED ENCLOSURE FUNCTION";
+        case 0x23502: return "ENCLOSURE SERVICES UNAVAILABLE";
+        case 0x43503: return "ENCLOSURE SERVICES TRANSFER FAILURE";
+        case 0x53504: return "ENCLOSURE SERVICES TRANSFER REFUSED";
+        
+        case 0x33600: return "RIBBON, INK, OR TONER FAILURE";
+        case 0x13700: return "ROUNDED PARAMETER";
+        //case 0x53800: return "";
+        
+        case 0x53900: return "SAVING PARAMETERS NOT SUPPORTED";
+        case 0x23A00: return "MEDIUM NOT PRESENT";
+        case 0x23A01: return "MEDIUM NOT PRESENT - TRAY CLOSED";
+        case 0x23A02: return "MEDIUM NOT PRESENT - TRAY OPEN";
+        
+        case 0x33B00: return "SEQUENTIAL POSITIONING ERROR";
+        case 0x33B01: return "TAPE POSITION ERROR AT BEGINNING-OF-MEDIUM";
+        case 0x33B02: return "TAPE POSITION ERROR AT END-OF-MEDIUM";
+        case 0x33B03: return "TAPE OR ELECTRONIC VERTICAL FORMS UNIT NOT READY";
+        case 0x43B04: return "SLEW FAILURE";
+        case 0x43B05: return "PAPER JAM";
+        case 0x33B06: return "FAILED TO SENSE TOP-OF-FORM";
+        case 0x33B07: return "FAILED TO SENSE BOTTOM-OF-FORM";
+        case 0x33B08: return "REPOSITION ERROR";
+        case 0x33B09: return "READ PAST END OF MEDIUM";
+        case 0x33B0A: return "READ PAST BEGINNING OF MEDIUM";
+        case 0x33B0B: return "POSITION PAST END OF MEDIUM";
+        case 0x33B0C: return "POSITION PAST BEGINNING OF MEDIUM";
+        case 0x53B0D: return "MEDIUM DESTINATION ELEMENT FULL";
+        case 0x53B0E: return "MEDIUM SOURCE ELEMENT EMPTY";
+        case 0x63B0F: return "END OF MEDIUM REACHED";
+        case 0x23B11: return "MEDIUM MAGAZINE NOT ACCESSIBLE";
+        case 0x63B12: return "MEDIUM MAGAZINE REMOVED";
+        case 0x63B13: return "MEDIUM MAGAZINE INSERTED";
+        case 0x63B14: return "MEDIUM MAGAZINE LOCKED";
+        case 0x63B15: return "MEDIUM MAGAZINE UNLOCKED";
+        case 0x43B16: return "MECHANICAL POSITIONING OR CHANGER ERROR";
+        
+        case 0x53D00: return "INVALID BITS IN IDENTIFY MESSAGE";
+        case 0x23E00: return "LOGICAL UNIT HAS NOT SELF-CONFIGURED YET";
+        case 0x43E01: return "LOGICAL UNIT FAILURE";
+        case 0x43E02: return "TIMEOUT ON LOGICAL UNIT";
+        
+        case 0x63F00: return "TARGET OPERATING CONDITIONS HAVE CHANGED";
+        case 0x63F01: return "MICROCODE HAS BEEN CHANGED";
+        case 0x63F02: return "CHANGED OPERATING DEFINITION";
+        case 0x63F03: return "INQUIRY DATA HAS CHANGED";
+        
+        case 0x44000: return "RAM FAILURE";
+        // 0x44080-0x440FF is handled above
+        case 0x44100: return "DATA PATH FAILURE";
+        case 0x44200: return "POWER-ON OR SELF-TEST FAILURE";
+        case 0x54300: return "MESSAGE ERROR";
+        case 0x44400: return "INTERNAL TARGET FAILURE";
+        
+        case 0xB4500: return "SELECT OR RESELECT FAILURE";
+        case 0x44600: return "UNSUCCESSFUL SOFT RESET";
+        case 0x44700: return "SCSI PARITY ERROR";
+        
+        case 0xB4800: return "INITIATOR DETECTED ERROR MESSAGE RECEIVED";
+        case 0xB4900: return "INVALID MESSAGE ERROR";
+        case 0x44A00: return "COMMAND PHASE ERROR";
+        case 0x44B00: return "DATA PHASE ERROR";
+        
+        case 0x44C00: return "LOGICAL UNIT FAILED SELF-CONFIGURATION";
+        // 0xB4DNN is handled above
+        case 0xB4E00: return "OVERLAPPED COMMANDS ATTEMPTED";
+        
+        case 0x35100: return "ERASE FAILURE";
+        case 0x35101: return "ERASE FAILURE - Incomplete erase operation detected";
+        case 0x35200: return "CARTRIDGE FAULT";
+        case 0x45300: return "MEDIA LOAD OR EJECT FAILED";
+        
+        case 0x25302: return "MEDIUM REMOVAL PREVENTED";
+        case 0x55302: return "MEDIUM REMOVAL PREVENTED";
+        
+        case 0x55500: return "SYSTEM RESOURCE FAILURE";
+        
+        case 0x55503: return "INSUFFICIENT RESOURCES";
+        
+        case 0x35700: return "UNABLE TO RECOVER TABLE-OF-CONTENTS";
+        
+        case 0x65A00: return "OPERATOR REQUEST OR STATE CHANGE INPUT";
+        case 0x65A01: return "OPERATOR MEDIUM REMOVAL REQUEST";
+        case 0x65A02: return "OPERATOR SELECTED WRITE PROTECT";
+        case 0x65A03: return "OPERATOR SELECTED WRITE PERMIT";
+        case 0x65B00: return "LOG EXCEPTION";
+        case 0x65B01: return "THRESHOLD CONDITION MET";
+        case 0x65B02: return "LOG COUNTER AT MAXIMUM";
+        case 0x65B03: return "LOG LIST CODES EXHAUSTED";
+        case 0x65C00: return "RPL STATUS CHANGE";
+        case 0x65C01: return "SPINDLES SYNCHRONIZED";
+        case 0x35C02: return "SPINDLES NOT SYNCHRONIZED";
+        case 0x15D00: return "FAILURE PREDICTION THRESHOLD EXCEEDED";
+        case 0x15D01: return "MEDIA FAILURE PREDICTION THRESHOLD EXCEEDED";
+        
+        case 0x15D03: return "SPARE AREA EXHAUSTION PREDICTION THRESHOLD EXCEEDED";
+        
+        case 0x15DFF: return "FAILURE PREDICTION THRESHOLD EXCEEDED (FALSE)";
+        case 0x65E00: return "LOW POWER CONDITION ON";
+        case 0x65E01: return "IDLE CONDITION ACTIVATED BY TIMER";
+        case 0x65E02: return "STANDBY CONDITION ACTIVATED BY TIMER";
+        case 0x65E03: return "IDLE CONDITION ACTIVATED BY COMMAND";
+        case 0x65E04: return "STANDBY CONDITION ACTIVATED BY COMMAND";
+        
+        case 0x46000: return "LAMP FAILURE";
+        case 0x36100: return "VIDEO ACQUISITION ERROR";
+        case 0x36101: return "UNABLE TO ACQUIRE VIDEO";
+        case 0x36102: return "OUT OF FOCUS";
+        case 0x46200: return "SCAN HEAD POSITIONING ERROR";
+        case 0x56300: return "END OF USER AREA ENCOUNTERED ON THIS TRACK";
+        case 0x56301: return "PACKET DOES NOT FIT IN AVAILABLE SPACE";
+        case 0x56400: return "ILLEGAL MODE FOR THIS TRACK";
+        case 0x56401: return "INVALID PACKET SIZE";
+        case 0x46500: return "VOLTAGE FAULT";
+        case 0x46600: return "AUTOMATIC DOCUMENT FEEDER COVER UP";
+        case 0x46601: return "AUTOMATIC DOCUMENT FEEDER LIFT UP";
+        case 0x46602: return "DOCUMENT JAM IN AUTOMATIC DOCUMENT FEEDER";
+        case 0x46603: return "DOCUMENT MISS FEED AUTOMATIC IN DOCUMENT FEEDER";
+        case 0x46700: return "CONFIGURATION FAILURE";
+        case 0x46701: return "CONFIGURATION OF INCAPABLE LOGICAL UNITS FAILED";
+        case 0x46702: return "ADD LOGICAL UNIT FAILED";
+        case 0x46703: return "MODIFICATION OF LOGICAL UNIT FAILED";
+        case 0x46704: return "EXCHANGE OF LOGICAL UNIT FAILED";
+        case 0x46705: return "REMOVE OF LOGICAL UNIT FAILED";
+        case 0x46706: return "ATTACHMENT OF LOGICAL UNIT FAILED";
+        case 0x46707: return "CREATION OF LOGICAL UNIT FAILED";
+        
+        case 0x26800: return "LOGICAL UNIT NOT CONFIGURED";
+        case 0x46900: return "DATA LOSS ON LOGICAL UNIT";
+        case 0x46901: return "MULTIPLE LOGICAL UNIT FAILURES";
+        case 0x46902: return "A PARITY/DATA MISMATCH";
+        case 0x16A00: return "INFORMATIONAL, REFER TO LOG";
+        case 0x66B00: return "STATE CHANGE HAS OCCURRED";
+        case 0x66B01: return "REDUNDANCY LEVEL GOT BETTER";
+        case 0x66B02: return "REDUNDANCY LEVEL GOT WORSE";
+        case 0x36C00: return "REBUILD FAILURE OCCURRED";
+        case 0x36D00: return "RECALCULATE FAILURE OCCURRED";
+        case 0x46E00: return "COMMAND TO LOGICAL UNIT FAILED";
+        case 0x56F00: return "COPY PROTECTION KEY EXCHANGE FAILURE - AUTHENTICATION FAILURE";
+        case 0x56F01: return "COPY PROTECTION KEY EXCHANGE FAILURE - KEY NOT PRESENT";
+        case 0x56F02: return "COPY PROTECTION KEY EXCHANGE FAILURE - KEY NOT ESTABLISHED";
+        case 0x56F03: return "READ OF SCRAMBLED SECTOR WITHOUT AUTHENTICATION";
+        case 0x56F04: return "MEDIA REGION CODE IS MISMATCHED TO LOGICAL UNIT REGION";
+        case 0x56F05: return "DRIVE REGION MUST BE PERMANENT/REGION RESET COUNT ERROR";
+        case 0x56F06: return "INSUFFICIENT BLOCK COUNT FOR BINDING NONCE RECORDING";
+        case 0x56F07: return "CONFLICT IN BINDING NONCE RECORDING";
+        case 0x56F08: return "INSUFFICIENT PERMISSION";
+        // 0x370NN handled above
+        case 0x37100: return "DECOMPRESSION EXCEPTION LONG ALGORITHM ID";
+        case 0x37200: return "SESSION FIXATION ERROR";
+        case 0x37201: return "SESSION FIXATION ERROR WRITING Lead-in";
+        case 0x37202: return "SESSION FIXATION ERROR WRITING Lead-out";
+        case 0x57203: return "SESSION FIXATION ERROR - INCOMPLETE TRACK IN SESSION";
+        case 0x57204: return "EMPTY OR PARTIALLY WRITTEN RESERVED TRACK";
+        case 0x57205: return "NO MORE RZONE RESERVATIONS ARE ALLOWED";
+        case 0x57206: return "RMZ EXTENSION IS NOT ALLOWED";
+        case 0x57207: return "NO MORE TEST ZONE EXTENSIONS ARE ALLOWED";
+        case 0x37300: return "CD CONTROL ERROR";
+        case 0x17301: return "POWER CALIBRATION AREA ALMOST FULL";
+        case 0x37302: return "POWER CALIBRATION AREA IS FULL";
+        case 0x37303: return "POWER CALIBRATION AREA ERROR";
+        case 0x37304: return "PROGRAM MEMORY AREA/RMA UPDATE FAILURE";
+        case 0x37305: return "PROGRAM MEMORY AREA/RMA IS FULL";
+        case 0x17306: return "PROGRAM MEMORY AREA/RMA IS ALMOST FULL";
+        case 0x17310: return "CURRENT POWER CALIBRATION AREA ALMOST FULL";
+        case 0x57311: return "CURRENT POWER CALIBRATION AREA IS FULL";
+        case 0x57315: return "CURRENT PROGRAM MEMORY AREA/RMZ IS FULL";
+        case 0x17316: return "CURRENT PROGRAM MEMORY AREA/RMZ IS (almost) FULL";
+        case 0x57317: return "RDZ IS FULL";
+    }
+    switch(ulsense & 0x00FFFF) {
+        // put error codes with "-" for Sense Key here
+        case 0x0018: return "ERASE OPERATION IN PROGRESS";
+        case 0x0019: return "LOCATE OPERATION IN PROGRESS";
+        case 0x001A: return "REWIND OPERATION IN PROGRESS";
+        case 0x001B: return "SET CAPACITY OPERATION IN PROGRESS";
+        case 0x001C: return "VERIFY OPERATION IN PROGRESS";
+        case 0x001D: return "ATA PASS THROUGH INFORMATION AVAILABLE";
+        
+        case 0x0409: return "LOGICAL UNIT NOT READY, SELF-TEST IN PROGRESS";
+        case 0x040A: return "LOGICAL UNIT NOT ACCESSIBLE, ASYMMETRIC ACCESS STATE TRANSITION";
+        case 0x040B: return "LOGICAL UNIT NOT ACCESSIBLE, TARGET PORT IN STANDBY STATE";
+        case 0x040C: return "LOGICAL UNIT NOT ACCESSIBLE, TARGET PORT IN UNAVAILABLE STATE";
+        case 0x0410: return "LOGICAL UNIT NOT READY, AUXILIARY MEMORY NOT ACCESSIBLE";
+        case 0x0411: return "LOGICAL UNIT NOT READY, NOTIFY (ENABLE SPINUP) REQUIRED";
+        case 0x0412: return "LOGICAL UNIT NOT READY, OFFLINE";
+        
+        case 0x0804: return "UNREACHABLE COPY TARGET";
+        
+        case 0x0B03: return "WARNING - BACKGROUND SELF-TEST FAILED";
+        case 0x0B04: return "WARNING - BACKGROUND PRE-SCAN FAILED";
+        case 0x0B05: return "WARNING - BACKGROUND MEDIUM SCAN FAILED";
+        
+        case 0x0C0B: return "AUXILIARY MEMORY WRITE ERROR";
+        case 0x0C0C: return "WRITE ERROR - UNEXPECTED UNSOLICITED DATA";
+        case 0x0C0D: return "WRITE ERROR - NOT ENOUGH UNSOLICITED DATA";
+        //case 0x0D00: return "";
+        case 0x0D01: return "THIRD PARTY DEVICE FAILURE";
+        case 0x0D02: return "COPY TARGET DEVICE NOT REACHABLE";
+        case 0x0D03: return "INCORRECT COPY TARGET DEVICE TYPE";
+        case 0x0D04: return "COPY TARGET DEVICE DATA UNDERRUN";
+        case 0x0D05: return "COPY TARGET DEVICE DATA OVERRUN";
+        //case 0x0E00: return "";
+        case 0x0E01: return "INFORMATION UNIT TOO SHORT";
+        case 0x0E02: return "INFORMATION UNIT TOO LONG";
+        case 0x0E03: return "INVALID FIELD IN COMMAND INFORMATION UNIT";
+        //case 0x0F00: return "";
+        
+        case 0x1001: return "DATA BLOCK GUARD CHECK FAILED";
+        case 0x1002: return "DATA BLOCK APPLICATION TAG CHECK FAILED";
+        case 0x1003: return "DATA BLOCK REFERENCE TAG CHECK FAILED";
+        
+        case 0x1112: return "AUXILIARY MEMORY READ ERROR";
+        case 0x1113: return "READ ERROR - FAILED RETRANSMISSION REQUEST";
+        
+        case 0x1400: return "RECORDED ENTITY NOT FOUND";
+        
+        case 0x1407: return "LOCATE OPERATION FAILURE";
+        
+        case 0x2001: return "ACCESS DENIED - INITIATOR PENDING-ENROLLED";
+        case 0x2002: return "ACCESS DENIED - NO ACCESS RIGHTS";
+        case 0x2003: return "ACCESS DENIED - INVALID MGMT ID KEY";
+        case 0x2004: return "ILLEGAL COMMAND WHILE IN WRITE CAPABLE STATE";
+        case 0x2005: return "Obsolete error code";
+        case 0x2006: return "ILLEGAL COMMAND WHILE IN EXPLICIT ADDRESS MODE";
+        case 0x2007: return "ILLEGAL COMMAND WHILE IN IMPLICIT ADDRESS MODE";
+        case 0x2008: return "ACCESS DENIED - ENROLLMENT CONFLICT";
+        case 0x2009: return "ACCESS DENIED - INVALID LU IDENTIFIER";
+        case 0x200A: return "ACCESS DENIED - INVALID PROXY TOKEN";
+        case 0x200B: return "ACCESS DENIED - ACL LUN CONFLICT";
+        
+        //case 0x2300: return "";
+        
+        case 0x2401: return "CDB DECRYPTION ERROR";
+        case 0x2402: return "Obsolete error code";
+        case 0x2403: return "Obsolete error code";
+        case 0x2404: return "SECURITY AUDIT VALUE FROZEN";
+        case 0x2405: return "SECURITY WORKING KEY FROZEN";
+        case 0x2406: return "NONCE NOT UNIQUE";
+        case 0x2407: return "NONCE TIMESTAMP OUT OF RANGE";
+        
+        case 0x2605: return "DATA DECRYPTION ERROR";
+        case 0x2606: return "TOO MANY TARGET DESCRIPTORS";
+        case 0x2607: return "UNSUPPORTED TARGET DESCRIPTOR TYPE CODE";
+        case 0x2608: return "TOO MANY SEGMENT DESCRIPTORS";
+        case 0x2609: return "UNSUPPORTED SEGMENT DESCRIPTOR TYPE CODE";
+        case 0x260A: return "UNEXPECTED INEXACT SEGMENT";
+        case 0x260B: return "INLINE DATA LENGTH EXCEEDED";
+        case 0x260C: return "INVALID OPERATION FOR COPY SOURCE OR DESTINATION";
+        case 0x260D: return "COPY SEGMENT GRANULARITY VIOLATION";
+        case 0x260E: return "INVALID PARAMETER WHILE PORT IS ENABLED";
+        case 0x260F: return "INVALID DATA-OUT BUFFER INTEGRITY CHECK VALUE";
+        
+        case 0x2905: return "TRANSCEIVER MODE CHANGED TO SINGLE-ENDED";
+        case 0x2906: return "TRANSCEIVER MODE CHANGED TO LVD";
+        case 0x2907: return "I_T NEXUS LOSS OCCURRED";
+        
+        case 0x2A04: return "RESERVATIONS RELEASED";
+        case 0x2A05: return "REGISTRATIONS PREEMPTED";
+        case 0x2A06: return "ASYMMETRIC ACCESS STATE CHANGED";
+        case 0x2A07: return "IMPLICIT ASYMMETRIC ACCESS STATE TRANSITION FAILED";
+        case 0x2A08: return "PRIORITY CHANGED";
+        case 0x2A09: return "CAPACITY DATA HAS CHANGED";
+        case 0x2A10: return "TIMESTAMP CHANGED";
+        
+        case 0x2C06: return "PERSISTENT PREVENT CONFLICT";
+        case 0x2C07: return "PREVIOUS BUSY STATUS";
+        case 0x2C08: return "PREVIOUS TASK SET FULL STATUS";
+        case 0x2C09: return "PREVIOUS RESERVATION CONFLICT STATUS";
+        case 0x2C0A: return "PARTITION OR COLLECTION CONTAINS USER OBJECTS";
+        case 0x2C0B: return "NOT RESERVED";
+        
+        case 0x300A: return "CLEANING REQUEST REJECTED";
+        case 0x300C: return "WORM MEDIUM - OVERWRITE ATTEMPTED";
+        case 0x3010: return "MEDIUM NOT FORMATTED";
+        
+        case 0x3505: return "ENCLOSURE SERVICES CHECKSUM ERROR";
+        
+        case 0x3802: return "ESN - POWER MANAGEMENT CLASS EVENT";
+        case 0x3804: return "ESN - MEDIA CLASS EVENT";
+        case 0x3806: return "ESN - DEVICE BUSY CLASS EVENT";
+        
+        case 0x3A03: return "MEDIUM NOT PRESENT - LOADABLE";
+        case 0x3A04: return "MEDIUM NOT PRESENT - MEDIUM AUXILIARY MEMORY ACCESSIBLE";
+        
+        case 0x3B17: return "READ PAST END OF USER OBJECT";
+        //case 0x3C00: return "";
+        
+        case 0x3E03: return "LOGICAL UNIT FAILED SELF-TEST";
+        case 0x3E04: return "LOGICAL UNIT UNABLE TO UPDATE SELF-TEST LOG";
+        
+        case 0x3F04: return "COMPONENT DEVICE ATTACHED";
+        case 0x3F05: return "COMPONENT DEVICE ATTACHED";
+        case 0x3F06: return "REDUNDANCY GROUP CREATED OR MODIFIED";
+        case 0x3F07: return "REDUNDANCY GROUP DELETED";
+        case 0x3F08: return "SPARE CREATED OR MODIFIED";
+        case 0x3F09: return "SPARE DELETED";
+        case 0x3F0A: return "VOLUME SET CREATED OR MODIFIED";
+        case 0x3F0B: return "VOLUME SET DELETED";
+        case 0x3F0C: return "VOLUME SET DEASSIGNED";
+        case 0x3F0D: return "VOLUME SET REASSIGNED";
+        case 0x3F0E: return "REPORTED LUNS DATA HAS CHANGED";
+        case 0x3F0F: return "ECHO BUFFER OVERWRITTEN";
+        case 0x3F10: return "MEDIUM LOADABLE";
+        case 0x3F11: return "MEDIUM AUXILIARY MEMORY ACCESSIBLE";
+        
+        case 0x4471: return "ATA DEVICE FAILED SET FEATURES";
+        
+        case 0x4701: return "DATA PHASE CRC ERROR DETECTED";
+        case 0x4702: return "SCSI PARITY ERROR DETECTED DURING ST DATA PHASE";
+        case 0x4703: return "INFORMATION UNIT iuCRC ERROR DETECTED";
+        case 0x4704: return "ASYNCHRONOUS INFORMATION PROTECTION ERROR DETECTED";
+        case 0x4705: return "PROTOCOL SERVICE CRC ERROR";
+        case 0x4706: return "PHY TEST FUNCTION IN PROGRESS";
+        case 0x477F: return "SOME COMMANDS CLEARED BY ISCSI PROTOCOL EVENT";
+        
+        case 0x4B01: return "INVALID TARGET PORT TRANSFER TAG RECEIVED";
+        case 0x4B02: return "TOO MUCH WRITE DATA";
+        case 0x4B03: return "ACK/NAK TIMEOUT";
+        case 0x4B04: return "NAK RECEIVED";
+        case 0x4B05: return "DATA OFFSET ERROR";
+        case 0x4B06: return "INITIATOR RESPONSE TIMEOUT";
+        
+        //case 0x4F00: return "";
+        case 0x5000: return "WRITE APPEND ERROR";
+        case 0x5001: return "WRITE APPEND POSITION ERROR";
+        case 0x5002: return "POSITION ERROR RELATED TO TIMING";
+        
+        case 0x5301: return "UNLOAD TAPE FAILURE";
+        
+        case 0x5400: return "SCSI TO HOST SYSTEM INTERFACE FAILURE";
+        
+        case 0x5501: return "SYSTEM BUFFER FULL";
+        case 0x5502: return "INSUFFICIENT RESERVATION RESOURCES";
+        
+        case 0x5504: return "INSUFFICIENT REGISTRATION RESOURCES";
+        case 0x5505: return "INSUFFICIENT ACCESS CONTROL RESOURCES";
+        case 0x5506: return "AUXILIARY MEMORY OUT OF SPACE";
+        case 0x5507: return "QUOTA ERROR";
+        //case 0x5600: return "";
+        
+        case 0x5800: return "GENERATION DOES NOT EXIST";
+        case 0x5900: return "UPDATED BLOCK READ";
+        
+        case 0x5D02: return "LOGICAL UNIT FAILURE PREDICTION THRESHOLD EXCEEDED";
+        
+        case 0x5D10: return "HARDWARE IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D11: return "HARDWARE IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D12: return "HARDWARE IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D13: return "HARDWARE IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D14: return "HARDWARE IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D15: return "HARDWARE IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D16: return "HARDWARE IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D17: return "HARDWARE IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D18: return "HARDWARE IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D19: return "HARDWARE IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D1A: return "HARDWARE IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D1B: return "HARDWARE IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D1C: return "HARDWARE IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        case 0x5D20: return "CONTROLLER IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D21: return "CONTROLLER IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D22: return "CONTROLLER IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D23: return "CONTROLLER IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D24: return "CONTROLLER IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D25: return "CONTROLLER IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D26: return "CONTROLLER IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D27: return "CONTROLLER IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D28: return "CONTROLLER IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D29: return "CONTROLLER IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D2A: return "CONTROLLER IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D2B: return "CONTROLLER IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D2C: return "CONTROLLER IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        case 0x5D30: return "DATA CHANNEL IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D31: return "DATA CHANNEL IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D32: return "DATA CHANNEL IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D33: return "DATA CHANNEL IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D34: return "DATA CHANNEL IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D35: return "DATA CHANNEL IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D36: return "DATA CHANNEL IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D37: return "DATA CHANNEL IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D38: return "DATA CHANNEL IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D39: return "DATA CHANNEL IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D3A: return "DATA CHANNEL IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D3B: return "DATA CHANNEL IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D3C: return "DATA CHANNEL IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        case 0x5D40: return "SERVO IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D41: return "SERVO IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D42: return "SERVO IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D43: return "SERVO IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D44: return "SERVO IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D45: return "SERVO IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D46: return "SERVO IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D47: return "SERVO IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D48: return "SERVO IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D49: return "SERVO IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D4A: return "SERVO IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D4B: return "SERVO IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D4C: return "SERVO IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        case 0x5D50: return "SPINDLE IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D51: return "SPINDLE IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D52: return "SPINDLE IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D53: return "SPINDLE IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D54: return "SPINDLE IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D55: return "SPINDLE IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D56: return "SPINDLE IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D57: return "SPINDLE IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D58: return "SPINDLE IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D59: return "SPINDLE IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D5A: return "SPINDLE IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D5B: return "SPINDLE IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D5C: return "SPINDLE IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        case 0x5D60: return "FIRMWARE IMPENDING FAILURE GENERAL HARD DRIVE FAILURE";
+        case 0x5D61: return "FIRMWARE IMPENDING FAILURE DRIVE ERROR RATE TOO HIGH";
+        case 0x5D62: return "FIRMWARE IMPENDING FAILURE DATA ERROR RATE TOO HIGH";
+        case 0x5D63: return "FIRMWARE IMPENDING FAILURE SEEK ERROR RATE TOO HIGH";
+        case 0x5D64: return "FIRMWARE IMPENDING FAILURE TOO MANY BLOCK REASSIGNS";
+        case 0x5D65: return "FIRMWARE IMPENDING FAILURE ACCESS TIMES TOO HIGH";
+        case 0x5D66: return "FIRMWARE IMPENDING FAILURE START UNIT TIMES TOO HIGH";
+        case 0x5D67: return "FIRMWARE IMPENDING FAILURE CHANNEL PARAMETRICS";
+        case 0x5D68: return "FIRMWARE IMPENDING FAILURE CONTROLLER DETECTED";
+        case 0x5D69: return "FIRMWARE IMPENDING FAILURE THROUGHPUT PERFORMANCE";
+        case 0x5D6A: return "FIRMWARE IMPENDING FAILURE SEEK TIME PERFORMANCE";
+        case 0x5D6B: return "FIRMWARE IMPENDING FAILURE SPIN-UP RETRY COUNT";
+        case 0x5D6C: return "FIRMWARE IMPENDING FAILURE DRIVE CALIBRATION RETRY COUNT";
+        
+        case 0x5E41: return "POWER STATE CHANGE TO ACTIVE";
+        case 0x5E42: return "POWER STATE CHANGE TO IDLE";
+        case 0x5E43: return "POWER STATE CHANGE TO STANDBY";
+        case 0x5E45: return "POWER STATE CHANGE TO SLEEP";
+        case 0x5E47: return "POWER STATE CHANGE TO DEVICE CONTROL";
+        //case 0x5F00: return "";
+        
+        case 0x6708: return "ASSIGN FAILURE OCCURRED";
+        case 0x6709: return "MULTIPLY ASSIGNED LOGICAL UNIT";
+        case 0x670A: return "SET TARGET PORT GROUPS COMMAND FAILED";
+    }
+    // if we got here then we need to check the latest docs for new error codes and add them above
+    sprintf(specialerror, "Unrecognized Sense Error: %s", sense);
+  return specialerror;
 }
 
 #ifdef WIN32
@@ -1539,7 +1970,7 @@ int myfseeko64(FILE *stream, off64_t offset, int whence) {
   return fseeko64(stream, offset, whence);
 }
 
-void WinError(LPTSTR lpszFunction, char *textcolor) { 
+void WinError(char *action, char *textcolor) { 
     // retrieve the system error message for the last error code and print it with the function name in the desired color
     LPVOID lpMsgBuf;
     DWORD dw = GetLastError(); 
@@ -1554,12 +1985,12 @@ void WinError(LPTSTR lpszFunction, char *textcolor) {
                       NULL) == 0) {
         // FormatMessage failed
         color(textcolor);
-        printf("%s failed with error %ld%s", lpszFunction, dw, newline);
+        printf("%s failed with error %ld%s", action, dw, newline);
         color(normal);
     }
     else {
         color(textcolor);
-        printf("%s failed with error %ld: %s%s", lpszFunction, dw, (char *) lpMsgBuf, newline);
+        printf("%s failed with error %ld: %s%s", action, dw, (char *) lpMsgBuf, newline);
         color(normal);
         LocalFree(lpMsgBuf);
     }
@@ -1777,7 +2208,7 @@ int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSi
 
 int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSize,
             unsigned char *cdb, unsigned char cdbLen, bool checkreturnlength) {
-    // todo
+    // todo: sendcdb for mac os x
     
     sprintf(sense, "UU/OO/SS"); // temp -- gives sense error "Unsupported Operating System"
   return 1; // temp
@@ -1851,8 +2282,7 @@ int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSi
         }
     }
     else if (debug) printf("sense: %s (%s)%s", sense, cdberror(sense), newline);
-    // check that the proper amount of bytes were returned
-    // todo
+    // todo: check that the proper amount of bytes were returned
     
     if ((ccb->ccb_h.status & CAM_STATUS_MASK) != CAM_REQ_CMP) {
         // error occured (includes sense errors - not sure if 01/xx/xx will trigger this or not)
@@ -1872,7 +2302,7 @@ int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSi
 
 int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSize,
             unsigned char *cdb, unsigned char cdbLen, bool checkreturnlength) {
-    // todo
+    // todo: sendcdb for openbsd/netbsd
     
     sprintf(sense, "UU/OO/SS"); // temp
   return 1; // temp
@@ -1891,11 +2321,12 @@ int sendcdb(int direction, unsigned char *dataBuffer, unsigned long dataBufferSi
 
 #endif  // #ifdef WIN32
 
-int opendeviceandgetname(char *drive) {
+int opendeviceandgetname(char *drive, bool requestexclusiveaccess, bool errorsareok) {
     int i, j, n;
     char devicenamebuffer[64] = {0};
     #ifdef WIN32
         // drive should have already been validated as a drive letter A-Z (or a-z)
+        char stringforwinerror[26 + strlen(drive)];
         char rootpath[strlen(drive) + 3];
         char pathforcreatefile[strlen(drive) + 6];
         sprintf(rootpath, "%s:\\", drive);
@@ -1912,7 +2343,8 @@ int opendeviceandgetname(char *drive) {
         // check the drive type
         unsigned int drivetype = GetDriveType(rootpath);
         if (drivetype != DRIVE_CDROM) {
-            color(red);
+            if (errorsareok) color(yellow);
+            else color(red);
             printf("ERROR: %s is not recognized as a multimedia drive!", rootpath);
             if (drivetype < 7 && drivetype != 5) printf(" (%s)", drivetypelist[drivetype]);
             printf("%s", newline);
@@ -1921,35 +2353,92 @@ int opendeviceandgetname(char *drive) {
           return 1;
         }
         // open the device
-        hDevice = CreateFile(pathforcreatefile, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (requestexclusiveaccess)
+             hDevice = CreateFile(pathforcreatefile,
+                                  GENERIC_READ | GENERIC_WRITE,
+                                  0,
+                                  NULL, OPEN_EXISTING, 0, NULL);
+        else hDevice = CreateFile(pathforcreatefile,
+                                  GENERIC_READ | GENERIC_WRITE,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                  NULL, OPEN_EXISTING, 0, NULL);
         if (hDevice == INVALID_HANDLE_VALUE) {
-            WinError("CreateFile", red);
+            sprintf(stringforwinerror, "CreateFile for drive (%s:)", drive);
+            if (errorsareok) WinError(stringforwinerror, yellow);
+            else WinError(stringforwinerror, red);
             if (debug) printf("drive: %s, rootpath: %s, pathforcreatefile: %s%s", drive, rootpath, pathforcreatefile, newline);
           return 1;
         }
     #else
         // open the device
         #if defined(__FreeBSD__)
-        cam_dev = cam_open_device(drive, O_RDWR);
-        if (cam_dev != NULL && cam_dev->fd != -1) fd = cam_dev->fd;
-        else {
-            color(red);
-            if (debug) {
-                if (cam_dev == NULL) printf("cam_dev == NULL%s", newline);
-                else if (cam_dev->fd == -1) printf("cam_dev->fd == -1%s", newline);
+            cam_dev = cam_open_device(drive, O_RDWR);
+            if (cam_dev != NULL && cam_dev->fd != -1) fd = cam_dev->fd;
+            else {
+                if (errorsareok) color(yellow);
+                else color(red);
+                if (debug) {
+                    if (cam_dev == NULL) printf("cam_dev == NULL%s", newline);
+                    else if (cam_dev->fd == -1) printf("cam_dev->fd == -1%s", newline);
+                }
+                printf("ERROR: Failed to open device (O_RDWR): %s (%s)%s", drive, strerror(errno), newline);
+                color(normal);
+              return 1;
             }
-            printf("ERROR: Failed to open device: %s (%s)%s", drive, strerror(errno), newline);
-            color(normal);
-          return 1;
-        }
+            if (requestexclusiveaccess) {
+                // todo: make sure this is valid and works on FreeBSD
+                struct flock fl;
+                fl.l_type   = F_WRLCK;  // type of lock: F_RDLCK, F_WRLCK, F_UNLCK
+                fl.l_whence = SEEK_SET; // how to interpret l_start: SEEK_SET, SEEK_CUR, SEEK_END
+                fl.l_start  = 0;        // starting offset for lock from l_whence
+                fl.l_len    = 0;        // number of bytes to lock, 0 = to EOF
+                fl.l_pid    = getpid(); // lock owner
+                if (fcntl(fd, F_SETLK, &fl) == -1) {
+                    if (errorsareok) color(yellow);
+                    else color(red);
+                    printf("ERROR: Failed to open device for exclusive access: %s (%s)%s", drive, strerror(errno), newline);
+                    color(normal);
+                    close(fd);
+                  return 1;
+                }
+            }
         #else
-        fd = open(drive, O_RDONLY);
-        if (fd == -1) {
-            color(red);
-            printf("ERROR: Failed to open device: %s (%s)%s", drive, strerror(errno), newline);
-            color(normal);
-          return 1;
-        }
+            if (requestexclusiveaccess) {
+                // don't think this is actually exclusive but Ubuntu 8.10 VM (didn't try any others) will not let me open using O_RDWR on /dev/cdrom
+                // (errno says read-only filesystem) so i can't use F_WRLCK (exclusive) on a file that is not open for writing
+                struct flock fl;
+                fl.l_type   = F_RDLCK;  // type of lock: F_RDLCK, F_WRLCK, F_UNLCK
+                fl.l_whence = SEEK_SET; // how to interpret l_start: SEEK_SET, SEEK_CUR, SEEK_END
+                fl.l_start  = 0;        // starting offset for lock from l_whence
+                fl.l_len    = 0;        // number of bytes to lock, 0 = to EOF
+                fl.l_pid    = getpid(); // lock owner
+                fd = open(drive, O_RDONLY);
+                if (fd == -1) {
+                    if (errorsareok) color(yellow);
+                    else color(red);
+                    printf("ERROR: Failed to open device: %s (%s)%s", drive, strerror(errno), newline);
+                    color(normal);
+                  return 1;
+                }
+                if (fcntl(fd, F_SETLK, &fl) == -1) {
+                    if (errorsareok) color(yellow);
+                    else color(red);
+                    printf("ERROR: Failed to open device for exclusive access: %s (%s)%s", drive, strerror(errno), newline);
+                    color(normal);
+                    close(fd);
+                  return 1;
+                }
+            }
+            else {
+                fd = open(drive, O_RDONLY);
+                if (fd == -1) {
+                    if (errorsareok) color(yellow);
+                    else color(red);
+                    printf("ERROR: Failed to open device: %s (%s)%s", drive, strerror(errno), newline);
+                    color(normal);
+                  return 1;
+                }
+            }
         #endif
     #endif
     
@@ -1985,7 +2474,8 @@ int opendeviceandgetname(char *drive) {
             // check the device type
             unsigned char peripheraldevicetype = inqbuffer[0] & 0x1F;
             if (peripheraldevicetype != 0x05) {
-                color(red);
+                if (errorsareok) color(yellow);
+                else color(red);
                 printf("ERROR: %s is not recognized as a multimedia device!", drive);
                 if      (peripheraldevicetype == 0x00) printf(" (It's a direct-access block device; for example, magnetic disk.)");
                 else if (peripheraldevicetype == 0x01) printf(" (It's a sequential-access device; for example, magnetic tape.)");
@@ -2049,6 +2539,183 @@ int opendeviceandgetname(char *drive) {
             if (devicenamebuffer[n] == 0x20) i--;  // backspace over trailing spaces
             else break;
         }
+        devicenamebuffer[i] = 0x20;
+        i++;
+        // vendor specific additional info 36-55
+        if (isanxbox360rippingdrive(devicenamebuffer, false)) {
+            if (memcmp(devicenamebuffer, "PLDS DG-16D2S ", 14) == 0) {
+                // get more data for fw and hardware version (i.e. PLDS DG-16D2S 74850C A0A1)
+                i--;
+                for (j=36;j<42;j++) {
+                    if (j == 38) {
+                        devicenamebuffer[i] = 0x20;
+                        i++;
+                    }
+                    if (inqbuffer[j] > 0x1F) {
+                        devicenamebuffer[i] = inqbuffer[j];
+                        i++;
+                    }
+                }
+                if (i > 0) for (n=i-1;n>=0;n--) {
+                    if (devicenamebuffer[n] == 0x20) i--;  // backspace over trailing spaces
+                    else break;
+                }
+                devicenamebuffer[i] = 0x20;
+                i++;
+            }
+            else if (memcmp(devicenamebuffer, "SATA DVD-ROM 6243 ", 18) == 0) {
+                // get more data for fw version (i.e. SATA DVD-ROM 62430C)
+                i--;
+                for (j=36;j<40;j++) {
+                    if (inqbuffer[j] > 0x1F) {
+                        devicenamebuffer[i] = inqbuffer[j];
+                        i++;
+                    }
+                }
+                if (i > 0) for (n=i-1;n>=0;n--) {
+                    if (devicenamebuffer[n] == 0x20) i--;  // backspace over trailing spaces
+                    else break;
+                }
+                devicenamebuffer[i] = 0x20;
+                i++;
+            }
+            // try to get ixtreme version info
+            unsigned char ixbuffer[0x30] = {0};
+            memset(cdb, 0, 12);
+            cdb[0] = 0x12;
+            cdb[4] = 0x24;
+            cdb[9] = 0x49;
+            cdb[10] = 0x58;
+            cdb[11] = 0x01;
+            if (sendcdb(DATA_IN, ixbuffer, 0x30, cdb, 12, false)) {  // false means it won't check that number of bytes returned == 96
+                for (i=0;i<readretries;i++) {
+                    if (sendcdb(DATA_IN, ixbuffer, 0x30, cdb, 12, false) == 0) {
+                        // recovered error
+                        goto ixrecovered;
+                    }
+                }
+                // unrecovered error
+                if (debug || testingdvd) {
+                    #ifdef WIN32
+                        printf("DG-16D2S/VAD6038/TS-H943A failed to do ix01 cmd for drive %s: (%s)%s", drive, cdberror(sense), newline);
+                    #else
+                        printf("DG-16D2S/VAD6038/TS-H943A failed to do ix01 cmd for %s (%s)%s", drive, cdberror(sense), newline);
+                    #endif
+                }
+            }
+            else {
+                ixrecovered:
+                if (debug || testingdvd) {
+                    printf("ix buffer:%s", newline);
+                    hexdump(ixbuffer, 0, 0x30);
+                }
+                if (html) {
+                    devicenamebuffer[i]   = '&';
+                    devicenamebuffer[i+1] = 'l';
+                    devicenamebuffer[i+2] = 't';
+                    devicenamebuffer[i+3] = ';';
+                    i += 4;
+                }
+                else {
+                    devicenamebuffer[i] = '<';
+                    i++;
+                }
+                for (j=16;j<48;j++) {
+                    if (ixbuffer[j] > 0x1F) {
+                        devicenamebuffer[i] = ixbuffer[j];
+                        i++;
+                    }
+                }
+                if (i > 0) for (n=i-1;n>=0;n--) {
+                    if (devicenamebuffer[n] == 0x20) i--;  // backspace over trailing spaces
+                    else break;
+                }
+                if (html) {
+                    devicenamebuffer[i]   = '&';
+                    devicenamebuffer[i+1] = 'g';
+                    devicenamebuffer[i+2] = 't';
+                    devicenamebuffer[i+3] = ';';
+                    i += 4;
+                }
+                else {
+                    devicenamebuffer[i] = '>';
+                    i++;
+                }
+            }
+        }
+        else {
+            if (html) {
+                devicenamebuffer[i]   = '&';
+                devicenamebuffer[i+1] = 'l';
+                devicenamebuffer[i+2] = 't';
+                devicenamebuffer[i+3] = ';';
+                i += 4;
+            }
+            else {
+                devicenamebuffer[i] = '<';
+                i++;
+            }
+            for (j=36;j<56;j++) {
+                if (inqbuffer[j] > 0x1F) {
+                    devicenamebuffer[i] = inqbuffer[j];
+                    i++;
+                }
+            }
+            if (i > 0) for (n=i-1;n>=0;n--) {
+                if (devicenamebuffer[n] == 0x20) i--;  // backspace over trailing spaces
+                else break;
+            }
+            if (html) {
+                devicenamebuffer[i]   = '&';
+                devicenamebuffer[i+1] = 'g';
+                devicenamebuffer[i+2] = 't';
+                devicenamebuffer[i+3] = ';';
+                i += 4;
+            }
+            else {
+                devicenamebuffer[i] = '>';
+                i++;
+            }
+        }
+        
+        #ifdef WIN32
+            // get bus type
+            ULONG returnedbytes;
+            STORAGE_PROPERTY_QUERY query;
+            PSTORAGE_ADAPTER_DESCRIPTOR adapterDesc;
+            UCHAR outBuf[1024];
+            memset(outBuf, 0, 1024);
+            query.PropertyId = StorageAdapterProperty;
+            query.QueryType = PropertyStandardQuery;
+            if (DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY, &query,
+                                sizeof(STORAGE_PROPERTY_QUERY), &outBuf, 1024, &returnedbytes, NULL)) {
+                adapterDesc = (PSTORAGE_ADAPTER_DESCRIPTOR) outBuf;
+                devicenamebuffer[i] = 0x20;
+                devicenamebuffer[i+1] = '[';
+                i += 2;
+                switch((UCHAR) adapterDesc->BusType) {
+                    case 0x01: memcpy(devicenamebuffer+i, "SCSI", 4);         i += 4;  break;
+                    case 0x02: memcpy(devicenamebuffer+i, "ATAPI", 5);        i += 5;  break;
+                    case 0x03: memcpy(devicenamebuffer+i, "ATA", 3);          i += 3;  break;
+                    case 0x04: memcpy(devicenamebuffer+i, "IEEE 1394", 9);    i += 9;  break;
+                    case 0x05: memcpy(devicenamebuffer+i, "SSA", 3);          i += 3;  break;
+                    case 0x06: memcpy(devicenamebuffer+i, "Fibre", 5);        i += 5;  break;
+                    case 0x07: memcpy(devicenamebuffer+i, "USB", 3);          i += 3;  break;
+                    case 0x08: memcpy(devicenamebuffer+i, "RAID", 4);         i += 4;  break;
+                    case 0x09: memcpy(devicenamebuffer+i, "iSCSI", 5);        i += 5;  break;
+                    case 0x0A: memcpy(devicenamebuffer+i, "SAS", 3);          i += 3;  break;
+                    case 0x0B: memcpy(devicenamebuffer+i, "SATA", 4);         i += 4;  break;
+                    case 0x0C: memcpy(devicenamebuffer+i, "SD", 2);           i += 2;  break;
+                    case 0x0D: memcpy(devicenamebuffer+i, "MMC", 3);          i += 3;  break;
+                    case 0x0E: memcpy(devicenamebuffer+i, "Virtual", 7);      i += 7;  break;
+                    case 0x0F: memcpy(devicenamebuffer+i, "FB Virtual", 10);  i += 10; break;
+                    default:   memcpy(devicenamebuffer+i, "Unknown Bus", 11); i += 11; break;
+                }
+                devicenamebuffer[i] = ']';
+                i++;
+            }
+        #endif
+        
         devicenamebuffer[i] = 0x00;  // terminating null
     }
     
@@ -2075,12 +2742,233 @@ int opendeviceandgetname(char *drive) {
           exit(1);
         }
         #ifdef WIN32
-            sprintf(isofilename, "drive %s:", drive);
+            sprintf(isofilename, "Drive %s:", drive);
         #else
             sprintf(isofilename, "%s", drive);
         #endif
     }
   return 0;
+}
+
+void closedeviceifopen() {
+    #ifdef WIN32
+        if (hDevice != INVALID_HANDLE_VALUE) CloseHandle(hDevice);
+    #else
+        if (fd != -1) close(fd);
+    #endif
+  return;
+}
+
+void mysleep(float seconds) {
+    #ifdef WIN32
+        Sleep((DWORD) roundf(seconds * 1000));  // milliseconds
+    #else
+        usleep((unsigned int) roundf(seconds * 1000000));  // microseconds
+    #endif
+}
+
+void setdvdspeed(float speed, bool resetting) {
+    // todo: test this on non-win32
+    // doesn't work on Ubuntu 8.10 VM with liteon 0800 and a normal Asus burner...
+    // ioctl returns -1, errno = EFAULT (bad address) -- don't know why
+    drive_speed_needs_to_be_reset = false;
+    unsigned char cdb[12] = {0};
+    unsigned char speedbuffer[28] = {0};
+    float currentspeed = -1.0;
+    long lspeed = (long) roundf(speed);
+    
+    if (isanxbox360rippingdrive(isofilename, false)) {
+        // mode sense to get current drive speed
+        // speed sense may be unreliable depending on fw version without doing speed select first
+        memset(cdb, 0, 12);
+        cdb[0] = 0x5A;
+        cdb[2] = 0x20;
+        cdb[8] = 0x14;
+        memset(speedbuffer, 0, 28);
+        if (sendcdb(DATA_IN, speedbuffer, 0x14, cdb, 10, false)) {
+            color(yellow);
+            printf("Error reading current drive speed (%s)%s", cdberror(sense), newline);
+            color(normal);
+        }
+        else if (speedbuffer[1] == 0x12 && speedbuffer[8] == 0x20 && speedbuffer[9] == 0x0A) {  // make sure data looks correct
+            // 1,2,3,4 for 2x,5x,8x,12x
+            if      (speedbuffer[10] == 0x01) currentspeed = 2.0;
+            else if (speedbuffer[10] == 0x02) currentspeed = 5.0;
+            else if (speedbuffer[10] == 0x03) {
+                if (memcmp(isofilename, "PLDS DG-16D2S ", 14) == 0 ||
+                    memcmp(isofilename, "PBDS VAD6038-", 13) == 0 ||
+                    memcmp(isofilename, "SATA DVD-ROM 6243", 17) == 0) {
+                    // liteon and benq have been observed to report an incorrect initial default speed of 8x when they were actually running at 5x
+                    // (iXtreme v1.60 and iXtreme v3.0)
+                    currentspeed = -1.0; // the actual speed could be 5x or 8x (if 8x was set manually), so leave currentspeed alone (-1 = unknown speed)
+                }
+                else currentspeed = 8.0; // sammy seems to report correct speed
+            }
+            else if (speedbuffer[10] == 0x04) currentspeed = 12.0;
+        }
+        if (debug || testingdvd) {
+            printf("speedbuffer after mode sense for drive speed:%s", newline);
+            hexdump(speedbuffer, 0, 0x14);
+            printf("%s", newline);
+        }
+        // only set speeds that can actually be set
+        if (speed <= 0) speed = 5.0;  // default
+        else if (speed > 0 && speed <= 3.5) speed = 2.0;    // 0.01-3.5 = 2
+        else if (speed > 3.5 && speed <= 6.5) speed = 5.0;  // 3.51-6.5 = 5
+        else if (speed > 6.5 && speed <= 9.5) speed = 8.0;  // 6.51-9.5 = 8
+        else speed = 12.0;                                  // 9.51+    = 12
+        
+        lspeed = (long) roundf(speed);
+        
+        if (roundf(speed) != currentspeed) {
+            if (resetting) fprintf(stderr, "\n");
+            fprintf(stderr, "Setting drive speed to %lux... ", lspeed);
+            if (memcmp(isofilename, "TSSTcorp DVD-ROM TS-H943A ", 26) == 0) {
+                // use kreon cdb style for sammy (benq/liteon way gives error LOGICAL UNIT IS IN PROCESS OF BECOMING READY)
+                memset(cdb, 0, 12);
+                cdb[0] = 0xFF;
+                cdb[2] = 0xBB;
+                cdb[3] = (unsigned char) lspeed;
+                if (sendcdb(DATA_IN, speedbuffer, 28, cdb, 12, false)) {
+                    color(yellow);
+                    printf("Error setting drive speed (%s)%s", cdberror(sense), newline);
+                    if (!resetting) printf("%s", newline);
+                    color(normal);
+                }
+                else {
+                    // wait 4 seconds for drive to spin up/down
+                    mysleep(4.0);
+                    fprintf(stderr, "Done\n");
+                    if (!resetting) fprintf(stderr, "\n");
+                    if (speed != 5.0) drive_speed_needs_to_be_reset = true;
+                }
+            }
+            else {
+                // benq and liteon
+                memset(cdb, 0, 12);
+                cdb[0] = 0x55;
+                cdb[2] = 0x20;
+                cdb[8] = 0x14;
+                memset(speedbuffer, 0, 28);
+                speedbuffer[1] = 0x12;
+                speedbuffer[8] = 0x20;
+                speedbuffer[9] = 0x0A;
+                // 1,2,3,4 for 2x,5x,8x,12x
+                if      (speed == 2.0) speedbuffer[10] = 0x01;
+                else if (speed == 5.0) speedbuffer[10] = 0x02;
+                else if (speed == 8.0) speedbuffer[10] = 0x03;
+                else                   speedbuffer[10] = 0x04;
+                if (sendcdb(DATA_OUT, speedbuffer, 0x14, cdb, 10, false)) {
+                    color(yellow);
+                    printf("Error setting drive speed (%s)%s", cdberror(sense), newline);
+                    if (!resetting) printf("%s", newline);
+                    color(normal);
+                }
+                else {
+                    // wait 4 seconds for drive to spin up/down
+                    mysleep(4.0);
+                    fprintf(stderr, "Done\n");
+                    if (!resetting) fprintf(stderr, "\n");
+                    if (speed != 5.0) drive_speed_needs_to_be_reset = true;
+                }
+            }
+        }
+        else {
+            fprintf(stderr, "Drive speed is already set to %lux\n", lspeed);
+            if (!resetting) fprintf(stderr, "\n");
+        }
+    }
+    else if ( (memcmp(isofilename, "TSSTcorp DVD-ROM SH-D162C ", 26) == 0 ||
+               memcmp(isofilename, "TSSTcorp DVD-ROM SH-D162D ", 26) == 0 ||
+               memcmp(isofilename, "TSSTcorp DVD-ROM SH-D163A ", 26) == 0 ||
+               memcmp(isofilename, "TSSTcorp DVD-ROM SH-D163B ", 26) == 0    ) &&
+               strstr(isofilename, "KREON ") != NULL) {
+        // todo: figure out if mode sense or similar is supported by kreons to get current drive speed
+        
+        if (lspeed <= 0) lspeed = 8;  // apparent default for SH-D163B
+        else if (lspeed > 0xFF) lspeed = 0xFF;
+        // odd speeds greater than 1 give error INVALID COMMAND OPERATION CODE, so make 3=2, 5=4, 7=6, 9=8, etc
+        if (lspeed > 2 && lspeed % 2) lspeed -= 1;
+        if (resetting) fprintf(stderr, "\n");
+        fprintf(stderr, "Setting drive speed to %lux... ", lspeed);
+        memset(cdb, 0, 12);
+        cdb[0] = 0xFF;
+        cdb[2] = 0xBB;
+        cdb[3] = (unsigned char) lspeed;
+        if (sendcdb(DATA_IN, speedbuffer, 28, cdb, 12, false)) {
+            color(yellow);
+            printf("Error setting drive speed (%s)%s", cdberror(sense), newline);
+            if (!resetting) printf("%s", newline);
+            color(normal);
+        }
+        else {
+            // looks like sleeping isn't needed for kreons (at least the drive and fw tested --
+            // sendcdb doesn't return until the speed has been set) -- leave it out
+            //mysleep(4.0);
+            fprintf(stderr, "Done\n");
+            if (!resetting) fprintf(stderr, "\n");
+            if (lspeed != 8) drive_speed_needs_to_be_reset = true;
+        }
+    }
+    else {
+        // SET STREAMING command for typical DVD-ROMs
+        // todo: check for Feature 0107h Real Time Streaming first?
+        // todo: do mode sense to get current drive speed
+        
+        cdb[0]  = 0xB6;  // SET STREAMING
+        cdb[10] =   28;  // 28 bytes Parameter List Length
+        if (speed <= 0) {
+            // RDD (Restore Drive Defaults) bit -- with this set the rest of this crap will be ignored and speed will be set to default
+            speedbuffer[0] = 4;
+        }
+        // End LBA (Start LBA is already set to 0)
+        unsigned long endlba = (unsigned long) (fpfilesize / 2048 - 1);
+        if (debug || testingdvd) printf("End LBA for SET STREAMING: 0x%08lX%s", endlba, newline);
+        speedbuffer[8]  = (unsigned char)  (endlba >> 24);
+        speedbuffer[9]  = (unsigned char) ((endlba & 0x00FF0000L) >> 16);
+        speedbuffer[10] = (unsigned char) ((endlba & 0x0000FF00L) >>  8);
+        speedbuffer[11] = (unsigned char)  (endlba & 0x000000FFL);
+        // "The data rate to be delivered for reading is Read Size/Read Time"
+        // Read Size in kilobytes
+        unsigned long kb = (unsigned long) (1350.0 * speed);
+        if (debug || testingdvd) printf("Read data rate = %lu KB/s%s", kb, newline);
+        speedbuffer[12] = (unsigned char)  (kb >> 24);
+        speedbuffer[13] = (unsigned char) ((kb & 0x00FF0000L) >> 16);
+        speedbuffer[14] = (unsigned char) ((kb & 0x0000FF00L) >>  8);
+        speedbuffer[15] = (unsigned char)  (kb & 0x000000FFL);
+        // Read Time in milliseconds (1000)
+        speedbuffer[18] = 0x03;
+        speedbuffer[19] = 0xE8;
+        // "When Write Size field is set to 0 the Writing throughput is not specified. The Write Time field should not be set to 0
+        // (host may set 1000) to avoid logical unit error of division by 0. The logical unit shall refer Read Size/Read Time fields."
+        // Write Time in milliseconds (1000)
+        speedbuffer[26] = 0x03;
+        speedbuffer[27] = 0xE8;
+        if (resetting) fprintf(stderr, "\n");
+        if (speed <= 0) fprintf(stderr, "Setting drive speed to drive default... ");
+        else {
+            if (roundf(speed) == speed) fprintf(stderr, "Setting drive speed to %lux... ", lspeed);
+            else fprintf(stderr, "Setting drive speed to %.1fx... ", speed);
+        }
+        if (sendcdb(DATA_OUT, speedbuffer, 28, cdb, 12, false)) {
+            color(yellow);
+            printf("Error setting drive speed (%s)%s", cdberror(sense), newline);
+            if (!resetting) printf("%s", newline);
+            color(normal);
+        }
+        else {
+            // wait 4 seconds for drive to spin up/down
+            mysleep(4.0);
+            fprintf(stderr, "Done\n");
+            if (!resetting) fprintf(stderr, "\n");
+            if (speed > 0) drive_speed_needs_to_be_reset = true;
+        }
+    }
+}
+
+void resetdrivespeedifneeded() {
+    if (drive_speed_needs_to_be_reset) setdvdspeed(0, true);
+  return;
 }
 
 long long freediskspace(char* filename) {
@@ -2098,7 +2986,9 @@ long long freediskspace(char* filename) {
         }
         else {
             if (debug) {
-                color(red); printf("freediskspace - filename: %s does not have a colon%s", filename, newline); color(normal);
+                color(red);
+                printf("freediskspace - filename: %s does not have a colon%s", filename, newline);
+                color(normal);
             }
           return freespace;
         }
@@ -2154,7 +3044,7 @@ void getL0capacity() {
                    "1. This isn't a DVD+R DL disc%s"
                    "2. This DVD drive simply doesn't support checking the layerbreak (try using a%s"
                    "%s different drive or add the option --skiplb to hide this message)%s"
-                   "3. The drive has gone nuts and needs to be reset or replaced%s%s",
+                   "3. The drive has lost sanity and needs to be reset or replaced%s%s",
                    newline, newline, newline, sp2, newline, newline, newline);
         }
     }
@@ -2169,21 +3059,29 @@ void getL0capacity() {
                     L0capacity, L0capacityInitStatus, newline);
             hexdump(capbuffer, 0, 20);
         }
-        // L0 data area capacity should be 1913760
-        if (L0capacity != 1913760) {
-            color(red);
-            printf("Layerbreak for this DVD was reported as %"LL"d (expected 1913760)%s", L0capacity, newline);
-            if (L0capacityInitStatus)
-                printf("If this is a burnt Xbox 360 backup, it probably won't boot on your console!%s", newline);
-            else 
-                printf("This appears to be the default L0 capacity and the disc is probably blank!%s", newline);
-            printf("Always burn your backups with the correct layerbreak!%s%s", newline, newline);
+        // L0 data area capacity should be equal to the layerbreak calculated from the alternate pfi in the ss
+        if (L0capacity != (long long) layerbreak) {
+            if (L0capacityInitStatus && L0capacity == 2086912 && layerbreak == 2133520) color(yellow);
+            else color(red);
+            printf("Layerbreak for this DVD was reported as %"LL"d (should have been %ld)%s", L0capacity, layerbreak, newline);
+            if (L0capacityInitStatus) {
+                if (L0capacity == 2086912 && layerbreak == 2133520) {
+                    printf("Note: This might still be bootable on LT+ v2.0 or later firmware%s%s", newline, newline);
+                }
+                else {
+                    printf("If this is a burnt Xbox 360 backup, it probably won't boot on your console!%s", newline);
+                    printf("Always burn your backups with the correct layerbreak!%s%s", newline, newline);
+                }
+            }
+            else {
+                printf("This appears to be the default L0 capacity and the disc is probably blank!%s%s", newline, newline);
+            }
             color(normal);
         }
     }
 }
 
-long long getdisccapacity(bool checkblocklength) {
+long long getdisccapacity(bool checkblocklength, bool showerrors) {
     int i;
     unsigned char capbuffer[8];
     long long ret;
@@ -2198,12 +3096,14 @@ long long getdisccapacity(bool checkblocklength) {
             }
         }
         // unrecovered error
-        color(red);
-        printf("ERROR: Error reading disc capacity (%s)%s", cdberror(sense), newline);
-        color(normal);
-        if (debug) {
-            printf("cap buffer:%s", newline);
-            hexdump(capbuffer, 0, 8);
+        if (showerrors || debug) {
+            color(red);
+            printf("ERROR: Error reading disc capacity (%s)%s", cdberror(sense), newline);
+            color(normal);
+            if (debug) {
+                printf("cap buffer:%s", newline);
+                hexdump(capbuffer, 0, 8);
+            }
         }
       return -1LL;
     }
@@ -2214,9 +3114,11 @@ long long getdisccapacity(bool checkblocklength) {
     }
     // check that block length == 2048 if checkblocklength is true
     if (checkblocklength && getuintmsb(capbuffer+4) != 2048) {
-        color(red);
-        printf("ERROR: Block Length for this media was reported as %lu (expected 2048)%s", getuintmsb(capbuffer+4), newline);
-        color(normal);
+        if (showerrors || debug) {
+            color(red);
+            printf("ERROR: Block Length for this media was reported as %lu (expected 2048)%s", getuintmsb(capbuffer+4), newline);
+            color(normal);
+        }
       return -1LL;
     }
     // return size of media in bytes
@@ -2345,7 +3247,6 @@ void parsecmdline(int argc, char *argv[]) {
                 if (strcasecmp(argv[i], "--p-dmi") == 0 && (i+1 < argc)) { patchdmiarg = i + 1; manualpatch = true; }
                 if (strcasecmp(argv[i], "--p-ss") == 0 && (i+1 < argc)) { patchssarg = i + 1; manualpatch = true; }
                 if (strcasecmp(argv[i], "--e-video") == 0 && (i+1 < argc)) { extractvideoarg = i + 1; manualextract = true; }
-                if (strcasecmp(argv[i], "--e-videopartition") == 0 && (i+1 < argc)) { extractvideopartitionarg = i + 1; manualextract = true; }
                 if (strcasecmp(argv[i], "--e-pfi") == 0 && (i+1 < argc)) { extractpfiarg = i + 1; manualextract = true; }
                 if (strcasecmp(argv[i], "--e-dmi") == 0 && (i+1 < argc)) { extractdmiarg = i + 1; manualextract = true; }
                 if (strcasecmp(argv[i], "--e-ss") == 0 && (i+1 < argc)) { extractssarg = i + 1; manualextract = true; }
@@ -2359,16 +3260,16 @@ void parsecmdline(int argc, char *argv[]) {
                 if (strcasecmp(argv[i], "--truncate") == 0 && (i+1 < argc)) { truncatearg = i + 1; truncatefile = true; }
                 if (strcasecmp(argv[i], "--pause") == 0) pauseshell = true;
                 if (strcasecmp(argv[i], "--max") == 0) maximize = true;
-                //if (strcasecmp(argv[i], "--splitvid") == 0) addsplitvid = true;
-                //if (strcasecmp(argv[i], "--removesplitvid") == 0) removesplitvid = true;
                 if (strcasecmp(argv[i], "--padding") == 0) checkpadding = true;
+                if (strcasecmp(argv[i], "--pL0") == 0) padL0 = true;
                 if (strcasecmp(argv[i], "--showfiles") == 0) showfiles = true;
                 if (strcasecmp(argv[i], "--nofixdev") == 0) fixdeviation = false;
                 if (strcasecmp(argv[i], "--fixangle359") == 0) fixangle359 = true;
                 if (strcasecmp(argv[i], "--folder") == 0 && (i+1 < argc)) { folderarg = i + 1; foldermode = true; }
                 if (strcasecmp(argv[i], "--dir") == 0 && (i+1 < argc)) { folderarg = i + 1; foldermode = true; }
                 if (strcasecmp(argv[i], "--match") == 0 && (i+1 < argc)) { matcharg = i + 1; matchonly = true; }
-                if (strcasecmp(argv[i], "--showfulltable") == 0) showfulltable = true;
+                if (strcasecmp(argv[i], "--showsstable") == 0) showsstable = true;
+                if (strcasecmp(argv[i], "--showfulltable") == 0) { showfulltable = true; showsstable = true; }
                 if (strcasecmp(argv[i], "--nofixdrt") == 0) fixDRT = false;
                 if (strcasecmp(argv[i], "--testing") == 0) testing = true;
                 if (strcasecmp(argv[i], "--testingdvd") == 0) testingdvd = true;
@@ -2392,6 +3293,7 @@ void parsecmdline(int argc, char *argv[]) {
                 if (strcasecmp(argv[i], "--devkey") == 0) devkey = true;
                 if (strcasecmp(argv[i], "--notrust") == 0) trustssv2angles = false;
                 if (strcasecmp(argv[i], "--useinstalldir") == 0) useinstalldir = true;
+                if (strcasecmp(argv[i], "--orig") == 0 && (i+1 < argc)) origarg = i + 1;
                 #ifdef WIN32
                     if (strcasecmp(argv[i], "--dvd") == 0 && (i+1 < argc)) dvdarg = i + 1;
                 #endif
@@ -2430,16 +3332,15 @@ void parsecmdline(int argc, char *argv[]) {
                     if (readretries < 0) readretries = 20;
                     readretryarg = i + 1;
                 }
-                if (strcasecmp(argv[i], "--layerbreak") == 0 && (i+1 < argc)) {
-                    layerbreak = strtol(argv[i+1], NULL, 10);
-                    if (layerbreak <= 0) layerbreak = 1913760;
-                    else if (layerbreak != 1913760) altlayerbreak = true;
-                    layerbreakarg = i + 1;
-                }
                 if (strcasecmp(argv[i], "--lang") == 0 && (i+1 < argc)) {
                     userlang = strtol(argv[i+1], NULL, 10);
                     if (userlang < 0) userlang = 0;
                     userlangarg = i + 1;
+                }
+                if (strcasecmp(argv[i], "--speed") == 0 && (i+1 < argc)) {
+                    speed = strtof(argv[i+1], NULL);
+                    if (speed < 0) speed *= -1;
+                    speedarg = i + 1;
                 }
             }
             else for(u=1; u<strlen(argv[i]); u++) {
@@ -2471,6 +3372,7 @@ void parsecmdline(int argc, char *argv[]) {
 }
 
 void initializeglobals() {
+    int i;
     // 1st Wave PFI
     currentpfientries[0].crc = 0x739CEAB3;
     memcpy(currentpfientries[0].sha1, "\xf5\x13\xa4\x52\xd1\x32\xb4\x3d\x85\xfa\xe0\xd2\x2d\x4c\xae\x85\xfe\x8d\xde\x67", 20);
@@ -2496,8 +3398,29 @@ void initializeglobals() {
     memcpy(currentpfientries[4].sha1, "\xcb\xc6\xf7\x98\xb6\x6a\x6f\x7d\xec\x58\x46\xe9\x1e\xcb\xbb\xb9\xb1\x08\x45\xb1", 20);
     currentpfientries[4].description = "8th - 9th Wave";
     currentpfientries[4].hosted = true;
+    // 10th - 12th Wave PFI
+    currentpfientries[5].crc = 0xE18BC70B;
+    memcpy(currentpfientries[5].sha1, "\xd9\x0f\x13\xdd\x23\xce\xbe\x4c\x2d\xe4\x06\xfe\x18\xb7\x9c\xae\xab\x97\x01\x9f", 20);
+    currentpfientries[5].description = "10th - 12th Wave";
+    currentpfientries[5].hosted = true;
+    // 13th Wave PFI
+    currentpfientries[6].crc = 0x40DCB18F;
+    memcpy(currentpfientries[6].sha1, "\x77\x1c\xbb\x1d\x6f\xd4\x75\xf6\xed\x28\x5a\xbf\xde\xe7\x48\x40\x19\x02\xc6\xe0", 20);
+    currentpfientries[6].description = "13th Wave";
+    currentpfientries[6].hosted = true;
+    // 1st Wave XGD3 PFI -- 13140
+    currentpfientries[7].crc = 0xE1647069;
+    memcpy(currentpfientries[7].sha1, "\xad\x00\x93\x5f\x98\xcd\x31\xfc\x1a\xbe\xe8\xf8\x8f\xbb\x5f\xd9\x71\x5f\x5e\x2c", 20);
+    currentpfientries[7].description = "XGD3";
+    currentpfientries[7].hosted = true;
+    // 2nd - 3rd Wave XGD3 PFI -- 13146-13599
+    currentpfientries[8].crc = 0x26AF4C58;
+    memcpy(currentpfientries[8].sha1, "\x54\xc3\xeb\x44\x2f\x55\xad\xfc\x17\x9e\xf4\x4f\x81\x49\x7b\xe8\xa7\xb3\xf5\xf6", 20);
+    currentpfientries[8].description = "XGD3";
+    currentpfientries[8].hosted = true;
     // increment NUM_CURRENTPFIENTRIES if adding more pfi entries here
-
+    
+    
     // 1st Wave Video
     currentvideoentries[0].crc = 0x66D0CB54;
     memcpy(currentvideoentries[0].sha1, "\x12\x00\xd3\x04\x1f\x8d\x19\x64\x59\x9a\x1c\x5a\xee\xd3\x10\x55\xd4\x1a\xda\x87", 20);
@@ -2543,6 +3466,26 @@ void initializeglobals() {
     memcpy(currentvideoentries[8].sha1, "\x93\x12\x96\x43\xa5\xe4\x95\xbb\xdd\xc2\x42\xb1\x69\x70\x72\x68\x55\xb9\xf7\xa1", 20);
     currentvideoentries[8].description = "9th Wave";
     currentvideoentries[8].hosted = false;
+    // 10th Wave Video
+    currentvideoentries[9].crc = 0xC5C1F26A;
+    memcpy(currentvideoentries[9].sha1, "\x75\xcc\x57\x7c\xb3\xd6\xa8\xd4\x5e\x94\x7b\x52\x23\x31\x3c\x23\x90\x68\x91\x09", 20);
+    currentvideoentries[9].description = "10th Wave";
+    currentvideoentries[9].hosted = false;
+    // 11th Wave Video
+    currentvideoentries[10].crc = 0xBA47FD12;
+    memcpy(currentvideoentries[10].sha1, "\xf4\xc1\xd8\x77\xcf\xab\xfd\x8e\x8d\x40\xc1\x62\xb5\x74\x98\xd0\x2a\x71\xf9\x1a", 20);
+    currentvideoentries[10].description = "11th Wave";
+    currentvideoentries[10].hosted = false;
+    // 12th Wave Video
+    currentvideoentries[11].crc = 0x65D35C53;
+    memcpy(currentvideoentries[11].sha1, "\xd0\xa4\x6a\x74\xfa\xac\xc3\x29\x27\x05\xe8\x02\x1a\x81\xc3\x63\xa7\xf5\x18\xec", 20);
+    currentvideoentries[11].description = "12th Wave";
+    currentvideoentries[11].hosted = false;
+    // 13th Wave Video
+    currentvideoentries[12].crc = 0xFA3CD943;
+    memcpy(currentvideoentries[12].sha1, "\x30\x7e\xb9\x8c\x6a\xbf\xb3\x0f\x03\xb9\xc0\x30\x51\x57\xb1\xfb\x6a\xb4\xa6\x04", 20);
+    currentvideoentries[12].description = "13th Wave";
+    currentvideoentries[12].hosted = false;
     // increment NUM_CURRENTVIDEOENTRIES if adding more video entries here
     
     mostrecentpfientries = currentpfientries;
@@ -2557,18 +3500,101 @@ void initializeglobals() {
     xbox1videocrc = 0x231A0A56;
     memcpy(xbox1videosha1, "\xe2\x7f\x0c\x94\xae\xf7\x9c\xed\x70\x4d\x12\x2d\x50\x62\x57\x4a\x23\x76\xc6\x36", 20);
     
-    // media ids for AP25 games with no AP25 xex flag
-    memcpy(currentap25mediaids[0].mediaid, "\xD9\x9E\x18\xE7", 4);  // Fable III
-    memcpy(currentap25mediaids[1].mediaid, "\xBF\x2A\xB0\x04", 4);  // Fable III (spanish)
-    memcpy(currentap25mediaids[2].mediaid, "\xA3\x71\x06\x9D", 4);  // Fable III (french?)
-    memcpy(currentap25mediaids[3].mediaid, "\xC2\x2D\x0F\x2B", 4);  // Fable III (german)
-    memcpy(currentap25mediaids[4].mediaid, "\x63\x7B\xEC\xDF", 4);  // Fable III (japanese)
-    memcpy(currentap25mediaids[5].mediaid, "\xFC\xC2\xEE\x4D", 4);  // Fable III (spanish-latino)
+    // media ids for AP25 discs with no AP25 xex flag ("Assassin's Creed: Brotherhood" and "Need for Speed: Hot Pursuit" have the AP25 xex flag set)
+    // increment NUM_CURRENTAP25MEDIAIDS if adding more media ids here
+    i = 0;
+    memcpy(currentap25mediaids[i++].mediaid, "\xD9\x9E\x18\xE7", 4);  // Fable III (english, Cz, Hu, Ru, Kr, Pl, Sk, Cn)
+    memcpy(currentap25mediaids[i++].mediaid, "\xA3\x71\x06\x9D", 4);  // Fable III (french)
+    memcpy(currentap25mediaids[i++].mediaid, "\xC2\x2D\x0F\x2B", 4);  // Fable III (german)
+    memcpy(currentap25mediaids[i++].mediaid, "\x16\x00\x3B\xAB", 4);  // Fable III (italian)
+    memcpy(currentap25mediaids[i++].mediaid, "\xBF\x2A\xB0\x04", 4);  // Fable III (spanish-spain)
+    memcpy(currentap25mediaids[i++].mediaid, "\xFC\xC2\xEE\x4D", 4);  // Fable III (spanish-latino)
+    memcpy(currentap25mediaids[i++].mediaid, "\x63\x7B\xEC\xDF", 4);  // Fable III (japanese)
+    memcpy(currentap25mediaids[i++].mediaid, "\xD7\x82\xA1\x8E", 4);  // Fable III (unknown)
+    memcpy(currentap25mediaids[i++].mediaid, "\x56\x6C\x10\xD3", 4);  // Halo: Reach (english multi-5)
+    memcpy(currentap25mediaids[i++].mediaid, "\x04\x6D\x17\xEE", 4);  // Halo: Reach (french)
+    memcpy(currentap25mediaids[i++].mediaid, "\x61\xF0\x99\xB6", 4);  // Halo: Reach (german)
+    memcpy(currentap25mediaids[i++].mediaid, "\x56\xD0\x02\xAE", 4);  // Halo: Reach (italian)
+    memcpy(currentap25mediaids[i++].mediaid, "\x48\x96\x57\x8C", 4);  // Halo: Reach (unknown)
+    memcpy(currentap25mediaids[i++].mediaid, "\x0F\x6E\x5B\x5E", 4);  // Halo: Reach (korean)
+    memcpy(currentap25mediaids[i++].mediaid, "\x25\x14\x8C\x14", 4);  // Halo: Reach (spanish-latino)
+    memcpy(currentap25mediaids[i++].mediaid, "\x18\x26\xD8\x81", 4);  // Halo: Reach (portuguese)
+    memcpy(currentap25mediaids[i++].mediaid, "\x42\xD1\x8B\xEE", 4);  // Halo: Reach (spanish-spain)
+    memcpy(currentap25mediaids[i++].mediaid, "\x63\x68\x1F\x4C", 4);  // Halo: Reach (unknown)
+    memcpy(currentap25mediaids[i++].mediaid, "\xFF\xFF\xFE\x68", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\xB8\x37\x91\x50", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\x4B\x3E\xE2\xD3", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\xF2\xBD\xA9\x19", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\xA9\x72\xA1\xE3", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\x78\x7C\x0F\x30", 4);  // ?
+    memcpy(currentap25mediaids[i++].mediaid, "\xFD\x91\x51\x1A", 4);  // ?
     // increment NUM_CURRENTAP25MEDIAIDS if adding more media ids here
     
     mostrecentap25mediaids = currentap25mediaids;
     datfileap25mediaids = NULL;
     num_ap25mediaids = NUM_CURRENTAP25MEDIAIDS;
+    
+    // title ids for AP25 discs with no AP25 xex flag
+    // increment NUM_CURRENTAP25TITLEIDS if adding more tile ids here
+    i = 0;
+    memcpy(currentap25titleids[i++].mediaid, "\x41\x56\x08\x17", 4);  // Call of Duty: Modern Warfare 2
+    memcpy(currentap25titleids[i++].mediaid, "\x41\x56\x08\x55", 4);  // Call of Duty: Black Ops
+    // increment NUM_CURRENTAP25TITLEIDS if adding more tile ids here
+    
+    mostrecentap25titleids = currentap25titleids;
+    datfileap25titleids = NULL;
+    num_ap25titleids = NUM_CURRENTAP25TITLEIDS;
+    
+    // AP25 disc profile ids
+    // increment NUM_CURRENTAP25DISCPROFILEIDS if adding more disc profile ids here
+    i = 0;
+    memcpy(currentap25discprofileids[i++].mediaid, "\x25\xE7\x3C\x43", 4);  // Halo: Reach (XGD3 Beta)
+    memcpy(currentap25discprofileids[i++].mediaid, "\xF8\x7A\x80\x4E", 4);  // Driver: SF, Space Marine, Rise of Nightmares, GOW3, Rage, ...
+    memcpy(currentap25discprofileids[i++].mediaid, "\x98\xDB\x99\x94", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\xB5\x42\x53\xFF", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\x46\x58\x2E\x05", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\x83\x17\xB0\x19", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\x4A\xB9\xE7\x7A", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\xDA\x8C\x0E\x45", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\xE0\x44\x5B\x7C", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\xE3\x07\x04\x4C", 4);  // ?
+    memcpy(currentap25discprofileids[i++].mediaid, "\x82\xC0\x17\x9E", 4);  // ?
+    // increment NUM_CURRENTAP25DISCPROFILEIDS if adding more disc profile ids here
+    
+    mostrecentap25discprofileids = currentap25discprofileids;
+    datfileap25discprofileids = NULL;
+    num_ap25discprofileids = NUM_CURRENTAP25DISCPROFILEIDS;
+    
+    /*
+    // DAE versions -- the description will be displayed when checking an AP25 replay sector directly after this text:
+    // "NOTE: This AP25 replay data is ONLY suitable for dashboard version"
+    // (flags & 0x01) = ap25 data created with this dae version is obsolete
+    // v0 -- for when there is no version number (or an actual v0 dae.bin if that comes into existence)
+    currentdaeversions[0].flags = 0x01; // obsolete
+    currentdaeversions[0].version = 0;
+    currentdaeversions[0].description = "s UNKNOWN! No version info is provided in this AP25 replay sector; it's probably old or fake!";
+    // v4 -- 12413 -- full of unknown media ids
+    currentdaeversions[1].flags = 0x01; // obsolete
+    currentdaeversions[1].version = 4;
+    currentdaeversions[1].description = " 12413";
+    // v5 -- 12416-12611 -- but ap25.bins created with v5 are also good for 12625
+    currentdaeversions[2].flags = 0x01; // obsolete
+    currentdaeversions[2].version = 5;
+    currentdaeversions[2].description = "s 12416-12625";
+    // v9 -- 12625 -- but ap25.bins created with this version are also good for 12416-12611
+    currentdaeversions[3].flags = 0x01; // obsolete
+    currentdaeversions[3].version = 9;
+    currentdaeversions[3].description = "s 12416-12625";
+    // v12 -- 13140-13604
+    currentdaeversions[4].flags = 0x00;
+    currentdaeversions[4].version = 12;
+    currentdaeversions[4].description = "s 13140-13604 (and ONLY if your dae.bin hasn't been silently updated)";
+    // increment NUM_CURRENTDAEVERSIONS if adding more dae versions and descriptions here
+    
+    mostrecentdaeversions = currentdaeversions;
+    datfiledaeversions = NULL;
+    num_daeversions = NUM_CURRENTDAEVERSIONS;
+    */
     
   return;
 }
@@ -2617,6 +3643,10 @@ int main(int argc, char *argv[]) {
         //printf("%s stealth passes and verification fails%s", sp21, newline);
         printf("%s --showfiles %s display ISO filesystem%s", sp6, sp2, newline);
         printf("%s-p,%s--padding %s check/fix Video zero padding (doesn't affect stealth)%s", sp2, sp2, sp4, newline);
+        printf("%s --pL0 %s if using -p or --padding, this option is also needed to%s", sp6, sp8, newline);
+        printf("%s enable fixing XGD2 L0 zero padding (don't add this option%s", sp21, newline);
+        printf("%s until you've read the message that comes up when XGD2 L0%s", sp21, newline);
+        printf("%s padding is not blank)%s", sp21, newline);
         printf("%s-s,%s--stripcolors%s strips colors", sp2, sp2, sp1);
         #ifndef WIN32 // windows SetConsoleTextAttribute will not output escape characters
             printf(" (useful if you're directing output to a%s%s text file)", newline, sp21);
@@ -2672,34 +3702,31 @@ int main(int argc, char *argv[]) {
         printf("Rebuilding Method (choose the method for rebuilding an ISO if it's missing%s", newline);
         printf("space for a video partition):%s%s", newline, newline);
         color(normal);
-        printf("%s [default method] %s requires 7 - 7.5 GB free space on the partition%s", sp6, sp4, newline);
-        printf("%s%s your ISO is located%s", sp21, sp7, newline);
-        printf("%s-l,%s --rebuildlowspace %s only requires 253 MB free space but will corrupt%s", sp2, sp1, sp3, newline);
-        printf("%s%s your ISO if it fails or is aborted during the%s", sp21, sp7, newline);
-        printf("%s%s rebuilding process%s", sp21, sp7, newline);
-        printf("%s-b,%s --norebuild %s don't rebuild%s", sp2, sp1, sp9, newline);
-        printf("%s-k,%s--keeporiginaliso %s don't delete the original ISO after rebuilding%s", sp2, sp2, sp3, newline);
-        printf("%s%s (applies to the default method only)%s%s", sp21, sp7, newline, newline);
+        printf("%s [default method] %s requires 7 - 7.5 GB free space on the partition%s", sp6, sp2, newline);
+        printf("%s%s your ISO is located%s", sp21, sp5, newline);
+        printf("%s-l,%s --rebuildlowspace %s only requires 253 MB free space but will corrupt%s", sp2, sp1, sp1, newline);
+        printf("%s%s your ISO if it fails or is aborted during the%s", sp21, sp5, newline);
+        printf("%s%s rebuilding process%s", sp21, sp5, newline);
+        printf("%s-b,%s --norebuild %s don't rebuild%s", sp2, sp1, sp7, newline);
+        printf("%s-k,%s--keeporiginaliso %s don't delete the original ISO after rebuilding%s", sp2, sp2, sp1, newline);
+        printf("%s%s (applies to the default method only)%s%s", sp21, sp5, newline, newline);
         
         color(white);
         printf("Manually patch or extract files:%s%s", newline, newline);
         color(normal);
-        printf("%s --p-video %sfile%s %s patch video from %sfile%s%s", sp6, lessthan, greaterthan, sp9, lessthan, greaterthan, newline);
-        printf("%s --p-pfi %sfile%s %s patch PFI from %sfile%s%s", sp6, lessthan, greaterthan, sp11, lessthan, greaterthan, newline);
-        printf("%s --p-dmi %sfile%s %s patch DMI from %sfile%s%s", sp6, lessthan, greaterthan, sp11, lessthan, greaterthan, newline);
-        printf("%s --p-ss %sfile%s %s patch SS from %sfile%s%s", sp6, lessthan, greaterthan, sp12, lessthan, greaterthan, newline);
-        printf("%s --patchitanyway %s patch files even if stealth passes (default%s", sp6, sp10, newline);
-        printf("%s%s behavior is to patch only if stealth fails%s", sp21, sp12, newline);
-        printf("%s%s and isn't AutoFixed, or stealth is uncertain%s", sp21, sp12, newline);
-        printf("%s%s and isn't verified/AutoFixed)%s", sp21, sp12, newline);
-        printf("%s --patchgarbage %s patch files even if they're invalid%s", sp6, sp11, newline);
-        printf("%s --e-video %sfile%s %s extract video to %sfile%s%s", sp6, lessthan, greaterthan, sp9, lessthan, greaterthan, newline);
-        printf("%s --e-videopartition %sfile%s%s extract entire video partition (253 MB) to%s", sp6, lessthan, greaterthan, sp1, newline);
-        printf("%s%s %sfile%s%s", sp21, sp12, lessthan, greaterthan, newline);
-        printf("%s --e-pfi %sfile%s %s extract PFI to %sfile%s%s", sp6, lessthan, greaterthan, sp11, lessthan, greaterthan, newline);
-        printf("%s --e-dmi %sfile%s %s extract DMI to %sfile%s%s", sp6, lessthan, greaterthan, sp11, lessthan, greaterthan, newline);
-        printf("%s --e-ss %sfile%s %s extract SS to %sfile%s%s", sp6, lessthan, greaterthan, sp12, lessthan, greaterthan, newline);
-        printf("%s --clobber %s %s overwrite extracted files without prompting%s%s", sp6, sp10, sp5, newline, newline);
+        printf("%s --p-video %sfile%s%s patch video from %sfile%s%s", sp6, lessthan, greaterthan, sp1, lessthan, greaterthan, newline);
+        printf("%s --p-pfi %sfile%s %s patch PFI from %sfile%s%s", sp6, lessthan, greaterthan, sp2, lessthan, greaterthan, newline);
+        printf("%s --p-dmi %sfile%s %s patch DMI from %sfile%s%s", sp6, lessthan, greaterthan, sp2, lessthan, greaterthan, newline);
+        printf("%s --p-ss %sfile%s %s patch SS from %sfile%s%s", sp6, lessthan, greaterthan, sp3, lessthan, greaterthan, newline);
+        printf("%s --patchitanyway %s patch files even if stealth passes (default behavior%s", sp6, sp1, newline);
+        printf("%s%s is to patch only if stealth fails and isn't AutoFixed,%s", sp21, sp3, newline);
+        printf("%s%s or stealth is uncertain and isn't verified/AutoFixed)%s", sp21, sp3, newline);
+        printf("%s --patchgarbage %s patch files even if they're invalid%s", sp6, sp2, newline);
+        printf("%s --e-video %sfile%s%s extract video to %sfile%s%s", sp6, lessthan, greaterthan, sp1, lessthan, greaterthan, newline);
+        printf("%s --e-pfi %sfile%s %s extract PFI to %sfile%s%s", sp6, lessthan, greaterthan, sp2, lessthan, greaterthan, newline);
+        printf("%s --e-dmi %sfile%s %s extract DMI to %sfile%s%s", sp6, lessthan, greaterthan, sp2, lessthan, greaterthan, newline);
+        printf("%s --e-ss %sfile%s %s extract SS to %sfile%s%s", sp6, lessthan, greaterthan, sp3, lessthan, greaterthan, newline);
+        printf("%s --clobber %s %s overwrite extracted files without prompting%s%s", sp6, sp1, sp5, newline, newline);
         
         color(white);
         printf("Misc:%s%s", newline, newline);
@@ -2733,10 +3760,6 @@ int main(int argc, char *argv[]) {
         printf("%s%s use multiple regions if you have multiple consoles.%s", sp21, sp5, newline);
         printf("%s%s Ex codes: 000000FF (NTSC/U), 00FE0000 (PAL Europe),%s", sp21, sp5, newline);
         printf("%s%s 00FE01FF (PAL Europe, NTSC/J Japan and NTSC/U)%s", sp21, sp5, newline);
-        //printf("%s --splitvid %s add SplitVid if it doesn't exist or isn't valid%s", sp6, sp8, newline);
-        //printf("%s --removesplitvid %s remove SplitVid if it exists%s", sp6, sp2, newline);
-/*      printf("%s --layerbreak %sLB%s %s calculate PFI and SS offsets using a layerbreak%s", sp6, lessthan, greaterthan, sp1, newline);
-        printf("%s%s other than the default 1913760 (experimental)%s", sp21, sp5, newline); */
         printf("%s --truncate %ssize%s %s truncate or extend input file to %ssize%s bytes%s", sp6, lessthan, greaterthan, sp1, lessthan, greaterthan, newline);
         printf("%s%s be very careful with this!%s", sp21, sp5, newline);
         printf("%s --retries %snumber%s%s change the number of retries before a read/write%s", sp6, lessthan, greaterthan, sp1, newline);
@@ -2746,8 +3769,8 @@ int main(int argc, char *argv[]) {
         printf("%s --dvdtimeout %ssecs%s change the timeout for DVD Drive I/O requests to%s", sp6, lessthan, greaterthan, newline);
         printf("%s%s %ssecs%s seconds (default=20)%s", sp21, sp5, lessthan, greaterthan, newline);
         printf("%s --devkey %s use the devkit AES key when decrypting an Xex%s", sp6, sp10, newline);
-        printf("%s --help %s display this message (or just use %s%s%s with no%s", sp6, sp12, quotation, argv[0], quotation, newline);
-        printf("%s%s arguments)%s%s", sp21, sp5, newline, newline);
+        printf("%s --help %s display this message (or just use %s%s%s%s", sp6, sp12, quotation, argv[0], quotation, newline);
+        printf("%s%s with no arguments)%s%s", sp21, sp5, newline, newline);
         
       return 1;
     }
@@ -2777,14 +3800,25 @@ int main(int argc, char *argv[]) {
         sp20 = "<span class=sp>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;</span>";
         sp21 = "<span class=sp>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;</span>";
         sp28 = "<span class=sp>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;</span>";
-        green = "</span><span class=green>"; yellow = "</span><span class=yellow>"; red = "</span><span class=red>";
-        cyan = "</span><span class=cyan>"; blue = "</span><span class=blue>"; darkblue = "</span><span class=darkblue>";
-        white = "</span><span class=white>"; arrow = "</span><span class=arrow>"; box = "</span><span class=box>";
-        normal = "</span><span class=normal>"; hexoffsetcolor = "</span><span class=hexoffset>"; darkgray = "</span><span class=darkgray>";
-        wtfhexcolor = "</span><span class=wtfhex>"; wtfcharcolor = "</span><span class=wtfchar>";
-        brown = "</span><span class=brown>";
-        reset = "</span><span class=normal>";
-        filename = "</span><span class=filename>";
+        green =          "</span><span class=green>";
+        yellow =         "</span><span class=yellow>";
+        red =            "</span><span class=red>";
+        cyan =           "</span><span class=cyan>";
+        blue =           "</span><span class=blue>";
+        darkblue =       "</span><span class=darkblue>";
+        white =          "</span><span class=white>";
+        arrow =          "</span><span class=arrow>";
+        box =            "</span><span class=box>";
+        normal =         "</span><span class=normal>";
+        hexoffsetcolor = "</span><span class=hexoffset>";
+        darkgray =       "</span><span class=darkgray>";
+        wtfhexcolor =    "</span><span class=wtfhex>";
+        wtfcharcolor =   "</span><span class=wtfchar>";
+        brown =          "</span><span class=brown>";
+        reset =          "</span><span class=normal>";
+        filename =       "</span><span class=filename>";
+        blackonyellow =  "</span><span class=blackonyellow>";
+        blackonred =     "</span><span class=blackonred>";
         newline = "<br>\n";
     }
     
@@ -2935,12 +3969,15 @@ int main(int argc, char *argv[]) {
                 // check abgx360.ini
                 checkini();
                 if (debug) {
-                    printf("webinidir: %s%s", webinidir, newline);
-                    printf("webunverifiedinidir: %s%s", webunverifiedinidir, newline);
-                    printf("webcsv: %s%s", webcsv, newline);
-                    printf("webdat: %s%s", webdat, newline);
-                    printf("webstealthdir: %s%s", webstealthdir, newline);
-                    printf("autouploadwebaddress: %s%s%s", autouploadwebaddress, newline, newline);
+                    printf("webinidir: %s%s %s%s",    sp10, sp4, webinidir, newline);
+                    printf("webunverifiedinidir: %s %s%s",  sp4, webunverifiedinidir, newline);
+                    printf("webcsv: %s%s %s%s",       sp10, sp7, webcsv, newline);
+                    printf("webdat: %s%s %s%s",       sp10, sp7, webdat, newline);
+                    printf("webtopology: %s %s%s",         sp12, webtopology, newline);
+                    printf("webstealthdir: %s %s%s",       sp10, webstealthdir, newline);
+                    printf("autouploadwebaddress: %s %s%s", sp3, autouploadwebaddress, newline);
+                    //printf("ap25autouploadwebaddress: %s%s%s",   ap25autouploadwebaddress, newline, newline);
+                    //printf("webdae: %s%s %s%s",       sp10, sp7, webdae, newline);
                 }
             }
         }
@@ -2953,12 +3990,14 @@ int main(int argc, char *argv[]) {
             // download an updated GameNameLookup.csv and abgx360.dat if server file is newer than the local one
             memset(curlerrorbuffer, 0, CURL_ERROR_SIZE+1);
             memset(buffer, 0, 2048);
-            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing all supported encodings is sent.
+            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing
+                                                           // all supported encodings is sent.
             curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
             curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
             curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended and we don't want to retrieve the error page as a file)
+            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended or something and we don't
+                                                           // want to retrieve the error page as a file)
             curl_easy_setopt(curl, CURLOPT_URL, webcsv);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
             curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
@@ -2966,7 +4005,8 @@ int main(int argc, char *argv[]) {
             curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
             if (extraverbose) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
             if (!homeless) {
-                strcat(buffer, homedir); strcat(buffer, abgxdir);
+                strcat(buffer, homedir);
+                strcat(buffer, abgxdir);
             }
             strcat(buffer, "GameNameLookup.csv");
             struct MyCurlFile curlwebcsv = {buffer, NULL};
@@ -3028,23 +4068,25 @@ int main(int argc, char *argv[]) {
         memset(buffer, 0, 2048);
         if (!csvupdate) {
             printf("Checking for updates to abgx360.dat...%s", newline);
-            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing all supported encodings is sent.
+            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing
+                                                           // all supported encodings is sent.
             curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
             curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
             curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended and we don't want to retrieve the error page as a file)
+            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended or something and we don't
+                                                           // want to retrieve the error page as a file)
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
             curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
             curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
             if (extraverbose) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_curl_write);
         }
-        //else if (extraverbose) fprintf(stderr, "\n");
         curl_easy_setopt(curl, CURLOPT_URL, webdat);
         curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, (char*) "Downloading abgx360.dat");
         if (!homeless) {
-            strcat(buffer, homedir); strcat(buffer, abgxdir);
+            strcat(buffer, homedir);
+            strcat(buffer, abgxdir);
         }
         strcat(buffer, "abgx360.dat");
         struct MyCurlFile curlwebdat = {buffer, NULL};
@@ -3132,46 +4174,101 @@ int main(int argc, char *argv[]) {
             writefile = false;
             fp = NULL;
             
-            if (opendeviceandgetname(argv[dvdarg])) return 1;
+            if (opendeviceandgetname(argv[dvdarg], false, false)) return 1;
             
             // get size of media in bytes
-            fpfilesize = getdisccapacity(true);
+            fpfilesize = getdisccapacity(true, true);
             if (fpfilesize == -1LL) return 1;
             if (debug) printf("fpfilesize: %"LL"d%s", fpfilesize, newline);
             
-            // check that they've burned with the correct layerbreak (1913760)
-            getL0capacity();
-            
-            // check to see if they burned just a game partition (unbootable) by looking for magic bytes at sector 32
-            if (fpfilesize < 67584) {
-                color(red); printf("ERROR: Media size (%"LL"d bytes) is too small to be an Xbox 360 game!%s", fpfilesize, newline); color(normal);
+            // make sure we will be able to read sector 32 in the game partition
+            // (any game [xgd2/xgd3 with or without video] should be at least this big)
+            if (fpfilesize < 0xFDA0800LL /* 0xFD90000 (largest current video offset [xgd2]) + 33*2048 (to make sure we can read sector 32) */) {
+                color(red);
+                printf("ERROR: Media size (%"LL"d bytes) is too small to be an Xbox 360 game!%s", fpfilesize, newline);
+                color(normal);
               return 1;
             }
+            
+            // check to see if they burned just a game partition (unbootable) by looking for magic bytes at sector 32
             video = 0LL;
+            memset(ubuffer, 0, 2048);
             initcheckread();
             if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 65536, isofilename, "Reading Sector 32") != 0) return 1;
             donecheckread(isofilename);
             if (debug) { printf("sector 32:%s", newline); hexdump(ubuffer, 0, 2048); }
             
             if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
-                // proper backups should have the game partition starting at 0xFD90000
+                // proper backups should have the game partition starting at 0xFD90000 (XGD2) or 0x2080000 (XGD3)
                 video = 0xFD90000LL;
-                if (fpfilesize < (long long) video + 67584LL) {
-                    color(red); printf("ERROR: Media size (%"LL"d bytes) is too small to be an Xbox 360 game!%s", fpfilesize, newline); color(normal);
-                  return 1;
-                }
                 // read sector 32 + video
                 memset(ubuffer, 0, 2048);
                 initcheckread();
                 if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video+65536LL, isofilename, "Reading Sector 32") != 0) return 1;
                 donecheckread(isofilename);
-                if (debug) { printf("sector 32 + video:%s", newline); hexdump(ubuffer, 0, 2048); }
+                if (debug) {
+                    printf("sector 32 + video (%"LL"d):%s", video, newline);
+                    hexdump(ubuffer, 0, 2048);
+                }
                 if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
-                    // this string should be here for all xbox 360 games
-                    color(red); printf("ERROR: Media isn't recognized as an Xbox 360 game!%s", newline); color(normal);
-                  return 1;
+                    video = 0x2080000LL;
+                    // read sector 32 + video
+                    memset(ubuffer, 0, 2048);
+                    initcheckread();
+                    if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video+65536LL, isofilename, "Reading Sector 32") != 0) return 1;
+                    donecheckread(isofilename);
+                    if (debug) {
+                        printf("sector 32 + video (%"LL"d):%s", video, newline);
+                        hexdump(ubuffer, 0, 2048);
+                    }
+                    if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
+                        // should have found this string by now
+                        color(red);
+                        printf("ERROR: Media isn't recognized as an Xbox 360 game!%s", newline);
+                        color(normal);
+                      return 1;
+                    }
+                    else xgd3 = true;
                 }
             }
+            
+            // get layerbreak from the alternate PFI in the SS
+            // if the SS doesn't exist/isn't valid or if altpfi_endpsnL0 is less than 0x30000 or if altpfi_startpsnL0
+            // doesn't correspond to the video offset, assume the layerbreak based solely on the video offset
+            layerbreak = -1;
+            if (video != 0) {
+                memset(ubuffer, 0, 2048);
+                initcheckread();
+                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x8800 : 0x800), isofilename, "Checking Alternate PFI") != 0) return 1;
+                donecheckread(isofilename);
+                if (lookslike360ss(ubuffer)) {
+                    // get End PSN of L0 Data Area
+                    unsigned char altpfi_endpsnL0hex[4] = {ubuffer[15], ubuffer[14], ubuffer[13], 0x00};
+                    unsigned long altpfi_endpsnL0 = getuint(altpfi_endpsnL0hex);
+                    // get Start PSN of L0 Data Area to check that it corresponds to the video offset
+                    unsigned char altpfi_startpsnL0hex[4] = {ubuffer[7], ubuffer[6], ubuffer[5], 0x00};
+                    unsigned long altpfi_startpsnL0 = getuint(altpfi_startpsnL0hex);
+                    if (debug) printf("about to take the layerbreak from the SS if these values are acceptable:%saltpfi_endpsnL0 = 0x%lX, altpfi_startpsnL0 = 0x%lX%s", newline, altpfi_endpsnL0, altpfi_startpsnL0, newline);
+                    if (altpfi_endpsnL0 >= 0x30000 && altpfi_startpsnL0 >= 0x30000 && ((altpfi_startpsnL0 - 0x30000) * 2048 == video)) {
+                        layerbreak = (long) altpfi_endpsnL0 - 0x30000 + 1;
+                        if (debug) printf("layerbreak (%ld) taken from SS altpfi_endpsnL0 (0x%lX)%s", layerbreak, altpfi_endpsnL0, newline);
+                    }
+                }
+                else if (debug) {
+                    printf("the sector at video - 0x%lX does not look like Xbox 360 SS:%s", (xgd3 ? 0x8800 : 0x800), newline);
+                    hexdump(ubuffer, 0, 2048);
+                }
+                if (layerbreak == -1) {
+                    if      (video == 0xFD90000LL) layerbreak = 1913760;  // XGD2
+                    else                           layerbreak = 2133520;  // XGD3 or unknown (we shouldn't get here though if video isn't either 0xFD90000 or 0x2080000)
+                    if (debug) printf("layerbreak (%ld) assumed based on video offset (0x%"LL"X)%s", layerbreak, video, newline);
+                }
+                // check that they've burned with the correct layerbreak
+                getL0capacity();
+            }
+            
+            // set speed if requested
+            if (speedarg) setdvdspeed(speed, false);
             
             if (manualextract) {
                 if (video == 0) {
@@ -3184,16 +4281,6 @@ int main(int argc, char *argv[]) {
             
             checkgame();
             
-            if (xex_foundmediaid && !game_has_ap25) {
-                // check media id against list of ap25 games with no ap25 xex flag
-                for (m=0;m<num_ap25mediaids;m++) {
-                    if (memcmp(xex_mediaid+12, mostrecentap25mediaids[m].mediaid, 4) == 0) {
-                        game_has_ap25 = true;
-                        break;
-                    }
-                }
-            }
-            
             if (stealthcheck) {
                 printf("%s", newline);
                 if (video == 0) {
@@ -3202,33 +4289,49 @@ int main(int argc, char *argv[]) {
                     printf("Stealth Failed!: Image is missing Video, PFI, DMI and SS%s", newline);
                     printf("%s %s (It's just a game partition and won't boot on ANY firmware!)%s", sp10, sp5, newline);
                     color(normal);
+                    resetdrivespeedifneeded();
                   return 1;
                 }
                 
                 if (game_has_ap25) {
-                    // check ap25 replay data
+                    // check topology data
                     initcheckread();
-                    if (checkreadandprinterrors(ap25, 1, 2048, fp, 0, 0xFD8E000, isofilename, "Stealth check") != 0) return 1;
+                    if (checkreadandprinterrors(topology, 1, TOPOLOGY_SIZE, fp, 0, video - (xgd3 ? 0x10000 : 0x8000), isofilename,
+                                                "Reading the topology data") != 0) {
+                        resetdrivespeedifneeded();
+                      return 1;
+                    }
                     donecheckread(isofilename);
-                    checkap25();
+                    checktopology();
                     if (verbose) printf("%s", newline);
                 }
                 
                 // check SS
                 initcheckread();
-                if (checkreadandprinterrors(ss, 1, 2048, fp, 0, 0xFD8F800, isofilename, "Stealth check") != 0) return 1;
+                if (checkreadandprinterrors(ss, 1, 2048, fp, 0, video - (xgd3 ? 0x8800 : 0x800), isofilename, "Reading the SS") != 0) {
+                    resetdrivespeedifneeded();
+                  return 1;
+                }
                 donecheckread(isofilename);
                 checkss();
+                if (ssv2) iso_has_ssv2 = true;
+                else iso_has_ssv2 = false;
                 
                 // check DMI
                 initcheckread();
-                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0xFD8F000, isofilename, "Stealth check") != 0) return 1;
+                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9000 : 0x1000), isofilename, "Reading the DMI") != 0) {
+                    resetdrivespeedifneeded();
+                  return 1;
+                }
                 donecheckread(isofilename);
                 checkdmi(ubuffer);
                 
                 // check PFI
                 initcheckread();
-                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0xFD8E800, isofilename, "Stealth check") != 0) return 1;
+                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9800 : 0x1800), isofilename, "Reading the PFI") != 0) {
+                    resetdrivespeedifneeded();
+                  return 1;
+                }
                 donecheckread(isofilename);
                 checkpfi(ubuffer);
                 
@@ -3251,33 +4354,37 @@ int main(int argc, char *argv[]) {
                             if (drtfucked) {
                                 color(yellow);
                                 printf("Stealth and game data were verified but angle deviation cannot be verified%s", newline);
+                                if (game_has_ap25 && !topology_was_verified) {
+                                    printf("Note: Topology data wasn't verified either%s", newline);
+                                }
                             }
                             else {
                                 color(green);
                                 printf("Verification was successful, Stealth passed!%s", newline);
+                                if (game_has_ap25 && !topology_was_verified) {
+                                    color(yellow);
+                                    printf("Note: Topology data was not verified%s", newline);
+                                }
                             }
                             color(normal);
-                            // this is only here to make the splitvid check possible
-                            video_stealthuncertain = false;
-                            pfi_stealthuncertain = false;
                         }
                         else if (returnvalue == 2) {
                             color(yellow);
                             printf("Stealth was verified but game data wasn't%s", newline);
                             if (drtfucked) printf("Angle deviation cannot be verified%s", newline);
+                            if (game_has_ap25 && !topology_was_verified) {
+                                printf("Note: Topology data wasn't verified either%s", newline);
+                            }
                             color(normal);
-                            // this is only here to make the splitvid check possible
-                            video_stealthuncertain = false;
-                            pfi_stealthuncertain = false;
                         }
                         else {
                             verifyfailed = true;
                             color(yellow);
                             if (returnvalue == 3) printf("Game data was verified but stealth wasn't%s", newline);
-                            if (drtfucked) printf("Angle deviation cannot be verified%s", newline);
                             printf("Verification failed%s", newline);
                             color(normal);
                         }
+                        
                     }
                 }
                 else {
@@ -3290,30 +4397,41 @@ int main(int argc, char *argv[]) {
                         if (returnvalue == 0) {
                             color(green);
                             printf("Verification was successful!%s", newline);
+                            if (game_has_ap25 && !topology_was_verified) {
+                                color(yellow);
+                                printf("Note: Topology data was not verified%s", newline);
+                            }
                             color(normal);
                         }
                         else if (returnvalue == 2) {
                             color(yellow);
                             printf("Stealth was verified but game data wasn't%s", newline);
+                            if (game_has_ap25 && !topology_was_verified) {
+                                printf("Note: Topology data wasn't verified either%s", newline);
+                            }
                             color(normal);
                         }
                         else {
                             verifyfailed = true;
                             color(yellow);
                             if (returnvalue == 3) printf("Game data was verified but stealth wasn't%s", newline);
-                            else printf("Verification failed%s", newline);
+                            printf("Verification failed%s", newline);
                             color(normal);
                             if (autoupload && !stayoffline && !fixedss && autouploaduserarg && autouploadpassarg) {
-                                doautoupload(argv);
-                                // should check to see if autoupload resulted in verification
+                                doautoupload(argv, false);
                             }
                         }
+                        if ( (returnvalue == 0 || returnvalue == 2) &&
+                              autoupload && !stayoffline && !fixedss && autouploaduserarg && autouploadpassarg && iso_has_ssv2) {
+                            // autoupload an ssv2 if stealth was verified but the existing ss in the db is ssv1
+                            printf("%sChecking to see if the existing SS file in the db is SSv1...%s", newline, newline);
+                            if (valid_ssv2_exists_in_db()) {
+                                if (verbose) printf("%s", newline);
+                                printf("A valid SSv2 already exists in the db, no need to upload anything%s", newline);
+                            }
+                            else if (!stayoffline) doautoupload(argv, true);  // true = upload_ss_only
+                        }
                     }
-                }
-                if (addsplitvid) {
-                    // this will only check for valid splitvid since writing is disabled (dvd input)
-                    printf("%s", newline);
-                    doaddsplitvid();
                 }
                 if (checkcorruption && game_crc32 == 0 && !checkgamecrcnever) {
                     printf("%sChecking for AnyDVD style game data corruption while running CRC check...%s", newline, newline);
@@ -3328,12 +4446,12 @@ int main(int argc, char *argv[]) {
                     }
                     else {
                         checkgamecrcnever = true;
-                        gamecrcfailed = true;
+                        if (!usercancelledgamecrc) gamecrcfailed = true;
                     }
                 }
             }
-            
-            if (hDevice != INVALID_HANDLE_VALUE) CloseHandle(hDevice);
+            resetdrivespeedifneeded();
+            closedeviceifopen();
           return 0;
         }
     #endif  // ifdef WIN32
@@ -3448,11 +4566,11 @@ int main(int argc, char *argv[]) {
                 // exclude arguments that start with a hyphen unless they come after the special argument --
                 if (specialarg == 0 || i <= specialarg) continue;
             }
-            if (i==truncatearg || i==userregionarg || i==folderarg || i==matcharg || i==readretryarg || i==layerbreakarg ||
+            if (i==truncatearg || i==userregionarg || i==folderarg || i==matcharg || i==readretryarg ||
                 i==fixangledevarg || i==patchvideoarg || i==patchpfiarg || i==patchdmiarg || i==patchssarg ||
-                i==autouploaduserarg || i==autouploadpassarg || i==extractvideoarg || i==extractvideopartitionarg ||
+                i==autouploaduserarg || i==autouploadpassarg || i==extractvideoarg ||
                 i==extractpfiarg || i==extractdmiarg || i==extractssarg || i==connectiontimeoutarg || i==dvdarg ||
-                i==dvdtimeoutarg || i==userlangarg /* || i==riparg || i==ripdestarg */) continue;
+                i==dvdtimeoutarg || i==userlangarg || i==origarg || i==speedarg /* || i==riparg || i==ripdestarg */) continue;
             if ( stat(argv[i], &buf) == -1 ) {
                 printf("ERROR: stat failed for %s (%s)%s", argv[i], strerror(errno), newline);
               continue;
@@ -3495,7 +4613,7 @@ int main(int argc, char *argv[]) {
         }
         strcpy(isofilename, filenames[0]);
         fp = fopen(isofilename, "rb");
-        if (fp==NULL) {
+        if (fp == NULL) {
             color(red);
             printf("ERROR: Failed to open %s (%s)%s", isofilename, strerror(errno), newline);
             color(normal);
@@ -3511,7 +4629,13 @@ int main(int argc, char *argv[]) {
     for (fileloop=0;fileloop<filecount;fileloop++) {
         if (filecount > 1) {
             if (fileloop) {
+                // do finishing up stuff for last file
+                #ifndef WIN32
+                    if (blockdevice[fileloop-1]) resetdrivespeedifneeded();
+                    if (fd != -1) close(fd);
+                #endif
                 if (fp != NULL) fclose(fp);
+                // reset global variables that need to be reset after every file loop and parse command line again
                 resetvars();
                 parsecmdline(argc, argv);
                 printf("%s", newline);
@@ -3548,15 +4672,12 @@ int main(int argc, char *argv[]) {
         #else
             if (blockdevice[fileloop]) {
                 if (opendevice(isofilename, "Getting media size") != 0) continue;
-                fpfilesize = getdisccapacity(true);
+                fpfilesize = getdisccapacity(true, true);
                 if (fpfilesize == -1) {
                     close(fd);
                   continue;
                 }
                 if (debug) printf("fpfilesize: %"LL"d%s", fpfilesize, newline);
-                if (skiplayerboundaryinfo) L0capacity = 0;
-                else getL0capacity();
-                close(fd);
             }
             else {
                 fpfilesize = getfilesize(fp);
@@ -3599,7 +4720,7 @@ int main(int argc, char *argv[]) {
         if (strlen(isofilename) > 4 && strncasecmp(isofilename+strlen(isofilename)-4, ".spa", 4) == 0) {
             initcheckread();
             memset(ubuffer, 0, 2048);
-            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "checking .spa file") != 0) continue;
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "Checking .spa file") != 0) continue;
             donecheckread(isofilename);
             // look for spa magic bytes
             if (memcmp(ubuffer, "XDBF", 4) != 0) {
@@ -3644,7 +4765,7 @@ int main(int argc, char *argv[]) {
             }
             // read the entire .spa file into the buffer
             initcheckread();
-            if (checkreadandprinterrors(resourcebuffer, 1, fpfilesize, fp, 0, 0, isofilename, "checking .spa file") != 0) {
+            if (checkreadandprinterrors(resourcebuffer, 1, fpfilesize, fp, 0, 0, isofilename, "Checking .spa file") != 0) {
                 free(resourcebuffer);
               continue;
             }
@@ -3655,7 +4776,7 @@ int main(int argc, char *argv[]) {
             }
             // check it
             if (verbose) printf("Checking SPA%s", newline);
-            parsetitleidresource(resourcebuffer, fpfilesize, NULL);
+            parsetitleidresource(resourcebuffer, fpfilesize);
             free(resourcebuffer);
           continue;
         }
@@ -3664,7 +4785,7 @@ int main(int argc, char *argv[]) {
         if (strlen(isofilename) > 4 && strncasecmp(isofilename+strlen(isofilename)-4, ".xex", 4) == 0) {
             initcheckread();
             memset(ubuffer, 0, 2048);
-            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "checking .xex file") != 0) continue;
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "Checking .xex file") != 0) continue;
             donecheckread(isofilename);
             // look for XEX magic bytes
             if (memcmp(ubuffer, "XEX2", 4) != 0) {
@@ -3709,7 +4830,7 @@ int main(int argc, char *argv[]) {
             }
             // read the entire .xex file into the buffer
             initcheckread();
-            if (checkreadandprinterrors(defaultxexbuffer, 1, fpfilesize, fp, 0, 0, isofilename, "checking .xex file") != 0) {
+            if (checkreadandprinterrors(defaultxexbuffer, 1, fpfilesize, fp, 0, 0, isofilename, "Checking .xex file") != 0) {
                 free(defaultxexbuffer);
               continue;
             }
@@ -3733,7 +4854,7 @@ int main(int argc, char *argv[]) {
             // auto detect if this is dmi, pfi or ss
             initcheckread();
             memset(ubuffer, 0, 2048);
-            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "checking 2KB file") != 0) continue;
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0, isofilename, "Checking 2KB file") != 0) continue;
             donecheckread(isofilename);
             if (getzeros(ubuffer, 0, 2047) == 2048) {
                 color(yellow); printf("ERROR: %s is blank!%s", isofilename, newline); color(normal);
@@ -3788,7 +4909,7 @@ int main(int argc, char *argv[]) {
         }
         
         if (fpfilesize <= 265873408LL) {
-            // this is the maximum size of a video partition with padding data (pre-ap25 size so that older full video partition rips will be detected)
+            // this is the maximum size of a video partition with padding data (pre-ap25 size so that older full XGD2 video partition rips will be detected)
             // check to see if this is a video file by seeking to sector 16 and looking for magic bytes
             if (fseeko(fp, 32768, SEEK_SET) != 0) {
                 printseekerror(isofilename, "File identification check");
@@ -3796,7 +4917,7 @@ int main(int argc, char *argv[]) {
             }
             memset(buffer, 0, 2048);
             initcheckread();
-            if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, 32768, isofilename, "file identification check") != 0) continue;
+            if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, 32768, isofilename, "File identification check") != 0) continue;
             donecheckread(isofilename);
             if (memcmp(buffer+1, "CD001", 5) == 0) {
                 if (filecount > 1 && verbose) printf("%s", newline);
@@ -3812,61 +4933,116 @@ int main(int argc, char *argv[]) {
             }
         }
         
+        // make sure we will be able to read sector 32 in the game partition
+        // (any game [xgd2/xgd3 with or without video] should be at least this big)
+        if (fpfilesize < 0xFDA0800LL /* 0xFD90000 (largest current video offset [xgd2]) + 33*2048 (to make sure we can read sector 32) */) {
+            color(yellow);
+            if (filecount > 1) printf("ERROR: file isn't recognized as an XBOX 360 ISO or Stealth file!%s", newline);
+            else printf("ERROR: %s isn't recognized as an XBOX 360 ISO or Stealth file!%s", isofilename, newline);
+            color(normal);
+          continue;
+        }
         // check to see if this is an xbox 360 iso by looking for magic bytes at sector 32
         if (fseeko(fp, 65536, SEEK_SET) != 0) {
             printseekerror(isofilename, "ISO check");
           continue;
         }
-        video = 0;
+        video = 0LL;
+        memset(ubuffer, 0, 2048);
         initcheckread();
         if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 65536LL, isofilename, "Reading Sector 32") != 0) continue;
         donecheckread(isofilename);
+        if (debug) {
+            printf("sector 32:%s", newline);
+            hexdump(ubuffer, 0, 2048);
+        }
         if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
-            // the vast majority of images have a video partition and the game partition starts at 0xFD90000
+            // proper backups should have the game partition starting at 0xFD90000 (XGD2) or 0x2080000 (XGD3)
             video = 0xFD90000LL;
-            if (fpfilesize < (long long) video + 67584LL) {  // video + 66 KB (prevent EOF when trying to read sector 32)
-                color(yellow);
-                if (filecount > 1) printf("ERROR: file isn't recognized as an XBOX 360 ISO or Stealth file!%s", newline);
-                else printf("ERROR: %s isn't recognized as an XBOX 360 ISO or Stealth file!%s", isofilename, newline);
-                color(normal);
-              continue;
-            }
+            // read sector 32 + video
             if (fseeko(fp, 65536+video, SEEK_SET) != 0) {
                 printseekerror(isofilename, "ISO check");
               continue;
             }
+            memset(ubuffer, 0, 2048);
             initcheckread();
             if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video+65536LL, isofilename, "Reading Sector 32") != 0) continue;
             donecheckread(isofilename);
+            if (debug) {
+                printf("sector 32 + video (%"LL"d):%s", video, newline);
+                hexdump(ubuffer, 0, 2048);
+            }
             if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
-                // this string should be here for all xbox 360 games
-                color(yellow);
-                if (filecount > 1) printf("ERROR: file isn't recognized as an XBOX 360 ISO or Stealth file!%s", newline);
-                else printf("ERROR: %s isn't recognized as an XBOX 360 ISO or Stealth file!%s", isofilename, newline);
-                color(normal);
+                video = 0x2080000LL;
+                // read sector 32 + video
+                if (fseeko(fp, 65536+video, SEEK_SET) != 0) {
+                    printseekerror(isofilename, "ISO check");
+                  continue;
+                }
+                memset(ubuffer, 0, 2048);
+                initcheckread();
+                if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video+65536LL, isofilename, "Reading Sector 32") != 0) continue;
+                donecheckread(isofilename);
+                if (debug) {
+                    printf("sector 32 + video (%"LL"d):%s", video, newline);
+                    hexdump(ubuffer, 0, 2048);
+                }
+                if (memcmp(ubuffer, "MICROSOFT*XBOX*MEDIA", 20) != 0) {
+                    // should have found this string by now
+                    color(yellow);
+                    if (filecount > 1) printf("ERROR: file isn't recognized as an XBOX 360 ISO or Stealth file!%s", newline);
+                    else printf("ERROR: %s isn't recognized as an XBOX 360 ISO or Stealth file!%s", isofilename, newline);
+                    color(normal);
+                  continue;
+                }
+                else xgd3 = true;
+            }
+        }
+        
+        // get layerbreak from the alternate PFI in the SS
+        // if the SS doesn't exist/isn't valid or if altpfi_endpsnL0 is less than 0x30000 or if altpfi_startpsnL0
+        // doesn't correspond to the video offset, assume the layerbreak based solely on the video offset
+        layerbreak = -1;
+        if (video != 0) {
+            if (fseeko(fp, video - (xgd3 ? 0x8800 : 0x800), SEEK_SET) != 0) {
+                printseekerror(isofilename, "Checking alternate PFI");
               continue;
             }
-        }
-        /*
-        if (removesplitvid && video == 0xFD90000LL && fpfilesize > 7572881408LL) {
-            if (!writefile) {
-                color(yellow);
-                printf("Unable to remove SplitVid because writing is disabled!%s", newline);
-                color(normal);
-                if (verbose) printf("%s", newline);
+            memset(ubuffer, 0, 2048);
+            initcheckread();
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x8800 : 0x800), isofilename, "Checking alternate PFI") != 0) continue;
+            donecheckread(isofilename);
+            if (lookslike360ss(ubuffer)) {
+                // get End PSN of L0 Data Area
+                unsigned char altpfi_endpsnL0hex[4] = {ubuffer[15], ubuffer[14], ubuffer[13], 0x00};
+                unsigned long altpfi_endpsnL0 = getuint(altpfi_endpsnL0hex);
+                // get Start PSN of L0 Data Area to check that it corresponds to the video offset
+                unsigned char altpfi_startpsnL0hex[4] = {ubuffer[7], ubuffer[6], ubuffer[5], 0x00};
+                unsigned long altpfi_startpsnL0 = getuint(altpfi_startpsnL0hex);
+                if (debug) printf("about to take the layerbreak from the SS if these values are acceptable:%s"
+                                  "altpfi_endpsnL0 = 0x%lX, altpfi_startpsnL0 = 0x%lX%s", newline, altpfi_endpsnL0, altpfi_startpsnL0, newline);
+                if (altpfi_endpsnL0 >= 0x30000 && altpfi_startpsnL0 >= 0x30000 && ((altpfi_startpsnL0 - 0x30000) * 2048 == video)) {
+                    layerbreak = (long) altpfi_endpsnL0 - 0x30000 + 1;
+                    if (debug) printf("layerbreak (%ld) taken from SS altpfi_endpsnL0 (0x%lX)%s", layerbreak, altpfi_endpsnL0, newline);
+                }
             }
-            else {
-                // remove splitvid (just truncate file to 7572881408 bytes)
-                printf("Removing SplitVid");
-                if (verbose) printf(" (truncating file from %"LL"d bytes to 7572881408 bytes)%s", fpfilesize, newline);
-                if (verbose) printf("%s", newline);
-                if (dotruncate(isofilename, fpfilesize, 7572881408LL, true) != 0) continue;
-                // get the new filesize
-                fpfilesize = getfilesize(fp);
-                if (fpfilesize == -1) continue;  // seek error
+            else if (debug) {
+                printf("the sector at video - 0x%X does not look like Xbox 360 SS:%s", (xgd3 ? 0x8800 : 0x800), newline);
+                hexdump(ubuffer, 0, 2048);
             }
+            if (layerbreak == -1) {
+                if      (video == 0xFD90000LL) layerbreak = 1913760;  // XGD2
+                else                           layerbreak = 2133520;  // XGD3 or unknown (we shouldn't get here though if video isn't either 0xFD90000 or 0x2080000)
+                if (debug) printf("layerbreak (%ld) assumed based on video offset (0x%"LL"X)%s", layerbreak, video, newline);
+            }
+            #ifndef WIN32
+                if (blockdevice[fileloop]) {
+                    // check that they've burned with the correct layerbreak
+                    getL0capacity();
+                }
+            #endif
         }
-        */
+        
         if (checkdvdfile) {
             if (video == 0) {
                 if (!stealthcheck) {  // avoid redundant message when checking stealth
@@ -3877,6 +5053,14 @@ int main(int argc, char *argv[]) {
             }
             else docheckdvdfile();
         }
+        
+        #ifndef WIN32
+            if (blockdevice[fileloop] && speedarg) {
+                // set dvd speed as requested
+                // todo: make sure this gets set and reset properly on linux/bsd
+                setdvdspeed(speed, false);
+            }
+        #endif
         
         if (manualextract) {
             if (video == 0) {
@@ -3889,14 +5073,15 @@ int main(int argc, char *argv[]) {
         
         checkgame();
         
-        if (xex_foundmediaid && !game_has_ap25) {
-            // check media id against list of ap25 games with no ap25 xex flag
-            for (m=0;m<num_ap25mediaids;m++) {
-                if (memcmp(xex_mediaid+12, mostrecentap25mediaids[m].mediaid, 4) == 0) {
-                    game_has_ap25 = true;
-                    break;
-                }
-            }
+        if (layerbreak == -1) {
+            // this must have been just a game partition, so assume the layerbreak based on the existence of the disc
+            // profile id so that we can properly parse offsets for pfi/alt pfi that will (hopefully) get patched later
+            // we also need the layerbreak to be able to check/fix the .dvd file after the iso is rebuilt
+            // note that if the xex was not found, layerbreak will default to the possibly incorrect value of 1913760
+            // (but autofix will abort anyway if we didn't get the xex crc)
+            if (xgd3) layerbreak = 2133520;
+            else      layerbreak = 1913760;
+            if (debug) printf("layerbreak (%ld) assumed based on bool xgd3 (%s)%s", layerbreak, (xgd3 ? "true" : "false"), newline);
         }
         
         if (stealthcheck) {
@@ -3904,7 +5089,9 @@ int main(int argc, char *argv[]) {
             if (video == 0) {
                 // means that "MICROSOFT*XBOX*MEDIA" was found at 0x10000
                 color(red);
-                printf("Stealth Failed!: Image is missing Video, PFI, DMI and SS%s", newline);
+                printf("Stealth Failed!: Image is missing Video, PFI, DMI");
+                if (game_has_ap25) printf(", SS and topology data%s", newline);
+                else               printf(" and SS%s", newline);
                 printf("%s %s (It's just a game partition and won't boot on ANY firmware!)%s", sp10, sp5, newline);
                 color(normal);
                 if (autofix) {
@@ -3922,32 +5109,33 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 else if (manualpatch) domanualpatch(argv);
-                if (game_has_ap25) {
-                    // lazy...
+                if (writefile && game_has_ap25 && (autofix || manualpatch)) {
                     color(yellow);
-                    printf("Note: You will need to run this ISO through abgx360 again after rebuilding to check AP25 replay data%s", newline);
+                    printf("Note: You will need to run this ISO through abgx360 again in order to patch\n"
+                           "topology data%s", newline);
                     color(normal);
                 }
               goto finishedstealthcheck;
             }
             
             if (game_has_ap25) {
-                // check ap25 replay data
-                if (fseeko(fp, 0xFD8E000, SEEK_SET) != 0) {
+                // check topology data
+                if (fseeko(fp, video - (xgd3 ? 0x10000 : 0x8000), SEEK_SET) != 0) {
                     printseekerror(isofilename, "Stealth check");
                   continue;
                 }
                 initcheckread();
-                if (checkreadandprinterrors(ap25, 1, 2048, fp, 0, 0xFD8E000, isofilename, "Stealth check") != 0) continue;
+                if (checkreadandprinterrors(topology, 1, TOPOLOGY_SIZE, fp, 0, video - (xgd3 ? 0x10000 : 0x8000), isofilename,
+                                            "Stealth check") != 0) continue;
                 donecheckread(isofilename);
-                checkap25();
-                if (fixedap25) {
+                checktopology();
+                if (fixedtopology) {
                     if (verbose) printf("%s", newline);
-                    printf("Writing fixed AP25 data to this ISO%s", newline);
+                    printf("Writing fixed topology data to this ISO%s", newline);
                     fp = freopen(isofilename, "rb+", fp);
                     if (fp == NULL) {
                         color(red);
-                        printf("ERROR: Failed to reopen %s%s%s for writing! (%s) Unable to fix AP25 replay sector!%s",
+                        printf("ERROR: Failed to reopen %s%s%s for writing! (%s) Unable to fix topology data!%s",
                                quotation, isofilename, quotation, strerror(errno), newline);
                         color(normal);
                         fp = fopen(isofilename, "rb");
@@ -3960,23 +5148,26 @@ int main(int argc, char *argv[]) {
                         }
                       continue;
                     }
-                    if (trytowritestealthfile(ap25, 1, 2048, fp, isofilename, 0xFD8E000LL) != 0) continue;
+                    if (trytowritestealthfile(topology, 1, TOPOLOGY_SIZE, fp, isofilename, video - (xgd3 ? 0x10000 : 0x8000)) != 0) continue;
                     color(green);
-                    printf("AP25 replay sector was successfully fixed!%s", newline);
+                    printf("Topology data was successfully fixed!%s", newline);
                     color(normal);
+                    topology_was_verified = true;
                 }
                 if (verbose) printf("%s", newline);
             }
             
             // check SS
-            if (fseeko(fp, 0xFD8F800, SEEK_SET) != 0) {
+            if (fseeko(fp, video - (xgd3 ? 0x8800 : 0x800), SEEK_SET) != 0) {
                 printseekerror(isofilename, "Stealth check");
               continue;
             }
             initcheckread();
-            if (checkreadandprinterrors(ss, 1, 2048, fp, 0, 0xFD8F800, isofilename, "Stealth check") != 0) continue;
+            if (checkreadandprinterrors(ss, 1, 2048, fp, 0, video - (xgd3 ? 0x8800 : 0x800), isofilename, "Stealth check") != 0) continue;
             donecheckread(isofilename);
             checkss();
+            if (ssv2) iso_has_ssv2 = true;
+            else iso_has_ssv2 = false;
             if (fixedss) {
                 if (verbose) printf("%s", newline);
                 printf("Writing adjusted SS values to %s%s", isofilename, newline);
@@ -3994,26 +5185,26 @@ int main(int argc, char *argv[]) {
                     }
                   continue;
                 }
-                if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, 0xFD8F800LL) != 0) continue;
+                if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, video - (xgd3 ? 0x8800 : 0x800)) != 0) continue;
             }
             
             // check DMI
-            if (fseeko(fp, 0xFD8F000, SEEK_SET) != 0) {
+            if (fseeko(fp, video - (xgd3 ? 0x9000 : 0x1000), SEEK_SET) != 0) {
                 printseekerror(isofilename, "Stealth check");
               continue;
             }
             initcheckread();
-            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0xFD8F000, isofilename, "Stealth check") != 0) continue;
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9000 : 0x1000), isofilename, "Stealth check") != 0) continue;
             donecheckread(isofilename);
             checkdmi(ubuffer);
             
             // check PFI
-            if (fseeko(fp, 0xFD8E800, SEEK_SET) != 0) {
+            if (fseeko(fp, video - (xgd3 ? 0x9800 : 0x1800), SEEK_SET) != 0) {
                 printseekerror(isofilename, "Stealth check");
               continue;
             }
             initcheckread();
-            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0xFD8E800, isofilename, "Stealth check") != 0) continue;
+            if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9800 : 0x1800), isofilename, "Stealth check") != 0) continue;
             donecheckread(isofilename);
             checkpfi(ubuffer);
             
@@ -4030,6 +5221,10 @@ int main(int argc, char *argv[]) {
                     if (returnvalue == 0) {
                         color(green);
                         printf("AutoFix was successful!%s", newline);
+                        if (game_has_ap25 && !topology_was_verified) {
+                            color(yellow);
+                            printf("Note: Topology data was not verified%s", newline);
+                        }
                         color(normal);
                     }
                     else if (returnvalue == 1) {
@@ -4051,30 +5246,33 @@ int main(int argc, char *argv[]) {
                         if (drtfucked) {
                             color(yellow);
                             printf("Stealth and game data were verified but angle deviation cannot be verified%s", newline);
+                            if (game_has_ap25 && !topology_was_verified) {
+                                printf("Note: Topology data wasn't verified either%s", newline);
+                            }
                         }
                         else {
                             color(green);
                             printf("Verification was successful, Stealth passed!%s", newline);
+                            if (game_has_ap25 && !topology_was_verified) {
+                                color(yellow);
+                                printf("Note: Topology data was not verified%s", newline);
+                            }
                         }
                         color(normal);
-                        // this is only here to make the splitvid check/addition possible
-                        video_stealthuncertain = false;
-                        pfi_stealthuncertain = false;
                     }
                     else if (returnvalue == 2) {
                         color(yellow);
                         printf("Stealth was verified but game data wasn't%s", newline);
                         if (drtfucked) printf("Angle deviation cannot be verified%s", newline);
+                        if (game_has_ap25 && !topology_was_verified) {
+                            printf("Note: Topology data wasn't verified either%s", newline);
+                        }
                         color(normal);
-                        // this is only here to make the splitvid check/addition possible
-                        video_stealthuncertain = false;
-                        pfi_stealthuncertain = false;
                     }
                     else {
                         verifyfailed = true;
                         color(yellow);
                         if (returnvalue == 3) printf("Game data was verified but stealth wasn't%s", newline);
-                        if (drtfucked) printf("Angle deviation cannot be verified%s", newline);
                         printf("Verification failed%s", newline);
                         color(normal);
                     }
@@ -4084,6 +5282,10 @@ int main(int argc, char *argv[]) {
                             if (returnvalue == 0) {
                                 color(green);
                                 printf("AutoFix was successful!%s", newline);
+                                if (game_has_ap25 && !topology_was_verified) {
+                                    color(yellow);
+                                    printf("Note: Topology data was not verified%s", newline);
+                                }
                                 color(normal);
                             }
                             else if (returnvalue == 1) {
@@ -4108,18 +5310,25 @@ int main(int argc, char *argv[]) {
                     if (returnvalue == 0) {
                         color(green);
                         printf("Verification was successful!%s", newline);
+                        if (game_has_ap25 && !topology_was_verified) {
+                            color(yellow);
+                            printf("Note: Topology data was not verified%s", newline);
+                        }
                         color(normal);
                     }
                     else if (returnvalue == 2) {
                         color(yellow);
                         printf("Stealth was verified but game data wasn't%s", newline);
+                        if (game_has_ap25 && !topology_was_verified) {
+                            printf("Note: Topology data wasn't verified either%s", newline);
+                        }
                         color(normal);
                     }
                     else {
                         verifyfailed = true;
                         color(yellow);
                         if (returnvalue == 3) printf("Game data was verified but stealth wasn't%s", newline);
-                        else printf("Verification failed%s", newline);
+                        printf("Verification failed%s", newline);
                         color(normal);
                         if (verify_found_bad_pfi_or_video) {
                             autoupload = false;  // should have been set to false already but it doesn't hurt to make sure
@@ -4128,6 +5337,10 @@ int main(int argc, char *argv[]) {
                                 if (returnvalue == 0) {
                                     color(green);
                                     printf("AutoFix was successful!%s", newline);
+                                    if (game_has_ap25 && !topology_was_verified) {
+                                        color(yellow);
+                                        printf("Note: Topology data was not verified%s", newline);
+                                    }
                                     color(normal);
                                 }
                                 else if (returnvalue == 1) {
@@ -4156,14 +5369,17 @@ int main(int argc, char *argv[]) {
                                        newline, newline, newline, newline);
                                 color(normal);
                             }
-                            else doautoupload(argv);
-                            // should check to see if autoupload resulted in verification
+                            else doautoupload(argv, false);
                         }
                         if (!verify_found_bad_pfi_or_video && autofixalways) {
                             returnvalue = doautofix();
                             if (returnvalue == 0) {
                                 color(green);
                                 printf("AutoFix was successful!%s", newline);
+                                if (game_has_ap25 && !topology_was_verified) {
+                                    color(yellow);
+                                    printf("Note: Topology data was not verified%s", newline);
+                                }
                                 color(normal);
                             }
                             else if (returnvalue == 1) {
@@ -4175,14 +5391,27 @@ int main(int argc, char *argv[]) {
                         }
                         else if (manualpatch && patchifstealthpasses) domanualpatch(argv);
                     }
+                    if ( (returnvalue == 0 || returnvalue == 2) &&
+                          autoupload && !stayoffline && autouploaduserarg && autouploadpassarg && iso_has_ssv2) {
+                        // autoupload an ssv2 even if stealth was verified and the existing ss in db is ssv1
+                        printf("%sChecking to see if the existing SS file in the db is SSv1...%s", newline, newline);
+                        if (valid_ssv2_exists_in_db()) {
+                            if (verbose) printf("%s", newline);
+                            printf("A valid SSv2 already exists in the db, no need to upload anything%s", newline);
+                        }
+                        else if (fixedss) {
+                            color(red);
+                            printf("%sAutoUpload aborted because SS Challege / Response Data has been altered!%s"
+                                   "DO NOT AutoUpload from this ISO! Delete it and rip again!%s%s",
+                                   newline, newline, newline, newline);
+                            color(normal);
+                        }
+                        else if (!stayoffline) doautoupload(argv, true);  // true = upload_ss_only
+                    }
                 }
                 else if (!verify_found_bad_pfi_or_video && manualpatch && patchifstealthpasses) domanualpatch(argv);
             }
             finishedstealthcheck:
-            if (addsplitvid) {
-                printf("%s", newline);
-                doaddsplitvid();
-            }
             if (checkcorruption && game_crc32 == 0 && !checkgamecrcnever) {
                 printf("%sChecking for AnyDVD style game data corruption while running CRC check...%s", newline, newline);
                 if (docheckgamecrc() == 0) {
@@ -4196,11 +5425,15 @@ int main(int argc, char *argv[]) {
                 }
                 else {
                     checkgamecrcnever = true;
-                    gamecrcfailed = true;
+                    if (!usercancelledgamecrc) gamecrcfailed = true;
                 }
             }
         }
     }
+    #ifndef WIN32
+        if (fileloop > 0 && blockdevice[fileloop-1]) resetdrivespeedifneeded();
+        if (fd != -1) close(fd);
+    #endif
   return 0;
 }
 
@@ -4209,7 +5442,9 @@ int dotruncate(char *filename, long long filesize, long long truncatesize, bool 
     if (truncatesize < filesize) action = "Truncating";
     else action = "Extending";
     if (!writefile) {
-        color(yellow); printf("%s file aborted because writing is disabled%s", action, newline); color(normal);
+        color(yellow);
+        printf("%s file aborted because writing is disabled%s", action, newline);
+        color(normal);
       return 1;
     }
     if (!stfu) printf("%s %s%s%s to %"LL"d Bytes... ", action, quotation, filename, quotation, truncatesize);
@@ -4229,21 +5464,29 @@ int dotruncate(char *filename, long long filesize, long long truncatesize, bool 
     #ifdef WIN32
         HANDLE hFile = CreateFile((LPCTSTR) filename, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE) {
-            color(red); printf("ERROR: CreateFile returned an invalid handle value! (%s) %s file failed!%s", WinErrorString(), action, newline); color(normal);
+            color(red);
+            printf("ERROR: CreateFile returned an invalid handle value! (%s) %s file failed!%s", WinErrorString(), action, newline);
+            color(normal);
           return 1;
         }
         if (SetFilePointerEx(hFile, (LARGE_INTEGER) truncatesize, NULL, FILE_BEGIN) == 0) {
-            color(red); printf("ERROR: SetFilePointerEx failed! (%s) %s file failed!%s", WinErrorString(), action, newline); color(normal);
+            color(red);
+            printf("ERROR: SetFilePointerEx failed! (%s) %s file failed!%s", WinErrorString(), action, newline);
+            color(normal);
           return 1;
         }
         if (SetEndOfFile(hFile) == 0) {
-            color(red); printf("ERROR: SetEndOfFile failed! (%s) %s file failed!%s", WinErrorString(), action, newline); color(normal);
+            color(red);
+            printf("ERROR: SetEndOfFile failed! (%s) %s file failed!%s", WinErrorString(), action, newline);
+            color(normal);
           return 1;
         }
         CloseHandle(hFile);
     #else
         if (truncate(filename, truncatesize) == -1) {
-            color(red); printf("ERROR: truncate() returned -1! (%s) %s file failed!%s", strerror(errno), action, newline); color(normal);
+            color(red);
+            printf("ERROR: truncate() returned -1! (%s) %s file failed!%s", strerror(errno), action, newline);
+            color(normal);
           return 1;
         }
     #endif
@@ -4254,7 +5497,6 @@ int dotruncate(char *filename, long long filesize, long long truncatesize, bool 
 void printpfitable(unsigned long startpsnL0, unsigned long endpsnL0, unsigned long startpsnL1, unsigned long endpsnL1,
                    unsigned long sectorsL0, unsigned long sectorsL1, unsigned long long offsetL0, unsigned long long offsetL0end,
                    unsigned long long offsetL1, unsigned long long offsetend, unsigned long sectorstotal) {
-    if (altlayerbreak) printf("%sUsing layerbreak: %ld%s%s", sp5, layerbreak, newline, newline);
     printf("%s%06lXh ", sp5, startpsnL0); color(arrow);
     if (terminal) printf("컴컴컴� PSN 컴컴컴%s", greaterthan);
     else printf("------- PSN ------%s", greaterthan);
@@ -4290,6 +5532,16 @@ void printpfitable(unsigned long startpsnL0, unsigned long endpsnL0, unsigned lo
   return;
 }
 
+unsigned long long assume_start_offset_of_L1_padding() {
+    // assume the start offset of L1 padding based on the start offset of the game partition
+    // this will allow us to check L1 padding even if ss is missing
+    // todo: this will need to be updated if a new game partition start offset is used, and additional
+    // measures will be needed if game partition size changes but an existing start offset is used
+    if (video == 0xFD90000LL) return 0x01C3610000LL;  // XGD2
+    if (video == 0x2080000LL) return 0x0206590000LL;  // XGD3
+  return 0LL;  // calling functions should recognize this return value as invalid
+}
+
 void domanualextraction(char *argv[]) {
     unsigned long m;
     char response[4];
@@ -4319,14 +5571,14 @@ void domanualextraction(char *argv[]) {
             }
         }
         // check pfi_sectorstotal to get the true size of video data
-        if (fseeko(fp, 0xFD8E800LL, SEEK_SET) != 0) {  // seek to pfi
+        if (fseeko(fp, video - (xgd3 ? 0x9800 : 0x1800), SEEK_SET) != 0) {  // seek to pfi
             printseekerror(isofilename, "Extracting Video");
           goto endofextractvideo2;
         }
         memset(ubuffer, 0, 2048);
         initcheckread();
-        if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 0xFD8E800LL,
-                                    isofilename, "extraction") != 0) goto endofextractvideo2;
+        if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9800 : 0x1800),
+                                    isofilename, "Extraction") != 0) goto endofextractvideo2;
         donecheckread(isofilename);
         if (getzeros(ubuffer, 0, 2047) == 2048) {
             color(red);
@@ -4353,18 +5605,25 @@ void domanualextraction(char *argv[]) {
         unsigned long long pfi_offsetL0 = ((unsigned long long) pfi_startpsnL0 - 0x030000) * 2048;
         unsigned long long pfi_offsetL1 = ((unsigned long long) pfi_startpsnL1 - (unsigned long long) layerbreakpsn) * 2048 + ((unsigned long long) layerbreak * 2048);
         unsigned long long pfi_offsetL0end = (unsigned long long) (pfi_endpsnL0 - pfi_startpsnL0 + 1) * 2048 + pfi_offsetL0 - 1;
-        unsigned long long pfi_offsetend = (pfi_endpsnL1 - pfi_startpsnL1 + 1) * 2048 + pfi_offsetL1 - 1;
+        unsigned long long pfi_offsetend = (unsigned long long) (pfi_endpsnL1 - pfi_startpsnL1 + 1) * 2048 + pfi_offsetL1 - 1;
         unsigned long pfi_sectorstotal = pfi_sectorsL0 + pfi_sectorsL1;
         // print that shit
         if (debug) printpfitable(pfi_startpsnL0, pfi_endpsnL0, pfi_startpsnL1, pfi_endpsnL1, pfi_sectorsL0, pfi_sectorsL1,
                                  pfi_offsetL0, pfi_offsetL0end, pfi_offsetL1, pfi_offsetend, pfi_sectorstotal);
-        if (pfi_sectorstotal > total_sectors_available_for_video_data) {
+        if (pfi_offsetL0end >= video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048) {
             color(yellow);
-            printf("PFI Data Area is too large! (%lu sectors) Extracting Video aborted!%s", pfi_sectorstotal, newline);
+            printf("PFI L0 Data Area overlaps Stealth sectors/game data! Extracting Video aborted!%s", newline);
             color(normal);
           goto endofextractvideo2;
         }
-        // ready to extract
+        // filesize should be at least [pfi_offsetL1 + pfi_sectorsL1*2048]
+        if ((unsigned long long) fpfilesize < pfi_offsetL1 + pfi_sectorsL1*2048) {
+            color(yellow);
+            printf("ISO size is too small to contain the L1 Video! Extracting Video aborted!%s", newline);
+            color(normal);
+          goto endofextractvideo2;
+        }
+        // open destination file for writing
         extractvideofile = fopen(argv[extractvideoarg], "wb");
         if (extractvideofile == NULL) {
             color(red);
@@ -4373,93 +5632,62 @@ void domanualextraction(char *argv[]) {
             color(normal);
           goto endofextractvideo2;
         }
-        // seek back to the beginning and start extraction
+        // seek to the start of L0 Video and start extraction
         if (fseeko(fp, 0, SEEK_SET) != 0) {
             printseekerror(isofilename, "Extracting Video");
           goto endofextractvideo;
         }
-        sizeoverbuffer = pfi_sectorstotal * 2048 / BIGBUF_SIZE;
-        bufferremainder = pfi_sectorstotal * 2048 % BIGBUF_SIZE;
-        initcheckread(); initcheckwrite();
-        for (m=0;m<sizeoverbuffer;m++) {
+        sizeoverbuffer = pfi_sectorsL0*2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL0*2048 % BIGBUF_SIZE;
+        initcheckread();
+        initcheckwrite();
+        for (m=0; m<sizeoverbuffer; m++) {
             if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0,
-                                        isofilename, "extraction") != 0) goto endofextractvideo;
+                                        isofilename, "Extraction") != 0)
+                goto endofextractvideo;
             if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, extractvideofile, m, 0,
-                                         argv[extractvideoarg], "extraction") != 0) goto endofextractvideo;
+                                         argv[extractvideoarg], "Extraction") != 0)
+                goto endofextractvideo;
         }
         if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_sectorstotal * 2048 - bufferremainder,
-                                        isofilename, "extraction") != 0) goto endofextractvideo;
-            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, extractvideofile, 0, pfi_sectorstotal * 2048 - bufferremainder,
-                                         argv[extractvideoarg], "extraction") !=0) goto endofextractvideo;
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                        isofilename, "Extraction") != 0)
+                goto endofextractvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, extractvideofile, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                         argv[extractvideoarg], "Extraction") !=0)
+                goto endofextractvideo;
+        }
+        // seek to the start of L1 Video and continue extraction
+        if (fseeko(fp, pfi_offsetL1, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Extracting Video");
+          goto endofextractvideo;
+        }
+        sizeoverbuffer = pfi_sectorsL1 * 2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL1 * 2048 % BIGBUF_SIZE;
+        for (m=0; m<sizeoverbuffer; m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, pfi_offsetL1,
+                                        isofilename, "Extraction") != 0)
+                goto endofextractvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, extractvideofile, m, pfi_sectorsL0*2048,
+                                         argv[extractvideoarg], "Extraction") != 0)
+                goto endofextractvideo;
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 + pfi_sectorsL1*2048 - bufferremainder,
+                                        isofilename, "Extraction") != 0)
+                goto endofextractvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, extractvideofile, 0, pfi_sectorstotal*2048 - bufferremainder,
+                                         argv[extractvideoarg], "Extraction") !=0)
+                goto endofextractvideo;
         }
         donecheckread(isofilename);
         donecheckwrite(argv[extractvideoarg]);
-        color(green); printf("Extraction was successful%s", newline); color(normal);
+        color(green);
+        printf("Extraction was successful%s", newline);
+        color(normal);
         endofextractvideo:
             fclose(extractvideofile);
         endofextractvideo2:
-            printf("%s", newline);
-    }
-    if (extractvideopartitionarg) {
-        FILE *extractvideopartitionfile;
-        printf("Extracting Video Partition to %s%s%s%s", quotation, argv[extractvideopartitionarg], quotation, newline);
-        if (!clobber) {
-            // check if file already exists
-            extractvideopartitionfile = fopen(argv[extractvideopartitionarg], "rb");
-            if (extractvideopartitionfile != NULL) {
-                fclose(extractvideopartitionfile);
-                if (debug) printf("file already exists, asking user for permission to overwrite%s", newline);
-                printstderr = true; color(yellow);
-                fprintf(stderr, "Warning: \"%s\" already exists...\n", argv[extractvideopartitionarg]);
-                color(normal); printstderr = false;
-                memset(response, 0, 4);
-                while (response[0] != 'y' && response[0] != 'n' && response[0] != 'Y' && response[0] != 'N') {
-                    fprintf(stderr, "Do you want to overwrite it? (y/n) ");
-                    readstdin(response, 4);
-                    if (debug) printf("response[0] = %c (0x%02X)%s", response[0], response[0], newline);
-                }
-                if (response[0] == 'n' || response[0] == 'N') {
-                    printf("Extracting Video Partition was aborted as requested%s", newline);
-                  goto endofextractvideopartition2;
-                }
-            }
-        }
-        // ready to extract
-        extractvideopartitionfile = fopen(argv[extractvideopartitionarg], "wb");
-        if (extractvideopartitionfile == NULL) {
-            color(red);
-            printf("ERROR: Failed to open %s%s%s for writing! (%s) Extracting Video Partition failedd!%s",
-                    quotation, argv[extractvideopartitionarg], quotation, strerror(errno), newline);
-            color(normal);
-          goto endofextractvideopartition2;
-        }
-        // extract video partition
-        if (fseeko(fp, 0, SEEK_SET) != 0) {
-            printseekerror(isofilename, "Extracting Video Partition");
-          goto endofextractvideopartition;
-        }
-        sizeoverbuffer = total_sectors_available_for_video_data*2048 / BIGBUF_SIZE;
-        bufferremainder = total_sectors_available_for_video_data*2048 % BIGBUF_SIZE;
-        initcheckread(); initcheckwrite();
-        for (m=0;m<sizeoverbuffer;m++) {
-            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0,
-                                        isofilename, "extraction") != 0) goto endofextractvideopartition;
-            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, extractvideopartitionfile, m, 0,
-                                         argv[extractvideopartitionarg], "extraction") != 0) goto endofextractvideopartition;
-        }
-        if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, total_sectors_available_for_video_data*2048 - bufferremainder,
-                                        isofilename, "extraction") != 0) goto endofextractvideopartition;
-            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, extractvideopartitionfile, 0, total_sectors_available_for_video_data*2048 - bufferremainder,
-                                         argv[extractvideopartitionarg], "extraction") !=0) goto endofextractvideopartition;
-        }
-        donecheckread(isofilename);
-        donecheckwrite(argv[extractvideopartitionarg]);
-        color(green); printf("Extraction was successful%s", newline); color(normal);
-        endofextractvideopartition:
-            fclose(extractvideopartitionfile);
-        endofextractvideopartition2:
             printf("%s", newline);
     }
     if (extractpfiarg) {
@@ -4471,9 +5699,11 @@ void domanualextraction(char *argv[]) {
             if (extractpfifile != NULL) {
                 fclose(extractpfifile);
                 if (debug) printf("file already exists, asking user for permission to overwrite%s", newline);
-                printstderr = true; color(yellow);
+                printstderr = true;
+                color(yellow);
                 fprintf(stderr, "Warning: \"%s\" already exists...\n", argv[extractpfiarg]);
-                color(normal); printstderr = false;
+                color(normal);
+                printstderr = false;
                 memset(response, 0, 4);
                 while (response[0] != 'y' && response[0] != 'n' && response[0] != 'Y' && response[0] != 'N') {
                     fprintf(stderr, "Do you want to overwrite it? (y/n) ");
@@ -4489,21 +5719,25 @@ void domanualextraction(char *argv[]) {
         // ready to extract
         extractpfifile = fopen(argv[extractpfiarg], "wb");
         if (extractpfifile == NULL) {
-            color(red); printf("ERROR: Failed to open %s%s%s for writing! (%s) Extracting PFI failed!%s",
-                                quotation, argv[extractpfiarg], quotation, strerror(errno), newline); color(normal);
+            color(red);
+            printf("ERROR: Failed to open %s%s%s for writing! (%s) Extracting PFI failed!%s",
+                   quotation, argv[extractpfiarg], quotation, strerror(errno), newline);
+            color(normal);
           goto endofextractpfi2;
         }
-        if (fseeko(fp, 0xFD8E800LL, SEEK_SET) != 0) {
+        if (fseeko(fp, video - (xgd3 ? 0x9800 : 0x1800), SEEK_SET) != 0) {
             printseekerror(isofilename, "Extracting PFI");
           goto endofextractpfi;
         }
         memset(buffer, 0, 2048);
         initcheckread();
-        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, 0xFD8E800LL,
+        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9800 : 0x1800),
                                     isofilename, "Reading stealth file") != 0) goto endofextractpfi;
         donecheckread(isofilename);
         if (trytowritestealthfile(buffer, 1, 2048, extractpfifile, argv[extractpfiarg], 0) != 0) goto endofextractpfi;
-        color(green); printf("Extraction was successful%s", newline); color(normal);
+        color(green);
+        printf("Extraction was successful%s", newline);
+        color(normal);
         endofextractpfi:
             fclose(extractpfifile);
         endofextractpfi2:
@@ -4518,9 +5752,11 @@ void domanualextraction(char *argv[]) {
             if (extractdmifile != NULL) {
                 fclose(extractdmifile);
                 if (debug) printf("file already exists, asking user for permission to overwrite%s", newline);
-                printstderr = true; color(yellow);
+                printstderr = true;
+                color(yellow);
                 fprintf(stderr, "Warning: \"%s\" already exists...\n", argv[extractdmiarg]);
-                color(normal); printstderr = false;
+                color(normal);
+                printstderr = false;
                 memset(response, 0, 4);
                 while (response[0] != 'y' && response[0] != 'n' && response[0] != 'Y' && response[0] != 'N') {
                     fprintf(stderr, "Do you want to overwrite it? (y/n) ");
@@ -4542,17 +5778,19 @@ void domanualextraction(char *argv[]) {
             color(normal);
           goto endofextractdmi2;
         }
-        if (fseeko(fp, 0xFD8F000LL, SEEK_SET) != 0) {
+        if (fseeko(fp, video - (xgd3 ? 0x9000 : 0x1000), SEEK_SET) != 0) {
             printseekerror(isofilename, "Extracting DMI");
           goto endofextractdmi;
         }
         memset(buffer, 0, 2048);
         initcheckread();
-        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, 0xFD8F000LL,
+        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, video - (xgd3 ? 0x9000 : 0x1000),
                                     isofilename, "Reading stealth file") != 0) goto endofextractdmi;
         donecheckread(isofilename);
         if (trytowritestealthfile(buffer, 1, 2048, extractdmifile, argv[extractdmiarg], 0) != 0) goto endofextractdmi;
-        color(green); printf("Extraction was successful%s", newline); color(normal);
+        color(green);
+        printf("Extraction was successful%s", newline);
+        color(normal);
         endofextractdmi:
             fclose(extractdmifile);
         endofextractdmi2:
@@ -4567,9 +5805,11 @@ void domanualextraction(char *argv[]) {
             if (extractssfile != NULL) {
                 fclose(extractssfile);
                 if (debug) printf("file already exists, asking user for permission to overwrite%s", newline);
-                printstderr = true; color(yellow);
+                printstderr = true;
+                color(yellow);
                 fprintf(stderr, "Warning: \"%s\" already exists...\n", argv[extractssarg]);
-                color(normal); printstderr = false;
+                color(normal);
+                printstderr = false;
                 memset(response, 0, 4);
                 while (response[0] != 'y' && response[0] != 'n' && response[0] != 'Y' && response[0] != 'N') {
                     fprintf(stderr, "Do you want to overwrite it? (y/n) ");
@@ -4591,17 +5831,19 @@ void domanualextraction(char *argv[]) {
             color(normal);
           goto endofextractss2;
         }
-        if (fseeko(fp, 0xFD8F800LL, SEEK_SET) != 0) {
+        if (fseeko(fp, video - (xgd3 ? 0x8800 : 0x800), SEEK_SET) != 0) {
             printseekerror(isofilename, "Extracting SS");
           goto endofextractss;
         }
         memset(buffer, 0, 2048);
         initcheckread();
-        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, 0xFD8F800LL,
+        if (checkreadandprinterrors(buffer, 1, 2048, fp, 0, video - (xgd3 ? 0x8800 : 0x800),
                                     isofilename, "Reading stealth file") != 0) goto endofextractss;
         donecheckread(isofilename);
         if (trytowritestealthfile(buffer, 1, 2048, extractssfile, argv[extractssarg], 0) != 0) goto endofextractss;
-        color(green); printf("Extraction was successful%s", newline); color(normal);
+        color(green);
+        printf("Extraction was successful%s", newline);
+        color(normal);
         endofextractss:
             fclose(extractssfile);
         endofextractss2:
@@ -4674,7 +5916,7 @@ void domanualpatch(char *argv[]) {
             goto endofpatchss2;
         }
         initcheckread();
-        if (checkreadandprinterrors(ss, 1, 2048, patchssfile, 0, 0, argv[patchssarg], "patching") != 0) goto endofpatchss;
+        if (checkreadandprinterrors(ss, 1, 2048, patchssfile, 0, 0, argv[patchssarg], "Patching") != 0) goto endofpatchss;
         donecheckread(argv[patchssarg]);
         if (getzeros(ss, 0, 2047) == 2048) {
             // ss is blank
@@ -4685,6 +5927,7 @@ void domanualpatch(char *argv[]) {
                 goto endofpatchss;
             }
             else {
+                ssv2 = false;
                 ss_stealthfailed = true;
                 color(red);
                 printf("Warning: This SS file is blank but you disabled the option to patch valid files only! I hope you know what you're doing!%s", newline);
@@ -4711,11 +5954,14 @@ void domanualpatch(char *argv[]) {
             }
         }
         // patch it
-        if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, 0xFD8F800LL) != 0) goto endofpatchss;
+        if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, video - (xgd3 ? 0x8800 : 0x800)) != 0) goto endofpatchss;
         
         color(green);
         printf("Patching SS was successful%s", newline);
         color(normal);
+        
+        if (ssv2) iso_has_ssv2 = true;
+        else iso_has_ssv2 = false;
         
         endofpatchss:
             fclose(patchssfile);
@@ -4733,7 +5979,7 @@ void domanualpatch(char *argv[]) {
             goto endofpatchdmi2;
         }
         initcheckread();
-        if (checkreadandprinterrors(ubuffer, 1, 2048, patchdmifile, 0, 0, argv[patchdmiarg], "patching") != 0) goto endofpatchdmi;
+        if (checkreadandprinterrors(ubuffer, 1, 2048, patchdmifile, 0, 0, argv[patchdmiarg], "Patching") != 0) goto endofpatchdmi;
         donecheckread(argv[patchdmiarg]);
         if (getzeros(ubuffer, 0, 2047) == 2048) {
             // dmi is blank
@@ -4769,7 +6015,7 @@ void domanualpatch(char *argv[]) {
             }
         }
         // patch it
-        if (trytowritestealthfile(ubuffer, 1, 2048, fp, isofilename, 0xFD8F000LL) != 0) goto endofpatchdmi;
+        if (trytowritestealthfile(ubuffer, 1, 2048, fp, isofilename, video - (xgd3 ? 0x9000 : 0x1000)) != 0) goto endofpatchdmi;
         
         color(green);
         printf("Patching DMI was successful%s", newline);
@@ -4791,7 +6037,7 @@ void domanualpatch(char *argv[]) {
             goto endofpatchpfi2;
         }
         initcheckread();
-        if (checkreadandprinterrors(ubuffer, 1, 2048, patchpfifile, 0, 0, argv[patchpfiarg], "patching") != 0) goto endofpatchpfi;
+        if (checkreadandprinterrors(ubuffer, 1, 2048, patchpfifile, 0, 0, argv[patchpfiarg], "Patching") != 0) goto endofpatchpfi;
         donecheckread(argv[patchpfiarg]);
         if (getzeros(ubuffer, 0, 2047) == 2048) {
             // pfi is blank
@@ -4827,7 +6073,7 @@ void domanualpatch(char *argv[]) {
             }
         }
         // patch it
-        if (trytowritestealthfile(ubuffer, 1, 2048, fp, isofilename, 0xFD8E800LL) != 0) goto endofpatchpfi;
+        if (trytowritestealthfile(ubuffer, 1, 2048, fp, isofilename, video - (xgd3 ? 0x9800 : 0x1800)) != 0) goto endofpatchpfi;
         
         color(green);
         printf("Patching PFI was successful%s", newline);
@@ -4841,15 +6087,23 @@ void domanualpatch(char *argv[]) {
     if (patchvideoarg) {
         FILE *patchvideofile;
         printf("Patching Video from %s%s%s%s", quotation, argv[patchvideoarg], quotation, newline);
+        if (!pfi_foundsectorstotal) {
+            // we need PFI to determine how to patch video
+            color(red);
+            printf("Patching was aborted because there is no PFI to describe the Video data areas!%s", newline);
+            color(normal);
+          return;
+        }
         patchvideofile = fopen(argv[patchvideoarg], "rb");
         if (patchvideofile == NULL) {
             color(red);
-            printf("ERROR: Failed to open %s%s%s for reading! (%s) Patching was aborted!%s", quotation, argv[patchvideoarg], quotation, strerror(errno), newline);
+            printf("ERROR: Failed to open %s%s%s for reading! (%s) Patching was aborted!%s",
+                   quotation, argv[patchvideoarg], quotation, strerror(errno), newline);
             color(normal);
           return;
         }
         if (verbose) printf("%s", newline);
-        checkvideo(argv[patchvideoarg], patchvideofile, false, false);
+        checkvideo(argv[patchvideoarg], patchvideofile, true, false);
         if (video_stealthfailed || video_stealthuncertain) {
             // video failed stealth check
             if (patchvalidfilesonly) {
@@ -4861,34 +6115,53 @@ void domanualpatch(char *argv[]) {
             else {
                 if (video_stealthfailed) color(red);
                 else color(yellow);
-                printf("Warning: This Video file appears to be invalid but you disabled the option to patch valid files only! I hope you know what you're doing!%s", newline);
+                printf("Warning: This Video file appears to be invalid but you disabled the option to\n"
+                       "patch valid files only! I hope you know what you're doing!%s", newline);
                 color(normal);
             }
         }
         // patch video
         long long videofilesize = getfilesize(patchvideofile);
         if (videofilesize == -1) goto endofpatchvideo;  // seek error
-        if (pfi_foundsectorstotal) {
-            if (pfi_sectorstotal*2048 > videofilesize) {
-                // the supplied file is not large enough based on the pfi data area size
-                color(red);
-                printf("ERROR: %s%s%s (%"LL"d bytes) is smaller than the PFI data area size (%"LL"d bytes) Patching was aborted!%s", quotation, argv[patchvideoarg], quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
-                color(normal);
-                goto endofpatchvideo;
-            }
-            if (videofilesize > pfi_sectorstotal*2048) {
-                // only patch the actual video data and let the rest of the video partition get padded properly
-                printf("Note: %s%s%s (%"LL"d bytes) is larger than necessary (this is normal for full video partition files). Only the first %"LL"d bytes will be patched.%s", quotation, argv[patchvideoarg], quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
-                videofilesize = (long long) pfi_sectorstotal*2048;
-            }
+        if (videofilesize < pfi_sectorstotal*2048) {
+            // the supplied file is not large enough based on the pfi data area size
+            color(red);
+            printf("ERROR: %s%s%s (%"LL"d bytes) is smaller than the PFI data area size (%"LL"d bytes) Patching was aborted!%s",
+                   quotation, argv[patchvideoarg], quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
+            color(normal);
+            goto endofpatchvideo;
         }
-        if (videofilesize > total_sectors_available_for_video_data*2048) {
-            // only patch the first total_sectors_available_for_video_data*2048 bytes
-            printf("Note: %s%s%s (%"LL"d bytes) is larger than the current video partition size (this is normal for older full video partition files). Only the first %"LL"d bytes will be patched.%s", quotation, argv[patchvideoarg], quotation, videofilesize, (long long) total_sectors_available_for_video_data*2048, newline);
-            videofilesize = (long long) total_sectors_available_for_video_data*2048;
+        if (videofilesize > pfi_sectorstotal*2048) {
+            // only patch the first pfi_sectorstotal*2048 bytes of the supplied file
+            printf("Note: %s%s%s (%"LL"d bytes) is larger than necessary (this is normal for full XGD2 video partition files). "
+                   "Only the first %"LL"d bytes will be patched.%s",
+                   quotation, argv[patchvideoarg], quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
+            videofilesize = (long long) pfi_sectorstotal*2048;
         }
-        sizeoverbuffer = videofilesize / BIGBUF_SIZE;
-        bufferremainder = videofilesize % BIGBUF_SIZE;
+        // iso size should be at least [pfi_offsetL1 + pfi_sectorsL1*2048]
+        if ((unsigned long long) fpfilesize < pfi_offsetL1 + pfi_sectorsL1*2048) {
+            printf("ISO size is too small to contain the L1 Video, extending...%s", newline);
+            if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1*2048, false) != 0) goto endofpatchvideo;
+            // get the new filesize
+            fpfilesize = getfilesize(fp);
+            if (fpfilesize == -1) goto endofpatchvideo;  // seek error
+        }
+        else if ((unsigned long long) fpfilesize > pfi_offsetL1 + pfi_sectorsL1*2048) {
+            // this really doesn't matter unless the image is too big to burn
+            printf("ISO size is larger than necessary, truncating...%s", newline);
+            if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1*2048, false) != 0) goto endofpatchvideo;
+            // get the new filesize
+            fpfilesize = getfilesize(fp);
+            if (fpfilesize == -1) goto endofpatchvideo;  // seek error
+        }
+        // check that L0 data area does not overlap stealth files or game data
+        if (pfi_sectorsL0 > video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0)) {
+            color(yellow);
+            printf("PFI L0 Data Area is too large! (%lu sectors) Patching was aborted!%s", pfi_sectorsL0, newline);
+            color(normal);
+            goto endofpatchvideo;
+        }
+        // seek to the start of L0 Video and start patching
         if (fseeko(fp, 0, SEEK_SET) != 0) {
             printseekerror(isofilename, "Patching video file");
             goto endofpatchvideo;
@@ -4897,21 +6170,84 @@ void domanualpatch(char *argv[]) {
             printseekerror(argv[patchvideoarg], "Patching video file");
             goto endofpatchvideo;
         }
-        initcheckread(); initcheckwrite();
-        for (m=0;m<sizeoverbuffer;m++) {
-            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, patchvideofile, m, 0, argv[patchvideoarg], "patching") != 0) goto endofpatchvideo;
-            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0, isofilename, "patching") != 0) goto endofpatchvideo;
+        sizeoverbuffer = pfi_sectorsL0*2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL0*2048 % BIGBUF_SIZE;
+        initcheckread();
+        initcheckwrite();
+        for (m=0; m<sizeoverbuffer; m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, patchvideofile, m, 0,
+                                        argv[patchvideoarg], "Patching L0 Video") != 0)
+                goto endofpatchvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0,
+                                         isofilename, "Patching L0 Video") != 0)
+                goto endofpatchvideo;
         }
         if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, patchvideofile, 0, videofilesize - bufferremainder, argv[patchvideoarg], "patching") != 0) goto endofpatchvideo;
-            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, videofilesize - bufferremainder, isofilename, "patching") !=0) goto endofpatchvideo;
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, patchvideofile, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                        argv[patchvideoarg], "Patching L0 Video") != 0)
+                goto endofpatchvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                         isofilename, "Patching L0 Video") != 0)
+                goto endofpatchvideo;
         }
-        donecheckread(argv[patchvideoarg]); donecheckwrite(isofilename);
+        // seek to the start of L1 Video and continue patching
+        if (fseeko(fp, pfi_offsetL1, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Patching video file");
+          goto endofpatchvideo;
+        }
+        sizeoverbuffer = pfi_sectorsL1*2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL1*2048 % BIGBUF_SIZE;
+        for (m=0; m<sizeoverbuffer; m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, patchvideofile, m, pfi_sectorsL0*2048,
+                                        argv[patchvideoarg], "Patching L1 Video") != 0)
+                goto endofpatchvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, pfi_offsetL1,
+                                         isofilename, "Patching L1 Video") != 0)
+                goto endofpatchvideo;
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, patchvideofile, 0, pfi_sectorstotal*2048 - bufferremainder,
+                                        argv[patchvideoarg], "Patching L1 Video") != 0)
+                goto endofpatchvideo;
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 + pfi_sectorsL1*2048 - bufferremainder,
+                                         isofilename, "Patching L1 Video") != 0)
+                goto endofpatchvideo;
+        }
+        donecheckread(argv[patchvideoarg]);
+        donecheckwrite(isofilename);
         
-        // pad video
-        if (verbose) fprintf(stderr, "Padding Video... ");
-        if (padzeros(fp, isofilename, videofilesize, (long long) total_sectors_available_for_video_data*2048) != 0) goto endofpatchvideo;
-        if (verbose) fprintf(stderr, "Done\n");
+        // pad L0 video
+        if (pfi_sectorsL0 == video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0)) {
+            // there is no L0 video padding
+            if (verbose) printf("Skipped padding L0 Video because there is no padding needed%s", newline);
+        }
+        else {
+            if (verbose) printf("Padding L0 Video... ");
+            if (padzeros(fp, isofilename, pfi_sectorsL0*2048,
+                         (long long) video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048) != 0) goto endofpatchvideo;
+            if (verbose) printf("Done%s", newline);
+        }
+        // pad L1 video
+        unsigned long long padding_offsetL1start = assume_start_offset_of_L1_padding();
+        if (padding_offsetL1start == 0) {
+            color(yellow);
+            printf("Cannot pad L1 Video because assume_start_offset_of_L1_padding() needs to be updated%s", newline);
+            color(normal);
+            goto endofpatchvideo;
+        }
+        if (pfi_offsetL1 == padding_offsetL1start) {
+            // there is no L1 video padding
+            if (verbose) printf("Skipped padding L1 Video because there is no padding needed%s", newline);
+        }
+        else if (pfi_offsetL1 < padding_offsetL1start) {
+            // L1 video overlaps game data
+            if (verbose) printf("Skipped padding L1 Video because there is no padding needed (PFI L1 Data Area overlaps the game partition)%s", newline);
+        }
+        else {
+            if (verbose) printf("Padding L1 Video... ");
+            if (padzeros(fp, isofilename, padding_offsetL1start, pfi_offsetL1) != 0) goto endofpatchvideo;
+            if (verbose) printf("Done%s", newline);
+        }
         
         color(green);
         printf("Patching Video was successful%s", newline);
@@ -4929,13 +6265,23 @@ int docheckdvdfile() {
     FILE *dvdfile;
     char dvdfilename[strlen(isofilename) + 1];
     char shortisofilename[strlen(isofilename) + 1];
+    char layerbreakstring[22];
     memset(dvdfilename, 0, strlen(isofilename) + 1);
     memset(shortisofilename, 0, strlen(isofilename) + 1);
+    memset(layerbreakstring, 0, 22);
+    sprintf(layerbreakstring, "LayerBreak=%ld", layerbreak);
     // copy isofilename to dvdfilename for editing
     memcpy(dvdfilename, isofilename, strlen(isofilename));
     // replace blah.xxx with blah.dvd
     if (memcmp(dvdfilename+strlen(dvdfilename)-4, ".", 1) == 0) {
         memcpy(dvdfilename+strlen(dvdfilename)-4, ".dvd", 4);
+        if (layerbreak <= 0) {
+            color(yellow);
+            printf("Unable to check/create .dvd file because the correct layerbreak to use could\nnot be determined!%s", newline);
+            color(normal);
+            if (verbose) printf("%s", newline);
+          return 1;
+        }
         // isofilename might be something like "C:\My Documents\imgname.iso" and
         // we want a string with just imgname.iso to compare or put in the .dvd file
         for (i=strlen(isofilename)-6;i>-1;i--) {  // work backwards to find the last slash
@@ -4950,13 +6296,13 @@ int docheckdvdfile() {
             // it does, so we'll check to make sure it's valid
             memset(buffer, 0, 2048);
             if (fgets(buffer, 2048, dvdfile) == NULL) goto dvdfix;
-            if (strlen(buffer) != 19 && strlen(buffer) != 20) goto dvdfix;
-            if (memcmp(buffer, "LayerBreak=1913760", 18) == 0) {  // first line of .dvd file must match this
+            if (strlen(buffer) != (strlen(layerbreakstring) + 1) && strlen(buffer) != (strlen(layerbreakstring) + 2)) goto dvdfix;
+            if (memcmp(buffer, layerbreakstring, strlen(layerbreakstring)) == 0) {  // first line of .dvd file must match this
                 // rest of first line should be one newline
-                if (strlen(buffer) == 19) {
-                    if (buffer[18] != 0x0D && buffer[18] != 0x0A) goto dvdfix;
+                if (strlen(buffer) == (strlen(layerbreakstring) + 1)) {
+                    if (buffer[strlen(layerbreakstring)] != 0x0D && buffer[strlen(layerbreakstring)] != 0x0A) goto dvdfix;
                 }
-                else if (memcmp(buffer+18, "\x0D\x0A", 2) != 0) goto dvdfix;
+                else if (memcmp(buffer+strlen(layerbreakstring), "\x0D\x0A", 2) != 0) goto dvdfix;
                 // read line 2
                 memset(buffer, 0, 2048);
                 if (fgets(buffer, 2048, dvdfile) == NULL) goto dvdfix;
@@ -5018,13 +6364,14 @@ int docheckdvdfile() {
             }
             // write the correct .dvd file contents to buffer
             memset(buffer, 0, 2048);
-            strcat(buffer, "LayerBreak=1913760\x0D\x0A");
+            strcat(buffer, layerbreakstring);
+            strcat(buffer, "\x0D\x0A");
             if (strlen(shortisofilename)) strcat(buffer, shortisofilename);
             else strcat(buffer, isofilename);
             strcat(buffer, "\x0D\x0A");
             // write buffer contents to the file
             initcheckwrite();
-            if (checkwriteandprinterrors(buffer, 1, strlen(buffer), dvdfile, 0, 0, dvdfilename, "fixing .dvd file") != 0) return 1;
+            if (checkwriteandprinterrors(buffer, 1, strlen(buffer), dvdfile, 0, 0, dvdfilename, "Fixing .dvd file") != 0) return 1;
             donecheckwrite(dvdfilename);
             color(green);
             printf("%s was fixed%s%s", dvdfilename, newline, newline);
@@ -5053,13 +6400,14 @@ int docheckdvdfile() {
             }
             // write the correct .dvd file contents to buffer
             memset(buffer, 0, 2048);
-            strcat(buffer, "LayerBreak=1913760\x0D\x0A");
+            strcat(buffer, layerbreakstring);
+            strcat(buffer, "\x0D\x0A");
             if (strlen(shortisofilename)) strcat(buffer, shortisofilename);
             else strcat(buffer, isofilename);
             strcat(buffer, "\x0D\x0A");
             // write buffer contents to the file
             initcheckwrite();
-            if (checkwriteandprinterrors(buffer, 1, strlen(buffer), dvdfile, 0, 0, dvdfilename, "creating .dvd file") != 0) return 1;
+            if (checkwriteandprinterrors(buffer, 1, strlen(buffer), dvdfile, 0, 0, dvdfilename, "Creating .dvd file") != 0) return 1;
             donecheckwrite(dvdfilename);
             color(green);
             printf("%s was created%s%s", dvdfilename, newline, newline);
@@ -5105,7 +6453,7 @@ long long getfilesize(FILE *fp) {
   return lastoffset;
 }
 
-// returns a random number between x and y
+// returns a random number from x to y
 int randomnumber(int x, int y) {
     // initialize random number generator
     srand(time(NULL));
@@ -5267,7 +6615,7 @@ FILE *openstealthfile(char *stealthfilename, char *localdir, char *webdir, int t
     FILE *stealthfile = NULL;
     char fullpath[2048];
     if (type == STEALTH_FILE || type == SMALL_VIDEO_FILE || type == GIANT_VIDEO_FILE || localonly || stayoffline) goto checklocally;
-    else goto checkonline;  // check for updated inis, ss files or ap25 files
+    else goto checkonline;  // check for updated inis, ss files or topology files
     checklocally:
     // look for the stealth file locally
     #ifdef WIN32
@@ -5312,15 +6660,18 @@ FILE *openstealthfile(char *stealthfilename, char *localdir, char *webdir, int t
         char progressdata[13 + strlen(stealthfilename)];
         sprintf(progressdata, "Downloading %s", stealthfilename);
         curl_easy_reset(curl);
-        if (type == SS_FILE || type == STEALTH_FILE || type == SMALL_VIDEO_FILE || type == AP25_BIN_FILE) {
-            // gzip actually increases bandwidth usage for very small files like xex inis or ap25 hash files, and not really worth it for ss/xex inis due to small bandwidth savings and increased latency
-            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing all supported encodings is sent.
+        if (type == SS_FILE || type == SS_FILE_OK_IF_MISSING || type == STEALTH_FILE || type == SMALL_VIDEO_FILE || type == TOP_BIN_FILE) {
+            // gzip actually increases bandwidth usage for very small files like xex inis or topology hash files, and not really worth it for
+            // ss+xex inis due to small bandwidth savings and increased latency
+            curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing
+                                                           // all supported encodings is sent.
         }
         curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
         curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
         curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended and we don't want to retrieve the error page as a file)
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended or something and we don't
+                                                       // want to retrieve the error page as a file)
         curl_easy_setopt(curl, CURLOPT_URL, fullurl);
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
         curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
@@ -5356,29 +6707,44 @@ FILE *openstealthfile(char *stealthfilename, char *localdir, char *webdir, int t
         if (res != CURLE_OK) {  // error occurred
             if (res == CURLE_HTTP_RETURNED_ERROR) {
                 if (strstr(curlerrorbuffer, "404") != NULL) {
-                    if (type == XEX_INI) {  // verified xex.ini that may or may not exist
+                    if (type == XEX_INI) {
+                        // verified xex.ini that may or may not exist
                         color(yellow);
                         printf("%sThere is no verified rip of Xex CRC %08lX in the online database%s", sp5, xex_crc32, newline);
                     }
-                    else if (type == SSXEX_INI) {  // verified ss+xex.ini that may or may not exist
+                    else if (type == SSXEX_INI) {
+                        // verified ss+xex.ini that may or may not exist
                         color(normal);
                         printf("%sThere is no verified rip of this Xex/SS combination in the online database%s", sp5, newline);
                     }
-                    else if (type == SSXEX_INI_FROM_XEX_INI) {  // verifed ss+xex.ini where the ss is taken from an existing xex.ini and the ss+xex.ini should definitely exist unless the user is doing stupid things or we screwed up the db somehow
+                    else if (type == SSXEX_INI_FROM_XEX_INI) {
+                        // verifed ss+xex.ini where the ss is taken from an existing xex.ini and the ss+xex.ini should definitely exist unless
+                        // the user is doing stupid things or we screwed up the db somehow
                         color(yellow);
                         printf("%sThe verified ini for this Xex/SS combination is missing from the online db%s", sp5, newline);
                     }
-                    else if (type == UNVERIFIED_INI) {  // means we're about to do an autoupload and we're looking at the existing unverified inis to see if any of them are an exact match to ours so we don't waste our time entering details for an upload that will be rejected
+                    else if (type == UNVERIFIED_INI) {
+                        // means we're about to do an autoupload and we're looking at the existing unverified inis to see if any of them are an
+                        // exact match to ours so we don't waste our time entering details for an upload that will be rejected
                         color(normal);
                         printf("%sThere are no duplicate uploads to worry about%s", sp5, newline);
                     }
-                    else if (type == SMALL_VIDEO_FILE || type == SS_FILE || type == STEALTH_FILE || type == AP25_BIN_FILE) {  // video.iso or pfi/dmi/ss/ap25.bin - should be there unless the ini we're using (and/or the stealth files it references) have been purged from the db for some reason... or maybe the user is putting his own inis in our StealthFiles folder
+                    else if (type == SMALL_VIDEO_FILE || type == SS_FILE || type == STEALTH_FILE || type == TOP_BIN_FILE) {
+                        // video.iso or pfi/dmi/ss/top.bin - should be there unless the ini we're using (and/or the stealth files it references)
+                        // have been purged from the db for some reason... or maybe the user is putting his own inis in our StealthFiles folder
                         color(yellow);
                         printf("%s%s is missing from the online database%s", sp5, stealthfilename, newline);
                     }
-                    else if (type == AP25_HASH_FILE) {  // ap25.sha1 file that is looked for when a game has the ap25 media flag set or media id matches the list updatable through abgx360.dat
+                    else if (type == SS_FILE_OK_IF_MISSING) {
+                        // we are just checking to see if an ss.bin exists in the db
+                        color(normal);
+                        printf("%s%s is not in the online database yet%s", sp5, stealthfilename, newline);
+                    }
+                    else if (type == TOP_HASH_FILE) {
+                        // top.sha1 file that is looked for when a game has the ap25 media flag set or media/title/disc profile id matches
+                        // the lists updatable through abgx360.dat
                         color(yellow);
-                        printf("%sThere is no AP25 replay sector for this game in the online database yet%s", sp5, newline);
+                        printf("%sThere is no topology data for this game in the online database yet%s", sp5, newline);
                     }
                 }
                 else if ((strstr(curlerrorbuffer, "403") != NULL) || (strstr(curlerrorbuffer, "401") != NULL)) {
@@ -5408,7 +6774,8 @@ FILE *openstealthfile(char *stealthfilename, char *localdir, char *webdir, int t
         }
         color(normal);
         
-        stealthfile = fopen(fullpath, "rb");
+        if (type == SS_FILE_OK_IF_MISSING && res != CURLE_OK) stealthfile = NULL;  // we were just checking to see if an ss.bin exists in the db
+        else stealthfile = fopen(fullpath, "rb");
     }
   return stealthfile;
 }
@@ -5481,12 +6848,14 @@ int trytowritestealthfile(const void *ptr, size_t size, size_t nmemb, FILE *stre
     if (fwrite(ptr, size, nmemb, stream) < nmemb) {
         charsprinted = 0;
         writeerrorstotal = 0;
-        printstderr = true; color(yellow);
+        printstderr = true;
+        color(yellow);
         for (i=0;i<readretries;i++) {
             writeerrorstotal++;
             resetstderr();
             charsprinted = fprintf(stderr, "ERROR: Write error while writing %s [%lu retries]", filename, writeerrorstotal);
             if (fseeko(stream, offset, SEEK_SET) != 0) {
+                printstderr = false;
                 printseekerror(filename, "Writing stealth file");
               return 1;
             }
@@ -5508,13 +6877,15 @@ int trytowritestealthfile(const void *ptr, size_t size, size_t nmemb, FILE *stre
 
 void initcheckread() {
     charsprinted = 0;
-    readerrorstotal = 0; readerrorsrecovered = 0;
+    readerrorstotal = 0;
+    readerrorsrecovered = 0;
   return;
 }
 
 void initcheckwrite() {
     charsprinted = 0;
-    writeerrorstotal = 0; writeerrorsrecovered = 0;
+    writeerrorstotal = 0;
+    writeerrorsrecovered = 0;
   return;
 }
 
@@ -5670,15 +7041,10 @@ int checkreadandprinterrors(void *ptr, size_t size, size_t nmemb, FILE *stream, 
             }
           return 0;
         #else
-            if (dvdarg) {
-                color(red);
-                printf("ERROR: WTF? WIN32 not defined but somehow dvdarg was set?%s", newline);
-                color(normal);
-                if (debug) printf("dvdarg = %d%s", dvdarg, newline);
-              return 1;
-            }
-            // todo: unix sector ripping
-            
+            color(red);
+            printf("ERROR: WTF? WIN32 not defined but somehow dvdarg was set?%s", newline);
+            color(normal);
+            if (debug) printf("dvdarg = %d%s", dvdarg, newline);
           return 1;
         #endif
     }
@@ -5772,7 +7138,7 @@ int checkwriteandprinterrors(const void *ptr, size_t size, size_t nmemb, FILE *s
 }
 
 int padzeros(FILE *stream, char *filename, long long startoffset, long long endoffset) {
-    unsigned long m;
+    unsigned long m, padzeros_sizeoverbuffer, padzeros_bufferremainder;
     if (startoffset == -1) return 1;  // seek error
     if (!writefile) {
         color(yellow);
@@ -5787,7 +7153,7 @@ int padzeros(FILE *stream, char *filename, long long startoffset, long long endo
           return 1;
         }
         initcheckwrite();
-        if (checkwriteandprinterrors(bigbuffer, 1, endoffset - startoffset, stream, 0, startoffset, filename, "padding") != 0) return 1;
+        if (checkwriteandprinterrors(bigbuffer, 1, endoffset - startoffset, stream, 0, startoffset, filename, "Padding") != 0) return 1;
         donecheckwrite(filename);
       return 0;
     }
@@ -5797,17 +7163,21 @@ int padzeros(FILE *stream, char *filename, long long startoffset, long long endo
             printseekerror(filename, "Padding");
           return 1;
         }
-        if (debug) {
-            printf("startoffset = %"LL"d, endoffset = %"LL"d\n", startoffset, endoffset);
-            printf("(endoffset - startoffset) / BIGBUF_SIZE = %"LL"d\n", (endoffset - startoffset) / BIGBUF_SIZE);
-            printf("BIGBUF_SIZE = %d\n", BIGBUF_SIZE);                
-        }
         initcheckwrite();
-        for (m=0; m < (unsigned long) ((endoffset - startoffset) / BIGBUF_SIZE); m++) {
-            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, startoffset, filename, "padding") != 0) return 1;
+        padzeros_sizeoverbuffer =  (unsigned long) ((endoffset - startoffset) / BIGBUF_SIZE);
+        padzeros_bufferremainder = (unsigned long) ((endoffset - startoffset) % BIGBUF_SIZE);
+        if (debug) {
+            printf("padzeros -- startoffset = %"LL"d, endoffset = %"LL"d%s", startoffset, endoffset, newline);
+            printf("padzeros_sizeoverbuffer = %lu%s", padzeros_sizeoverbuffer, newline);
+            printf("padzeros_bufferremainder = %lu%s", padzeros_bufferremainder, newline);
         }
-        if ((endoffset - startoffset) % BIGBUF_SIZE != 0) {
-            if (checkwriteandprinterrors(bigbuffer, 1, (endoffset - startoffset) % BIGBUF_SIZE, stream, 0, ftello(stream), filename, "padding") != 0) return 1;
+        for (m=0;m<padzeros_sizeoverbuffer;m++) {
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, startoffset,
+                                         filename, "Padding") != 0) return 1;
+        }
+        if (padzeros_bufferremainder) {
+            if (checkwriteandprinterrors(bigbuffer, 1, padzeros_bufferremainder, stream, 0, endoffset - padzeros_bufferremainder,
+                                         filename, "Padding") != 0) return 1;
         }
         donecheckwrite(filename);
       return 0;
@@ -5824,21 +7194,13 @@ void printseekerror(char *filename, char *action) {
 
 int rebuildiso(char *filename) {
     int i;
-    unsigned long m;
+    unsigned long m, n;
     if (debug) printf("rebuildiso - filename: %s%s", filename, newline);
     if (isotoosmall) {
         fprintf(stderr, "\n");
         color(red);
-        printf("ERROR: ISO filesize is too small, Rebuilding was aborted!%s", newline);
+        printf("ERROR: ISO size is too small, Rebuilding was aborted!%s", newline);
         color(normal);
-      return 1;
-    }
-    if (BIGBUF_SIZE < 32768) {
-        fprintf(stderr, "\n");
-        color(red);
-        printf("ERROR: BIGBUF_SIZE was less than 32 KB... oops! Rebuilding was aborted!%s", newline);
-        color(normal);
-        if (debug) printf("BIGBUF_SIZE = %u%s", BIGBUF_SIZE, newline);
       return 1;
     }
     if (!writefile) {
@@ -5847,15 +7209,26 @@ int rebuildiso(char *filename) {
         color(normal);
       return 1;
     }
-    #ifdef WIN32
-        unsigned long startmsecs = 0;
-        unsigned long endmsecs;
-    #endif
-    long long freespace, freespacerequired;
-    if (rebuildlowspace) {  // minimal disk space usage method
+    long long freespace, freespacerequired, targetfilesize, gamepartitionsize;
+    unsigned long long gamestartoffset;
+    if (xgd3) {
+        gamepartitionsize = 8662351872LL;
+        gamestartoffset = 0x2080000;
+    }
+    else {
+        gamepartitionsize = 7307001856LL;
+        gamestartoffset = 0xFD90000;
+    }
+    targetfilesize = gamepartitionsize + gamestartoffset;
+    if (debug) printf("BIGBUF_SIZE = %u%s"
+                      "gamepartitionsize = %"LL"d%s"
+                      "gamestartoffset = 0x%"LL"X%s"
+                      "targetfilesize = %"LL"d%s",
+                      BIGBUF_SIZE, newline, gamepartitionsize, newline, gamestartoffset, newline, targetfilesize, newline);
+    if (rebuildlowspace) {  // minimal disk space usage rebuilding method
         long long startingfilesize = getfilesize(fp);
         if (startingfilesize == -1) return 1;  // seek error
-        freespacerequired = 7572881408LL - startingfilesize;
+        freespacerequired = targetfilesize - startingfilesize;
         if (debug) printf("freespacerequired: %"LL"d Bytes, startingfilesize = %"LL"d Bytes%s", freespacerequired, startingfilesize, newline);
         if (freespacerequired > 0) {
             // check that we have enough space
@@ -5870,88 +7243,160 @@ int rebuildiso(char *filename) {
               return 1;
             }
         }
-        // extend or truncate filesize to 7572881408 bytes
-        if (dotruncate(filename, startingfilesize, 7572881408LL, true) != 0) return 1;
-        // start shifting all of the data down 265879552 bytes to make room for the video partition
-        #ifdef WIN32
-            if (debug || testing) {
-                startmsecs = GetTickCount();
-            }
-        #endif
+        if (startingfilesize != targetfilesize) {
+            // extend or truncate the iso to targetfilesize bytes
+            if (dotruncate(filename, startingfilesize, targetfilesize, true) != 0) return 1;
+        }
+        // start shifting all of the data down gamestartoffset bytes to make room for the L0 video partition and stealth files
         initcheckread();
         initcheckwrite();
         memset(bigbuffer, 0, BIGBUF_SIZE);
-        long long blockreadoffset = 7307001856LL;
-        // 7307001856 / 265879552 = 27.482
-        for (i=0;i<27;i++) {
-            blockreadoffset -= 265879552;
-            // 265879552 / 32768 = 8114
-            for (m=0;m<8114;m++) {
-                if (fseeko(fp, blockreadoffset + (m * 32768), SEEK_SET) != 0) {
+        long long blockreadoffset = gamepartitionsize;
+        unsigned long major_iterations           = (unsigned long) (gamepartitionsize / gamestartoffset);
+        unsigned long major_iterations_remainder = (unsigned long) (gamepartitionsize % gamestartoffset);
+        unsigned long minor_iterations           = (unsigned long) (gamestartoffset / BIGBUF_SIZE);
+        unsigned long minor_iterations_remainder = (unsigned long) (gamestartoffset % BIGBUF_SIZE);
+        if (debug) printf("major_iterations = %lu%s"
+                          "major_iterations_remainder = %lu%s"
+                          "minor_iterations = %lu%s"
+                          "minor_iterations_remainder = %lu%s",
+                          major_iterations, newline, major_iterations_remainder, newline,
+                          minor_iterations, newline, minor_iterations_remainder, newline);
+        for (m=0;m<major_iterations;m++) {
+            blockreadoffset -= gamestartoffset;
+            n = 0;  // just making sure in case this doesn't get set by the for loop if minor_iterations == 0
+            for (n=0;n<minor_iterations;n++) {
+                if (fseeko(fp, blockreadoffset + (n * BIGBUF_SIZE), SEEK_SET) != 0) {
                     printf("%s", newline);
                     printseekerror(filename, "Rebuilding");
                   return 1;
                 }
-                if (checkreadandprinterrors(bigbuffer, 1, 32768, fp, 0, blockreadoffset + (m * 32768), filename, "rebuilding") != 0) return 1;
-                // 265879552 - 32768 = 265846784
-                if (fseeko(fp, 265846784, SEEK_CUR) != 0) {
+                if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, 0, blockreadoffset + (n * BIGBUF_SIZE),
+                                            filename, "Rebuilding") != 0) return 1;
+                // use SEEK_CUR to seek ahead gamestartoffset bytes
+                // (subtracting BIGBUF_SIZE because we just advanced the position by BIGBUF_SIZE bytes by doing the read)
+                // but don't bother seeking if gamestartoffset happens to be equal to BIGBUF_SIZE
+                // btw, we wouldn't get here if gamestartoffset was less than BIGBUF_SIZE (minor_iterations would be 0)
+                if (gamestartoffset > BIGBUF_SIZE && fseeko(fp, gamestartoffset - BIGBUF_SIZE, SEEK_CUR) != 0) {
                     printf("%s", newline);
                     printseekerror(filename, "Rebuilding");
                   return 1;
                 }
-                if (checkwriteandprinterrors(bigbuffer, 1, 32768, fp, 0, blockreadoffset + (m * 32768) + 265846784, filename, "rebuilding") != 0) return 1;
-                // 7307001856 / 32768 = 222992
-                if (((i * 8114) + m) % 2230 == 0) {
+                if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, 0, blockreadoffset + (n * BIGBUF_SIZE) + gamestartoffset,
+                                             filename, "Rebuilding") != 0) return 1;
+                if (gamepartitionsize / BIGBUF_SIZE >= 100 && (m * minor_iterations + n) % (gamepartitionsize / BIGBUF_SIZE / 100) == 0) {
                     resetstderr();
-                    charsprinted = fprintf(stderr, "%lu%% done", ((i * 8114) + m) * 100 / 222992);
+                    charsprinted = fprintf(stderr, "%"LL"u%% done", (long long) (m * minor_iterations + n) * 100 / (gamepartitionsize / BIGBUF_SIZE));
+                }
+            }
+            if (minor_iterations_remainder) {
+                if (fseeko(fp, blockreadoffset + (n * BIGBUF_SIZE), SEEK_SET) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkreadandprinterrors(bigbuffer, 1, minor_iterations_remainder, fp, 0, blockreadoffset + (n * BIGBUF_SIZE),
+                                            filename, "Rebuilding") != 0) return 1;
+                // use SEEK_CUR to seek ahead gamestartoffset bytes
+                // (subtracting minor_iterations_remainder because we just advanced the position by
+                // minor_iterations_remainder bytes by doing the read)
+                // but don't bother seeking if gamestartoffset happens to be equal to minor_iterations_remainder
+                // btw, it is impossible for gamestartoffset to be less than minor_iterations_remainder:
+                // for all X [gamestartoffset] % Y [BIGBUF_SIZE] = Z [minor_iterations_remainder], Z must be <= X
+                if (gamestartoffset > minor_iterations_remainder &&
+                    fseeko(fp, gamestartoffset - minor_iterations_remainder, SEEK_CUR) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkwriteandprinterrors(bigbuffer, 1, minor_iterations_remainder, fp, 0, blockreadoffset + (n * BIGBUF_SIZE) + gamestartoffset,
+                                             filename, "Rebuilding") != 0) return 1;
+                if (minor_iterations == 0 && gamepartitionsize / minor_iterations_remainder >= 100 &&
+                    m % (gamepartitionsize / minor_iterations_remainder / 100) == 0) {
+                    // there are no minor_iterations, so show progress here since it won't be indicated above
+                    resetstderr();
+                    charsprinted = fprintf(stderr, "%"LL"u%% done", (long long) m * 100 / (gamepartitionsize / minor_iterations_remainder));
                 }
             }
         }
-        // 7307001856 - (27 * 265879552) = 128253952
-        // 128253952 / 32768 = 3914
-        for (m=0;m<3914;m++) {
-            if (fseeko(fp, m * 32768, SEEK_SET) != 0) {
-                printf("%s", newline);
-                printseekerror(filename, "Rebuilding");
-              return 1;
+        if (major_iterations_remainder) {
+            unsigned long major_iterations_remainder_sizeoverbuffer  = major_iterations_remainder / BIGBUF_SIZE;
+            unsigned long major_iterations_remainder_bufferremainder = major_iterations_remainder % BIGBUF_SIZE;
+            if (debug) printf("major_iterations_remainder_sizeoverbuffer = %lu%s"
+                              "major_iterations_remainder_bufferremainder = %lu%s",
+                              major_iterations_remainder_sizeoverbuffer, newline, major_iterations_remainder_bufferremainder, newline);
+            m = 0;  // just making sure in case this doesn't get set by the for loop if major_iterations_remainder_sizeoverbuffer == 0
+            for (m=0;m<major_iterations_remainder_sizeoverbuffer;m++) {
+                if (fseeko(fp, m * BIGBUF_SIZE, SEEK_SET) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, 0, m * BIGBUF_SIZE,
+                                            filename, "Rebuilding") != 0) return 1;
+                // use SEEK_CUR to seek ahead gamestartoffset bytes
+                // (subtracting BIGBUF_SIZE because we just advanced the position by BIGBUF_SIZE bytes by doing the read)
+                // btw, we wouldn't get here if gamestartoffset was less than or equal to BIGBUF_SIZE:
+                // major_iterations_remainder_sizeoverbuffer must be > 0, so
+                // major_iterations_remainder must be > BIGBUF_SIZE, so
+                // (gamepartitionsize % gamestartoffset) must be > BIGBUF_SIZE, and
+                // for all X [gamepartitionsize] % Y [gamestartoffset] > Z [BIGBUF_SIZE], Y must be > Z
+                if (fseeko(fp, gamestartoffset - BIGBUF_SIZE, SEEK_CUR) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, 0, m * BIGBUF_SIZE + gamestartoffset,
+                                             filename, "Rebuilding") != 0) return 1;
+                if (gamepartitionsize / BIGBUF_SIZE >= 100 &&
+                    (major_iterations * minor_iterations + m) % (gamepartitionsize / BIGBUF_SIZE / 100) == 0) {
+                    resetstderr();
+                    charsprinted = fprintf(stderr, "%"LL"u%% done", (long long) (major_iterations * minor_iterations + m) * 100 / (gamepartitionsize / BIGBUF_SIZE));
+                }
             }
-            if (checkreadandprinterrors(bigbuffer, 1, 32768, fp, 0, m * 32768, filename, "rebuilding") != 0) return 1;
-            if (fseeko(fp, 265846784, SEEK_CUR) != 0) {
-                printf("%s", newline);
-                printseekerror(filename, "Rebuilding");
-              return 1;
-            }
-            if (checkwriteandprinterrors(bigbuffer, 1, 32768, fp, 0, m * 32768 + 265846784, filename, "rebuilding") != 0) return 1;
-            if (((27 * 8114) + m) % 2230 == 0) {
-                resetstderr();
-                charsprinted = fprintf(stderr, "%lu%% done", ((27 * 8114) + m) * 100 / 222992);
+            if (major_iterations_remainder_bufferremainder) {
+                if (fseeko(fp, m * BIGBUF_SIZE, SEEK_SET) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkreadandprinterrors(bigbuffer, 1, major_iterations_remainder_bufferremainder, fp, 0, m * BIGBUF_SIZE,
+                                            filename, "Rebuilding") != 0) return 1;
+                // use SEEK_CUR to seek ahead gamestartoffset bytes
+                // (subtracting major_iterations_remainder_bufferremainder because we just advanced the position by
+                // major_iterations_remainder_bufferremainder bytes by doing the read)
+                // btw, we wouldn't get here if gamestartoffset was less than or equal to major_iterations_remainder_bufferremainder:
+                // for all X [gamepartitionsize] % Y [gamestartoffset] % Z [BIGBUF_SIZE] = T [major_iterations_remainder_bufferremainder],
+                // Y must be > T
+                if (fseeko(fp, gamestartoffset - major_iterations_remainder_bufferremainder, SEEK_CUR) != 0) {
+                    printf("%s", newline);
+                    printseekerror(filename, "Rebuilding");
+                  return 1;
+                }
+                if (checkwriteandprinterrors(bigbuffer, 1, major_iterations_remainder_bufferremainder, fp, 0, m * BIGBUF_SIZE + gamestartoffset,
+                                             filename, "Rebuilding") != 0) return 1;
             }
         }
         clearstderr();
         charsprinted = fprintf(stderr, "Done\n");
         donecheckread(filename);
         donecheckwrite(filename);
-        video = 0xFD90000LL;
-        #ifdef WIN32
-            if (debug || testing) {
-                endmsecs = GetTickCount();
-                printf("%lu seconds elapsed%s", (endmsecs - startmsecs) / 1000, newline);
-            }
-        #endif
-        fprintf(stderr, "Padding Video... ");
-        // erase everything except the game data
-        if (padzeros(fp, filename, 0, 0xFD90000LL) != 0) return 1;
+        // set video (game partition offset) now that the iso is rebuilt
+        video = gamestartoffset;
+        // clear everything before the game partition
+        fprintf(stderr, "Padding Game Data... ");
+        if (padzeros(fp, filename, 0, gamestartoffset) != 0) return 1;
         fprintf(stderr, "Done\n");
       return 0;
     }
-    else {  // default method
-        // check that we have at least 7572881408 bytes of free space
+    else {  // default rebuilding method
+        // check that we have at least targetfilesize bytes of free space
         freespace = freediskspace(filename);
-        if (freespace < 7572881408LL) {
+        if (freespace < targetfilesize) {
             color(red);
             printf("ERROR: Not enough free disk space! You need to free at least %"LL"d MB "
                    "on the partition your ISO is located. Rebuilding was aborted!%s",
-                    (7572881408LL - freespace) / 1048576, newline);
+                    (targetfilesize - freespace) / 1048576, newline);
             color(normal);
           return 1;
         }
@@ -5962,125 +7407,102 @@ int rebuildiso(char *filename) {
         char rebuiltisofilename[strlen(filename) + 16];
         memset(rebuiltisofilename, 0, strlen(filename) + 16);
         strcpy(rebuiltisofilename, filename);
-        // check for *.xxx
-        if (memcmp(rebuiltisofilename+(strlen(filename) - 4), ".", 1) == 0) {
-            // case insensitive check for *.iso
-            if (strncasecmp(rebuiltisofilename+(strlen(filename) - 4), ".iso", 4) == 0) {
-                // original iso named *.iso, rebuilt iso named *.[smallest integer possible].iso until a unique filename is found
-                i = 1;
-                while (i < 4001) {
-                    memset(randomext, 0, 16);
-                    sprintf(randomext, ".%d.iso", i);
-                    memcpy(rebuiltisofilename+(strlen(filename) - 4), randomext, strlen(randomext));
-                    rebuiltisofile = fopen(rebuiltisofilename, "rb");
-                    if (rebuiltisofile == NULL) break;
-                    i++;
+        int nametype = 3;  // if the original filename is too short to check for *.???, we'll just use nametype 3 (see below)
+        if (strlen(filename) > 4) {
+            // see what the original iso filename looks like
+            if (memcmp(rebuiltisofilename+(strlen(filename) - 4), ".", 1) == 0) {
+                if (strncasecmp(rebuiltisofilename+(strlen(filename) - 4), ".iso", 4) == 0) {
+                    // original iso named *.iso (case insensitive)
+                    // rebuilt iso will be named *.[smallest integer possible].iso until a unique filename is found
+                    nametype = 1;
                 }
-                if (i == 4001) {
-                    color(red);
-                    printf("ERROR: Failed to find a unique filename for the rebuilt ISO! (4,000 filenames tried) Perhaps you should try using a different Rebuilding Method...%s", newline);
-                    color(normal);
-                  return 1;
+                else {
+                    // original iso named *.??? (where "???" is not "iso")
+                    // rebuilt iso will be named *.iso (preferred) or *.[smallest integer possible].iso until a unique filename is found
+                    nametype = 2;
                 }
             }
             else {
-                // original iso named *.???, rebuilt iso named *.iso (preferred) or *.[smallest integer possible].iso until a unique filename is found
-                memcpy(rebuiltisofilename+(strlen(filename) - 4), ".iso", 4);
-                rebuiltisofile = fopen(rebuiltisofilename, "rb");
-                i = 1;
-                while (rebuiltisofile != NULL && i < 4001) {
-                    memset(randomext, 0, 16);
-                    sprintf(randomext, ".%d.iso", i);
-                    memcpy(rebuiltisofilename+(strlen(filename) - 4), randomext, strlen(randomext));
-                    rebuiltisofile = fopen(rebuiltisofilename, "rb");
-                    if (rebuiltisofile == NULL) break;
-                    i++;
-                }
-                if (i == 4001) {
-                    color(red);
-                    printf("ERROR: Failed to find a unique filename for the rebuilt ISO! (4,000 filenames tried) Perhaps you should try using a different Rebuilding Method...%s", newline);
-                    color(normal);
-                  return 1;
-                }
+                // original iso named *
+                // rebuilt iso will be named *.iso (preferred) or *.[smallest integer possible].iso until a unique filename is found
+                nametype = 3;
             }
         }
-        else {
-            // original iso named *, rebuilt iso named *.iso (preferred) or *.[smallest integer possible].iso until a unique filename is found
-            strcat(rebuiltisofilename, ".iso");
+        i = 1;
+        if      (nametype == 2) memcpy(rebuiltisofilename+(strlen(filename) - 4), ".iso", 4);
+        else if (nametype == 3) strcat(rebuiltisofilename, ".iso");
+        if (nametype == 2 || nametype == 3) {
             rebuiltisofile = fopen(rebuiltisofilename, "rb");
-            i = 1;
-            while (rebuiltisofile != NULL && i < 4001) {
-                memset(randomext, 0, 16);
-                sprintf(randomext, ".%d.iso", i);
-                memcpy(rebuiltisofilename+(strlen(filename)), randomext, strlen(randomext));
-                rebuiltisofile = fopen(rebuiltisofilename, "rb");
-                if (rebuiltisofile == NULL) break;
-                i++;
-            }
-            if (i == 4001) {
-                color(red);
-                printf("ERROR: Failed to find a unique filename for the rebuilt ISO! (4,000 filenames tried) Perhaps you should try using a different Rebuilding Method...%s", newline);
-                color(normal);
-              return 1;
-            }
+            if (rebuiltisofile == NULL) goto opentargetfile;
         }
+        while (i < 4001) {
+            memset(randomext, 0, 16);
+            sprintf(randomext, ".%d.iso", i);
+            memcpy(rebuiltisofilename+( nametype == 3 ? strlen(filename) : (strlen(filename) - 4) ), randomext, strlen(randomext));
+            rebuiltisofile = fopen(rebuiltisofilename, "rb");
+            if (rebuiltisofile == NULL) goto opentargetfile;
+            i++;
+        }
+        color(red);
+        printf("ERROR: Failed to find a unique filename for the rebuilt ISO! (4,000 filenames\n"
+               "tried) Perhaps you should try using a different Rebuilding Method...%s", newline);
+        color(normal);
+      return 1;
         
+        opentargetfile:
         rebuiltisofile = fopen(rebuiltisofilename, "wb+");
+        if (debug) printf("rebuiltisofilename: %s%s", rebuiltisofilename, newline);
         if (rebuiltisofile == NULL) {
             color(red);
             printf("ERROR: Failed to create a new file for the rebuilt ISO! (%s)%s", strerror(errno), newline);
             color(normal);
           return 1;
         }
-        if (debug) printf("rebuiltisofilename: %s%s", rebuiltisofilename, newline);
-        #ifdef WIN32
-            if (debug || testing) {
-                startmsecs = GetTickCount();
-            }
-        #endif
         memset(bigbuffer, 0, BIGBUF_SIZE);
-        
-        // extend rebuilt iso filesize to 265879553 bytes
-        if (dotruncate(rebuiltisofilename, 0, 265879553LL, true) != 0) return 1;
-        
-        // seek to 265879552 (0xFD90000) in rebuiltisofile
-        if (fseeko(rebuiltisofile, 265879552LL, SEEK_SET) != 0) {
+        // extend rebuilt iso filesize to [gamestartoffset + 1] bytes
+        if (dotruncate(rebuiltisofilename, 0, gamestartoffset + 1, true) != 0) return 1;
+        // seek to gamestartoffset in rebuiltisofile
+        if (fseeko(rebuiltisofile, gamestartoffset, SEEK_SET) != 0) {
             printf("%s", newline);
             printseekerror(rebuiltisofilename, "Rebuilding");
           return 1;
         }
-        
         // seek to 0 in input file
         if (fseeko(fp, 0, SEEK_SET) != 0) {
             printf("%s", newline);
             printseekerror(filename, "Rebuilding");
           return 1;
         }
-        
-        // copy first 7307001856 bytes from input file to rebuiltisofile (make sure we checked to see if input file is too small)
-        // 7307001856 / 32768 = 222992
-        initcheckread(); initcheckwrite();
-        for (m=0;m<222992;m++) {
-            if (checkreadandprinterrors(bigbuffer, 1, 32768, fp, m, 0, filename, "rebuilding") != 0) return 1;
-            if (checkwriteandprinterrors(bigbuffer, 1, 32768, rebuiltisofile, m, 0xFD90000LL, rebuiltisofilename, "rebuilding") != 0) return 1;
-            if (m % 2230 == 0) {
+        // copy first gamepartitionsize bytes from input file to rebuiltisofile
+        initcheckread();
+        initcheckwrite();
+        sizeoverbuffer  = (unsigned long) (gamepartitionsize / BIGBUF_SIZE);
+        bufferremainder = (unsigned long) (gamepartitionsize % BIGBUF_SIZE);
+        for (m=0;m<sizeoverbuffer;m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0,
+                                        filename, "Rebuilding") != 0) return 1;
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, rebuiltisofile, m, gamestartoffset,
+                                         rebuiltisofilename, "Rebuilding") != 0) return 1;
+            if (sizeoverbuffer >= 100 && m % (sizeoverbuffer / 100) == 0) {
                 resetstderr();
-                charsprinted = fprintf(stderr, "%lu%% done", (m) * 100 / 222992);
+                charsprinted = fprintf(stderr, "%lu%% done", m * 100 / sizeoverbuffer);
             }
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, gamepartitionsize - bufferremainder,
+                                        filename, "Rebuilding") != 0) return 1;
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, rebuiltisofile, 0, gamestartoffset + gamepartitionsize - bufferremainder,
+                                         rebuiltisofilename, "Rebuilding") != 0) return 1;
         }
         clearstderr();
         charsprinted = fprintf(stderr, "Done\n");
-        donecheckread(filename); donecheckwrite(filename);
-        video = 0xFD90000LL;
-        #ifdef WIN32
-            if (debug || testing) {
-                endmsecs = GetTickCount();
-                printf("%lu seconds elapsed%s", (endmsecs - startmsecs) / 1000, newline);
-            }
-        #endif
-        fprintf(stderr, "Padding Video... ");
-        // erase everything except the game data
-        if (padzeros(rebuiltisofile, rebuiltisofilename, 0, 0xFD90000LL) != 0) return 1;
+        donecheckread(filename);
+        donecheckwrite(rebuiltisofilename);
+        // set video (game partition offset) now that the iso is rebuilt
+        video = gamestartoffset;
+        // clear everything before the game partition
+        fprintf(stderr, "Padding Game Data... ");
+        if (padzeros(rebuiltisofile, rebuiltisofilename, 0, gamestartoffset) != 0) return 1;
         fprintf(stderr, "Done\n");
         
         void *unusedptr;
@@ -6094,7 +7516,9 @@ int rebuildiso(char *filename) {
                 color(normal);
                 unusedptr = realloc(isofilename, (strlen(rebuiltisofilename) + 1) * sizeof(char));
                 if (isofilename == NULL) {
-                    color(red); printf("ERROR: Failed to reallocate memory for isofilename! Game over man... Game over!%s", newline); color(normal);
+                    color(red);
+                    printf("ERROR: Failed to reallocate memory for isofilename! Game over man... Game over!%s", newline);
+                    color(normal);
                   exit(1);
                 }
                 strcpy(isofilename, rebuiltisofilename);
@@ -6123,7 +7547,8 @@ int rebuildiso(char *filename) {
             if (rename(rebuiltisofilename, filename)) {
                 color(yellow);
                 printf("ERROR: Renaming %s%s%s to %s%s%s failed! (%s) However, your ISO has been successfully rebuilt to %s%s%s%s",
-                       quotation, rebuiltisofilename, quotation, quotation, filename, quotation, strerror(errno), quotation, rebuiltisofilename, quotation, newline);
+                       quotation, rebuiltisofilename, quotation, quotation, filename, quotation, strerror(errno),
+                       quotation, rebuiltisofilename, quotation, newline);
                 color(normal);
                 unusedptr = realloc(isofilename, (strlen(rebuiltisofilename) + 1) * sizeof(char));
                 if (isofilename == NULL) {
@@ -6205,13 +7630,788 @@ int rebuildiso(char *filename) {
                    rebuiltisofilename, newline);
             color(normal);
         }
-        if (debug) printf("rebuildiso r0 - isofilename: %s, strlen(isofilename) = %u, filename: %s, strlen(filename) = %u%s", isofilename, (unsigned int) strlen(isofilename), filename, (unsigned int) strlen(filename), newline);
+        if (debug) printf("rebuildiso r0 - isofilename: %s, strlen(isofilename) = %u, filename: %s, strlen(filename) = %u%s",
+                          isofilename, (unsigned int) strlen(isofilename), filename, (unsigned int) strlen(filename), newline);
       return 0;
     }
 }
 
-int doautoupload(char *argv[]) {
+bool isanxbox360rippingdrive(char *drivename, bool ap25supportneeded) {
+    if (strlen(drivename) >= 14 && memcmp(drivename, "PLDS DG-16D2S ", 14) == 0) return true;
+    if (strlen(drivename) >= 13 && memcmp(drivename, "PBDS VAD6038-", 13) == 0) return true;
+    if (strlen(drivename) >= 17 && memcmp(drivename, "SATA DVD-ROM 6243", 17) == 0) return true;  // 2006 benq version (untested)
+    if (strlen(drivename) >= 26 && memcmp(drivename, "TSSTcorp DVD-ROM TS-H943A ", 26) == 0) {
+        if (ap25supportneeded) {
+            if (strstr(drivename, "SAMANTHA") != NULL) return true;
+            return false;
+        }
+        return true;
+    }
+  return false;
+}
+
+int doextendedsscr(char *forced_cr_drive, unsigned char *median_ss) {
+    // scan for the game in all recognized ripping drives automatically if forced_cr_drive is NULL (and we're in windows),
+    // otherwise try to use the specified drive
+    int i, j, num_angles;
+    // structs for angles and their deviations so that we can qsort by deviations and have angles sorted as well
+    struct angledev anglesanddevs1[NUM_SS_CR_SAMPLES], anglesanddevs2[NUM_SS_CR_SAMPLES], anglesanddevs3[NUM_SS_CR_SAMPLES], anglesanddevs4[NUM_SS_CR_SAMPLES];
+    unsigned int medianangle[4] = {360,360,360,360};
+    #ifdef WIN32
+        if (forced_cr_drive != NULL) {
+            // forced_cr_drive should be a single letter A-Z (or a-z)
+            if (strlen(forced_cr_drive) != 1) {
+                color(red);
+                printf("ERROR: Enter only one character for the DVD drive letter! Example: --orig D%s", newline);
+                color(normal);
+              return 1;
+            }
+            if ( (forced_cr_drive[0] >= 0x0 && forced_cr_drive[0] < 'A') ||
+                 (forced_cr_drive[0] > 'Z' && forced_cr_drive[0] < 'a') ||
+                 (forced_cr_drive[0] > 'z') ) {
+                color(red);
+                printf("ERROR: DVD drive letter is invalid! Enter A-Z only! Example: --orig D%s", newline);
+                color(normal);
+              return 1;
+            }
+        }
+    #endif
+    if (ss_num_angles != 4 || ss_num_targets != 4) {
+        color(yellow);
+        printf("ERROR: Unable to do extended C/R because this version of abgx360 expects to see exactly 4 angle challenge/response types%s", newline);
+        color(normal);
+      return 1;
+    }
+    if (ss_staticcrc32 == 0) {
+        color(red);
+        printf("ERROR: Failed to get the 'static' SS CRC for some reason%s", newline);
+        color(normal);
+      return 1;
+    }
+    
+    // is this necessary? (used in dvdarg routine)
+    writefile = false;
+    fp = NULL;
+    
+    unsigned char ssbuffer[2048], ss_overwritten[2048], ss_overwritten2[2048];
+    unsigned long ssbuffer_crc32, ss_overwritten2_staticcrc32;
+    char temp[4];
+    
+    if (forced_cr_drive == NULL) {
+        #ifdef WIN32
+            // search for the drive that has the game
+            startsearching:
+            printf("Automatically searching for the original disc...%s", newline);
+            char cDrive;
+            char driveletter[2];
+            char rootpath[4];
+            char pathforcreatefile[7];
+            unsigned int drivetype;
+            for (cDrive='A';cDrive<='Z';cDrive++) {
+                sprintf(rootpath, "%c:\\", cDrive);
+                sprintf(pathforcreatefile, "\\\\.\\%c:", cDrive);
+                // check the drive type
+                drivetype = GetDriveType(rootpath);
+                if (drivetype == DRIVE_CDROM) {
+                    sprintf(driveletter, "%c", cDrive);
+                    // open the handle for exclusive access (other apps ripping from the disc could screw up the angle measurements)
+                    // and get drive name and fw version
+                    if (opendeviceandgetname(driveletter, true, true)) {
+                        // an error message was probably just printed so reassure the user that
+                        // we're still searching for the disc (unless we just tried drive Z)
+                        if (cDrive != 'Z') printf("Trying next drive...%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    if (debug) printf("Checking drive: %s%s", isofilename, newline);
+                    // check that this is a recognized ripping drive
+                    if (!isanxbox360rippingdrive(isofilename, false)) {
+                        if (debug) printf("This is not a recognized Xbox 360 ripping drive%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    // get size of media in bytes
+                    fpfilesize = getdisccapacity(true, false);  // if the latter is false then it won't print errors unless --debug
+                    if (fpfilesize == -1LL) {
+                        closedeviceifopen();
+                      continue;
+                    }
+                    if (debug) printf("Media Size: %"LL"d Bytes%s", fpfilesize, newline);
+                    // try and read the ss without c/r data
+                    memset(ssbuffer, 0, 2048);
+                    memset(cdb, 0, 12);
+                    cdb[0]  = 0xAD;
+                    cdb[2]  = 0xFF;
+                    cdb[3]  = 0x02;
+                    cdb[4]  = 0xFD;
+                    cdb[5]  = 0xFF;
+                    cdb[6]  = 0xFE;
+                    cdb[8]  = 0x08;
+                    cdb[11] = 0xC0;
+                    if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+                        if (debug) printf("Error reading SS (%s)%s", cdberror(sense), newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    memcpy(ss_overwritten, ssbuffer, 2048);
+                    // calculate SS crc32 with the replay table set as 0xFF
+                    memset(ss_overwritten+ss_replay_table_offset, 0xFF, ss_replay_table_length);
+                    ssbuffer_crc32 = crc32(0, ss_overwritten, 2048);
+                    if (debug) {
+                        printf("ssbuffer_crc32 = %08lX%s"
+                               "ss_crc32 %s = %08lX%s", ssbuffer_crc32, newline, sp5, ss_crc32, newline);
+                        hexdump(ss_overwritten, 0, 2048);
+                    }
+                    // make sure this ripped ss matches the one in our iso
+                    if (ssbuffer_crc32 != ss_crc32) {
+                        if (debug) printf("SS from original disc does not match the SS in this ISO%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    // we found the disc (or at least a disc with the same ss as our iso)
+                    goto foundoriginaldisc;
+                }
+            }
+            // if we got here then we couldn't find the original disc
+            printstderr = true;
+            color(cyan);
+            fprintf(stderr, "Failed to find the original disc!\n\n"
+                   
+                   "If you still have the original disc, please make sure that it is inserted into\n"
+                   "a ripping drive and that the drive has been detected and assigned a drive\n"
+                   "letter by your computer.\n\n"
+                   
+                   "You must also close all other applications (such as XBC) that have a read/write\n"
+                   "handle open on the drive. In order to ensure accurate angle measurements,\n"
+                   "extended C/R must be able to open the drive for exclusive access.\n");
+            color(normal);
+            closedeviceifopen();
+            // ask the user if they want to try again
+            memset(temp, 0, 4);
+            color(white);
+            while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+                fprintf(stderr, "\nWould you like to try searching for the original disc again? (y/n) ");
+                readstdin(temp, 4);
+            }
+            color(normal);
+            printstderr = false;
+            if (temp[0] == 'y' || temp[0] == 'Y') {
+                goto startsearching;
+            }
+          return 1;
+          
+            foundoriginaldisc:
+            if (verbose) {
+                printf("%sUsing Drive: ", newline);
+                if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf("%s", newline);  // just looks nicer in a cli window this way
+                printf("%s%s", isofilename, newline);
+                printf("Media Size:");
+                if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf(" ");
+                else printf("%s ", sp1);  // just looks nicer this way
+                printf("%"LL"d Bytes%s%s", fpfilesize, newline, newline);
+            }
+        #else
+            // todo: support auto detection of drives on non-WIN32
+            color(yellow);
+            printf("ERROR: You did not supply the device name of the drive which contains the original disc! Example: --orig /dev/cdrom%s", newline);
+            color(normal);
+          return 1;
+        #endif
+    }
+    else {
+        // see if forced_cr_drive contains the game
+        // open the handle/fd for exclusive access (other apps ripping from the disc could screw up the angle measurements)
+        // and get drive name and fw version
+        startforced:
+        if (opendeviceandgetname(forced_cr_drive, true, true)) {
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        if (verbose) {
+            printf("%sUsing Drive: ", newline);
+            if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf("%s", newline);  // just looks nicer in a cli window this way
+            printf("%s%s", isofilename, newline);
+        }
+        // check that this is a recognized ripping drive
+        if (!isanxbox360rippingdrive(isofilename, false)) {
+            color(yellow);
+            printf("This is not a recognized Xbox 360 ripping drive! Extended C/R aborted!%s", newline);
+            color(normal);
+            closedeviceifopen();
+            // they must have entered the wrong drive letter/name, so no point in prompting to retry
+          return 1;
+        }
+        // get size of media in bytes
+        fpfilesize = getdisccapacity(true, true);
+        if (fpfilesize == -1LL) {
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        if (verbose) {
+            printf("Media Size:");
+            if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf(" ");
+            else printf("%s ", sp1);  // just looks nicer this way
+            printf("%"LL"d Bytes%s%s", fpfilesize, newline, newline);
+        }
+        // try and read the ss without c/r data
+        memset(ssbuffer, 0, 2048);
+        memset(cdb, 0, 12);
+        cdb[0]  = 0xAD;
+        cdb[2]  = 0xFF;
+        cdb[3]  = 0x02;
+        cdb[4]  = 0xFD;
+        cdb[5]  = 0xFF;
+        cdb[6]  = 0xFE;
+        cdb[8]  = 0x08;
+        cdb[11] = 0xC0;
+        if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+            color(yellow);
+            printf("Error reading SS (%s)%s", cdberror(sense), newline);
+            color(normal);
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        memcpy(ss_overwritten, ssbuffer, 2048);
+        // calculate SS crc32 with the replay table set as 0xFF
+        memset(ss_overwritten+ss_replay_table_offset, 0xFF, ss_replay_table_length);
+        ssbuffer_crc32 = crc32(0, ss_overwritten, 2048);
+        if (debug) {
+            printf("ssbuffer_crc32 = %08lX%s"
+                   "ss_crc32 %s = %08lX%s", ssbuffer_crc32, newline, sp5, ss_crc32, newline);
+            hexdump(ss_overwritten, 0, 2048);
+        }
+        // make sure this ripped ss matches the one in our iso
+        if (ssbuffer_crc32 != ss_crc32) {
+            color(yellow);
+            printf("SS from original disc does not match the SS in this ISO!%s", newline);
+            color(normal);
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        // we found the disc (or at least a disc with the same ss as our iso)
+        goto setspeed;
+        
+        prompttoretryforced:
+        printstderr = true;
+        color(cyan);
+        fprintf(stderr, "Failed to find the original disc!\n\n"
+               
+               "If you still have the original disc, please make sure that it is inserted into\n"
+               "the drive you specified and that the drive has been detected by your computer.\n\n"
+               
+               "You must also close all other applications that have a read/write handle open\n"
+               "on the drive. In order to ensure accurate angle measurements, extended C/R must\n"
+               "be able to open the drive for exclusive access.\n");
+        color(normal);
+        closedeviceifopen();
+        // ask the user if they want to try again
+        memset(temp, 0, 4);
+        color(white);
+        while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+            fprintf(stderr, "\nWould you like to try using drive \"%s\" again? (y/n) ", forced_cr_drive);
+            readstdin(temp, 4);
+        }
+        color(normal);
+        printstderr = false;
+        if (temp[0] == 'y' || temp[0] == 'Y') {
+            goto startforced;
+        }
+      return 1;
+    }
+    
+    // set drive speed to 5x
+    setspeed:
+    setdvdspeed(5, false);
+    
+    memset(cdb, 0, 12);
+    cdb[0]  = 0xAD;
+    cdb[2]  = 0xFF;
+    cdb[3]  = 0x02;
+    cdb[4]  = 0xFD;
+    cdb[5]  = 0xFF;
+    cdb[6]  = 0xFE;
+    cdb[8]  = 0x08;
+    cdb[11] = 0xC0;
+    
+    // do SS c/r up to NUM_SS_CR_SAMPLES*2 times and exit when NUM_SS_CR_SAMPLES valid ss's have been ripped
+    printf("Doing %d iterations of SS C/R now. Each measurement's angle and deviation from\n"
+           "the CCRT target angles will be displayed. Deviations greater than %d will be\n"
+           "displayed in red and deviations from %d to %d will be displayed in yellow. A\n"
+           "few outlying measurements (in red or yellow) should not affect the median very\n"
+           "much (if at all), but if you see a lot of them, you should probably press\n"
+           "Ctrl+C when it asks you to enter values for the ini file. If in doubt, don't\n"
+           "hesitate to ask Seacrest. This should only take about 2 minutes.%s%s",
+           NUM_SS_CR_SAMPLES, SS_HIGH_ANGLE, SS_MEDIUM_ANGLE + 1, SS_HIGH_ANGLE, newline, newline);
+    bool error_doing_cr = false;
+    bool checking_static_crc = true;
+    num_angles = 0;
+    for (i=0;i<NUM_SS_CR_SAMPLES*2;i++) {
+        // we should just give up if the number of good samples so far plus the number
+        // of iterations left is less than the number of valid samples required
+        if (num_angles + (NUM_SS_CR_SAMPLES*2 - i) < NUM_SS_CR_SAMPLES) break;
+        error_doing_cr = false;
+        for (j=0;j<21;j++) {
+            if (checking_static_crc) {
+                // do all response types except for types 0xF0 - 0xFF, 0x00 and 0xE0
+                if (ss_overwritten[0x730+j*9] < 0xF0 && ss_overwritten[0x730+j*9] != 0x00 && ss_overwritten[0x730+j*9] != 0xE0) {
+                    cdb[10] = ss_overwritten[0x730+j*9+1];
+                    if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+                        color(yellow);
+                        printf("Error doing C/R (%s)%s", cdberror(sense), newline);
+                        color(normal);
+                        error_doing_cr = true;
+                      break;
+                    }
+                }
+            }
+            else {
+                // just do response types 0x05 and 0x07 (angles)
+                if (ss_overwritten[0x730+j*9] == 0x05 || ss_overwritten[0x730+j*9] == 0x07) {
+                    cdb[10] = ss_overwritten[0x730+j*9+1];
+                    if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+                        color(yellow);
+                        printf("Error doing C/R (%s)%s", cdberror(sense), newline);
+                        color(normal);
+                        error_doing_cr = true;
+                      break;
+                    }
+                }
+            }
+        }
+        if (error_doing_cr) continue;
+        
+        if (checking_static_crc) {
+            // check the static crc to make sure other c/r data hasn't changed
+            memcpy(ss_overwritten2, ssbuffer, 2048);
+            memset(ss_overwritten2+ss_angleaddresses[0],   0xFF, 2);  // v1
+            memset(ss_overwritten2+ss_angleaddresses[0]+3, 0xFF, 2);  // v2
+            memset(ss_overwritten2+ss_angleaddresses[1],   0xFF, 2);  // v1
+            memset(ss_overwritten2+ss_angleaddresses[1]+3, 0xFF, 2);  // v2
+            memset(ss_overwritten2+ss_angleaddresses[2],   0xFF, 2);  // v1
+            memset(ss_overwritten2+ss_angleaddresses[2]+3, 0xFF, 2);  // v2
+            memset(ss_overwritten2+ss_angleaddresses[3],   0xFF, 2);  // v1
+            memset(ss_overwritten2+ss_angleaddresses[3]+3, 0xFF, 2);  // v2
+            ss_overwritten2_staticcrc32 = crc32(0, ss_overwritten2, 2048);
+            if (debug) printf("ss_overwritten2_staticcrc32 = %08lX%s", ss_overwritten2_staticcrc32, newline);
+            if (ss_overwritten2_staticcrc32 != ss_staticcrc32) {
+                color(yellow);
+                printf("Error: Looks like this drive returned different (probably bad) C/R data%s", newline);
+                color(normal);
+                if (debug) hexdump(ss_overwritten2+ss_replay_table_offset, 0, ss_replay_table_length);
+              continue;
+            }
+            else {
+                checking_static_crc = false;
+                memcpy(median_ss, ssbuffer, 2048);  // this ss will be used for writing in the median angles
+            }
+        }
+        else {
+            // make sure CD matches for the angle response types (drive errors usually cause 00000000 CD and 0 degree angles)
+            if (memcmp(median_ss+ss_angleaddresses[0]-4, ssbuffer+ss_angleaddresses[0]-4, 4) != 0 ||
+                memcmp(median_ss+ss_angleaddresses[1]-4, ssbuffer+ss_angleaddresses[1]-4, 4) != 0 ||
+                memcmp(median_ss+ss_angleaddresses[2]-4, ssbuffer+ss_angleaddresses[2]-4, 4) != 0 ||
+                memcmp(median_ss+ss_angleaddresses[3]-4, ssbuffer+ss_angleaddresses[3]-4, 4) != 0) {
+                color(yellow);
+                printf("Error: CD does not match for one or more angle response types%s", newline);
+                color(normal);
+                if (debug) hexdump(ssbuffer+ss_replay_table_offset, 0, ss_replay_table_length);
+              continue;
+            }
+        }
+        
+        // the ss v1 angles should match the ss v2 angles
+        if (memcmp(ssbuffer+ss_angleaddresses[0], ssbuffer+ss_angleaddresses[0]+3, 2) != 0 ||
+            memcmp(ssbuffer+ss_angleaddresses[1], ssbuffer+ss_angleaddresses[1]+3, 2) != 0 ||
+            memcmp(ssbuffer+ss_angleaddresses[2], ssbuffer+ss_angleaddresses[2]+3, 2) != 0 ||
+            memcmp(ssbuffer+ss_angleaddresses[3], ssbuffer+ss_angleaddresses[3]+3, 2) != 0) {
+            color(yellow);
+            printf("Error: One or more SS v1 angles do not match their SS v2 counterparts%s", newline);
+            color(normal);
+            if (debug) hexdump(ssbuffer+ss_replay_table_offset, 0, ss_replay_table_length);
+          continue;
+        }
+        
+        // store the angles
+        anglesanddevs1[num_angles].angle  = (unsigned int) ssbuffer[ss_angleaddresses[0]+1] << 8;
+        anglesanddevs1[num_angles].angle |= (unsigned int) ssbuffer[ss_angleaddresses[0]];
+        anglesanddevs2[num_angles].angle  = (unsigned int) ssbuffer[ss_angleaddresses[1]+1] << 8;
+        anglesanddevs2[num_angles].angle |= (unsigned int) ssbuffer[ss_angleaddresses[1]];
+        anglesanddevs3[num_angles].angle  = (unsigned int) ssbuffer[ss_angleaddresses[2]+1] << 8;
+        anglesanddevs3[num_angles].angle |= (unsigned int) ssbuffer[ss_angleaddresses[2]];
+        anglesanddevs4[num_angles].angle  = (unsigned int) ssbuffer[ss_angleaddresses[3]+1] << 8;
+        anglesanddevs4[num_angles].angle |= (unsigned int) ssbuffer[ss_angleaddresses[3]];
+        // make sure angles are valid
+        if (anglesanddevs1[num_angles].angle > 359 ||
+            anglesanddevs2[num_angles].angle > 359 ||
+            anglesanddevs3[num_angles].angle > 359 ||
+            anglesanddevs4[num_angles].angle > 359) {
+            color(yellow);
+            printf("One or more angle responses (%u, %u, %u, %u) are invalid!%s",
+                   anglesanddevs1[num_angles].angle, anglesanddevs2[num_angles].angle,
+                   anglesanddevs3[num_angles].angle, anglesanddevs4[num_angles].angle, newline);
+            color(normal);
+          continue;
+        }
+        // calculate and store deviations from the iso's ss ccrt targets
+        anglesanddevs1[num_angles].dev = getangledeviation(anglesanddevs1[num_angles].angle, (int) ss_targets[0]);
+        anglesanddevs2[num_angles].dev = getangledeviation(anglesanddevs2[num_angles].angle, (int) ss_targets[1]);
+        anglesanddevs3[num_angles].dev = getangledeviation(anglesanddevs3[num_angles].angle, (int) ss_targets[2]);
+        anglesanddevs4[num_angles].dev = getangledeviation(anglesanddevs4[num_angles].angle, (int) ss_targets[3]);
+        // make sure deviation is within tolerance
+        // todo: use tolerance value from CCRT instead of hardcoded SS_TOLERANCE
+        if (abs(anglesanddevs1[num_angles].dev) >= SS_TOLERANCE ||
+            abs(anglesanddevs2[num_angles].dev) >= SS_TOLERANCE ||
+            abs(anglesanddevs3[num_angles].dev) >= SS_TOLERANCE ||
+            abs(anglesanddevs4[num_angles].dev) >= SS_TOLERANCE) {
+            color(yellow);
+            printf("One or more angle responses (%u = %+d, %u = %+d, %u = %+d, %u = %+d)\nare out of tolerance (%d)!%s",
+                   anglesanddevs1[num_angles].angle, anglesanddevs1[num_angles].dev,
+                   anglesanddevs2[num_angles].angle, anglesanddevs2[num_angles].dev,
+                   anglesanddevs3[num_angles].angle, anglesanddevs3[num_angles].dev,
+                   anglesanddevs4[num_angles].angle, anglesanddevs4[num_angles].dev,
+                   SS_TOLERANCE, newline);
+            color(normal);
+          continue;
+        }
+        // display angles and their deviations with outliers highlighted
+        if (num_angles + 1 < 10) printf("%s", sp1);
+        printf("%d/%d: %s", num_angles + 1, NUM_SS_CR_SAMPLES, sp5);
+        
+        if      (abs(anglesanddevs1[num_angles].dev) > SS_HIGH_ANGLE)   color(red);
+        else if (abs(anglesanddevs1[num_angles].dev) > SS_MEDIUM_ANGLE) color(yellow);
+        if      (anglesanddevs1[num_angles].angle < 10)  printf("%s", sp2);
+        else if (anglesanddevs1[num_angles].angle < 100) printf("%s", sp1);
+        printf("%u ", anglesanddevs1[num_angles].angle);
+        if      (abs(anglesanddevs1[num_angles].dev) < 10)  printf("%s", sp2);
+        else if (abs(anglesanddevs1[num_angles].dev) < 100) printf("%s", sp1);
+        if (anglesanddevs1[num_angles].dev == 0) printf("%s", sp12);
+        else                                     printf("%+d %s", anglesanddevs1[num_angles].dev, sp9);
+        if (abs(anglesanddevs1[num_angles].dev) > SS_MEDIUM_ANGLE) color(normal);
+        
+        if      (abs(anglesanddevs2[num_angles].dev) > SS_HIGH_ANGLE)   color(red);
+        else if (abs(anglesanddevs2[num_angles].dev) > SS_MEDIUM_ANGLE) color(yellow);
+        if      (anglesanddevs2[num_angles].angle < 10)  printf("%s", sp2);
+        else if (anglesanddevs2[num_angles].angle < 100) printf("%s", sp1);
+        printf("%u ", anglesanddevs2[num_angles].angle);
+        if      (abs(anglesanddevs2[num_angles].dev) < 10)  printf("%s", sp2);
+        else if (abs(anglesanddevs2[num_angles].dev) < 100) printf("%s", sp1);
+        if (anglesanddevs2[num_angles].dev == 0) printf("%s", sp12);
+        else                                     printf("%+d %s", anglesanddevs2[num_angles].dev, sp9);
+        if (abs(anglesanddevs2[num_angles].dev) > SS_MEDIUM_ANGLE) color(normal);
+        
+        if      (abs(anglesanddevs3[num_angles].dev) > SS_HIGH_ANGLE)   color(red);
+        else if (abs(anglesanddevs3[num_angles].dev) > SS_MEDIUM_ANGLE) color(yellow);
+        if      (anglesanddevs3[num_angles].angle < 10)  printf("%s", sp2);
+        else if (anglesanddevs3[num_angles].angle < 100) printf("%s", sp1);
+        printf("%u ", anglesanddevs3[num_angles].angle);
+        if      (abs(anglesanddevs3[num_angles].dev) < 10)  printf("%s", sp2);
+        else if (abs(anglesanddevs3[num_angles].dev) < 100) printf("%s", sp1);
+        if (anglesanddevs3[num_angles].dev == 0) printf("%s", sp12);
+        else                                     printf("%+d %s", anglesanddevs3[num_angles].dev, sp9);
+        if (abs(anglesanddevs3[num_angles].dev) > SS_MEDIUM_ANGLE) color(normal);
+        
+        if      (abs(anglesanddevs4[num_angles].dev) > SS_HIGH_ANGLE)   color(red);
+        else if (abs(anglesanddevs4[num_angles].dev) > SS_MEDIUM_ANGLE) color(yellow);
+        if      (anglesanddevs4[num_angles].angle < 10)  printf("%s", sp2);
+        else if (anglesanddevs4[num_angles].angle < 100) printf("%s", sp1);
+        printf("%u ", anglesanddevs4[num_angles].angle);
+        if      (abs(anglesanddevs4[num_angles].dev) < 10)  printf("%s", sp2);
+        else if (abs(anglesanddevs4[num_angles].dev) < 100) printf("%s", sp1);
+        if (anglesanddevs4[num_angles].dev != 0) printf("%+d", anglesanddevs4[num_angles].dev);
+        if (abs(anglesanddevs4[num_angles].dev) > SS_MEDIUM_ANGLE) color(normal);
+        
+        printf("%s", newline);
+        num_angles++;
+        if (num_angles == NUM_SS_CR_SAMPLES) break;
+    }
+    if (debug) printf("num_angles = %d%s", num_angles, newline);
+    if (num_angles != NUM_SS_CR_SAMPLES) {
+        color(red);
+        printf("ERROR: Looks like there were too many errors to get a large enough sample size%s", newline);
+        color(normal);
+        closedeviceifopen();
+      return 1;
+    }
+    
+    // close exclusive access handle so other apps can access the drive now
+    closedeviceifopen();
+    
+    // sort angles by their deviations (it would be very difficult to sort just the angles [imagine sorting 0,1,358,359 for example])
+    qsort(anglesanddevs1, NUM_SS_CR_SAMPLES, sizeof(struct angledev), cmpangledev);
+    qsort(anglesanddevs2, NUM_SS_CR_SAMPLES, sizeof(struct angledev), cmpangledev);
+    qsort(anglesanddevs3, NUM_SS_CR_SAMPLES, sizeof(struct angledev), cmpangledev);
+    qsort(anglesanddevs4, NUM_SS_CR_SAMPLES, sizeof(struct angledev), cmpangledev);
+    
+    if (debug) {
+        printf("%sanglesanddevs1:%s", newline, newline);
+        for (i=0;i<num_angles;i++) {
+            if (i == NUM_SS_CR_SAMPLES/2) color(cyan);
+            printf("%2d: %3u %d%s", i+1, anglesanddevs1[i].angle, anglesanddevs1[i].dev, newline);
+            if (i == NUM_SS_CR_SAMPLES/2) color(normal);
+        }
+        printf("%sanglesanddevs2:%s", newline, newline);
+        for (i=0;i<num_angles;i++) {
+            if (i == NUM_SS_CR_SAMPLES/2) color(cyan);
+            printf("%2d: %3u %d%s", i+1, anglesanddevs2[i].angle, anglesanddevs2[i].dev, newline);
+            if (i == NUM_SS_CR_SAMPLES/2) color(normal);
+        }
+        printf("%sanglesanddevs3:%s", newline, newline);
+        for (i=0;i<num_angles;i++) {
+            if (i == NUM_SS_CR_SAMPLES/2) color(cyan);
+            printf("%2d: %3u %d%s", i+1, anglesanddevs3[i].angle, anglesanddevs3[i].dev, newline);
+            if (i == NUM_SS_CR_SAMPLES/2) color(normal);
+        }
+        printf("%sanglesanddevs4:%s", newline, newline);
+        for (i=0;i<num_angles;i++) {
+            if (i == NUM_SS_CR_SAMPLES/2) color(cyan);
+            printf("%2d: %3u %d%s", i+1, anglesanddevs4[i].angle, anglesanddevs4[i].dev, newline);
+            if (i == NUM_SS_CR_SAMPLES/2) color(normal);
+        }
+    }
+    
+    medianangle[0] = anglesanddevs1[NUM_SS_CR_SAMPLES/2].angle;
+    medianangle[1] = anglesanddevs2[NUM_SS_CR_SAMPLES/2].angle;
+    medianangle[2] = anglesanddevs3[NUM_SS_CR_SAMPLES/2].angle;
+    medianangle[3] = anglesanddevs4[NUM_SS_CR_SAMPLES/2].angle;
+    
+    // show median angles
+    printf("%sMedians: %s", newline, sp3);
+    
+    if      (abs(anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev) > SS_HIGH_ANGLE)   color(red);
+    else if (abs(anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(yellow);
+    if      (anglesanddevs1[NUM_SS_CR_SAMPLES/2].angle < 10)  printf("%s", sp2);
+    else if (anglesanddevs1[NUM_SS_CR_SAMPLES/2].angle < 100) printf("%s", sp1);
+    printf("%u ", anglesanddevs1[NUM_SS_CR_SAMPLES/2].angle);
+    if      (abs(anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev) < 10)  printf("%s", sp2);
+    else if (abs(anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev) < 100) printf("%s", sp1);
+    if (anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev == 0) printf("%s", sp12);
+    else                                              printf("%+d %s", anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev, sp9);
+    if (abs(anglesanddevs1[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(normal);
+    
+    if      (abs(anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev) > SS_HIGH_ANGLE)   color(red);
+    else if (abs(anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(yellow);
+    if      (anglesanddevs2[NUM_SS_CR_SAMPLES/2].angle < 10)  printf("%s", sp2);
+    else if (anglesanddevs2[NUM_SS_CR_SAMPLES/2].angle < 100) printf("%s", sp1);
+    printf("%u ", anglesanddevs2[NUM_SS_CR_SAMPLES/2].angle);
+    if      (abs(anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev) < 10)  printf("%s", sp2);
+    else if (abs(anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev) < 100) printf("%s", sp1);
+    if (anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev == 0) printf("%s", sp12);
+    else                                              printf("%+d %s", anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev, sp9);
+    if (abs(anglesanddevs2[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(normal);
+    
+    if      (abs(anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev) > SS_HIGH_ANGLE)   color(red);
+    else if (abs(anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(yellow);
+    if      (anglesanddevs3[NUM_SS_CR_SAMPLES/2].angle < 10)  printf("%s", sp2);
+    else if (anglesanddevs3[NUM_SS_CR_SAMPLES/2].angle < 100) printf("%s", sp1);
+    printf("%u ", anglesanddevs3[NUM_SS_CR_SAMPLES/2].angle);
+    if      (abs(anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev) < 10)  printf("%s", sp2);
+    else if (abs(anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev) < 100) printf("%s", sp1);
+    if (anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev == 0) printf("%s", sp12);
+    else                                              printf("%+d %s", anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev, sp9);
+    if (abs(anglesanddevs3[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(normal);
+    
+    if      (abs(anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev) > SS_HIGH_ANGLE)   color(red);
+    else if (abs(anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(yellow);
+    if      (anglesanddevs4[NUM_SS_CR_SAMPLES/2].angle < 10)  printf("%s", sp2);
+    else if (anglesanddevs4[NUM_SS_CR_SAMPLES/2].angle < 100) printf("%s", sp1);
+    printf("%u ", anglesanddevs4[NUM_SS_CR_SAMPLES/2].angle);
+    if      (abs(anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev) < 10)  printf("%s", sp2);
+    else if (abs(anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev) < 100) printf("%s", sp1);
+    if (anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev != 0) printf("%+d", anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev);
+    if (abs(anglesanddevs4[NUM_SS_CR_SAMPLES/2].dev) > SS_MEDIUM_ANGLE) color(normal);
+    
+    printf("%s", newline);
+    
+    // check for invalid angles (initialized to 360 in case they don't get set)
+    if (medianangle[0] > 359 || medianangle[1] > 359 || medianangle[2] > 359 || medianangle[3] > 359) {
+        color(red);
+        printf("ERROR: One or more median angles are invalid or could not be found%s", newline);
+        color(normal);
+      return 1;
+    }
+    
+    // show bar graph with median angles and outliers highlighted
+    unsigned int lastprintedangle;
+    struct angledev *anglesanddevsj;
+    for (j=1;j<=4;j++) {
+        if (j>1) printf("%s", newline);
+        lastprintedangle = 360;
+        if      (j == 1) anglesanddevsj = anglesanddevs1;
+        else if (j == 2) anglesanddevsj = anglesanddevs2;
+        else if (j == 3) anglesanddevsj = anglesanddevs3;
+        else             anglesanddevsj = anglesanddevs4;
+        for (i=0;i<NUM_SS_CR_SAMPLES;i++) {
+            if (lastprintedangle != anglesanddevsj[i].angle) {
+                printf("%s", newline);
+                if      (abs(anglesanddevsj[i].dev) > SS_HIGH_ANGLE)   color(red);
+                else if (abs(anglesanddevsj[i].dev) > SS_MEDIUM_ANGLE) color(yellow);
+                if (anglesanddevsj[i].angle == anglesanddevsj[NUM_SS_CR_SAMPLES/2].angle) {
+                    if (abs(anglesanddevsj[i].dev) <= SS_MEDIUM_ANGLE) color(cyan);
+                    printf("Angle %d: ", j);
+                }
+                else printf("%s", sp9);
+                if      (anglesanddevsj[i].angle < 10)  printf("%s", sp2);
+                else if (anglesanddevsj[i].angle < 100) printf("%s", sp1);
+                printf("%u ", anglesanddevsj[i].angle);
+                if      (abs(anglesanddevsj[i].dev) < 10)  printf("%s", sp2);
+                else if (abs(anglesanddevsj[i].dev) < 100) printf("%s", sp1);
+                if (anglesanddevsj[i].dev == 0) printf("%s0 %s", sp1, sp1);
+                else                            printf("%+d %s", anglesanddevsj[i].dev, sp1);
+                color(normal);
+                lastprintedangle = anglesanddevsj[i].angle;
+            }
+            if (i == NUM_SS_CR_SAMPLES/2) {
+                if      (abs(anglesanddevsj[i].dev) > SS_HIGH_ANGLE)   color(red);
+                else if (abs(anglesanddevsj[i].dev) > SS_MEDIUM_ANGLE) color(yellow);
+                else                                                   color(cyan);
+                printf("M");
+                color(normal);
+            }
+            else printf("%s", numbersign);
+        }
+    }
+    printf("%s", newline);
+    
+    median_ss[ss_angleaddresses[0]]   = (unsigned char)   (medianangle[0] & 0x000000FF);
+    median_ss[ss_angleaddresses[0]+1] = (unsigned char) ( (medianangle[0] & 0x0000FF00) >> 8);
+    median_ss[ss_angleaddresses[0]+3] = (unsigned char)   (medianangle[0] & 0x000000FF);
+    median_ss[ss_angleaddresses[0]+4] = (unsigned char) ( (medianangle[0] & 0x0000FF00) >> 8);
+    
+    median_ss[ss_angleaddresses[1]]   = (unsigned char)   (medianangle[1] & 0x000000FF);
+    median_ss[ss_angleaddresses[1]+1] = (unsigned char) ( (medianangle[1] & 0x0000FF00) >> 8);
+    median_ss[ss_angleaddresses[1]+3] = (unsigned char)   (medianangle[1] & 0x000000FF);
+    median_ss[ss_angleaddresses[1]+4] = (unsigned char) ( (medianangle[1] & 0x0000FF00) >> 8);
+    
+    median_ss[ss_angleaddresses[2]]   = (unsigned char)   (medianangle[2] & 0x000000FF);
+    median_ss[ss_angleaddresses[2]+1] = (unsigned char) ( (medianangle[2] & 0x0000FF00) >> 8);
+    median_ss[ss_angleaddresses[2]+3] = (unsigned char)   (medianangle[2] & 0x000000FF);
+    median_ss[ss_angleaddresses[2]+4] = (unsigned char) ( (medianangle[2] & 0x0000FF00) >> 8);
+    
+    median_ss[ss_angleaddresses[3]]   = (unsigned char)   (medianangle[3] & 0x000000FF);
+    median_ss[ss_angleaddresses[3]+1] = (unsigned char) ( (medianangle[3] & 0x0000FF00) >> 8);
+    median_ss[ss_angleaddresses[3]+3] = (unsigned char)   (medianangle[3] & 0x000000FF);
+    median_ss[ss_angleaddresses[3]+4] = (unsigned char) ( (medianangle[3] & 0x0000FF00) >> 8);
+    
+  return 0;
+}
+
+bool valid_ssv2_exists_in_db() {
+    char ssfilename[16];
+    FILE *ssfile = NULL;
+    int i;
+    bool delete_ss_and_return_false = false;
+    
+    // save the original global values so we can reset them after checkss()
+    // be sure to update this function (not just the part under this comment) if new global vars are used in checkss()
+    bool real_ss_stealthfailed =               ss_stealthfailed;
+    bool real_ss_stealthuncertain =            ss_stealthuncertain;
+    bool real_ss_foundtimestamp =              ss_foundtimestamp;
+    bool real_fixedss =                        fixedss;
+    bool real_drtfucked =                      drtfucked;
+    bool real_ssv2 =                           ssv2;
+    unsigned int real_ss_replay_table_offset = ss_replay_table_offset;
+    unsigned int real_ss_replay_table_length = ss_replay_table_length;
+    unsigned long real_ss_crc32 =              ss_crc32;
+    unsigned long real_ss_rawcrc32 =           ss_rawcrc32;
+    unsigned long long real_ss_authored =      ss_authored;
+    unsigned long real_ss_staticcrc32 =        ss_staticcrc32;
+    unsigned int real_ss_num_angles =          ss_num_angles;
+    unsigned int real_ss_num_targets =         ss_num_targets;
+    unsigned int real_ss_angleaddresses[4];
+    unsigned int real_ss_targets[4];
+    for (i=0;i<4;i++) {
+        real_ss_angleaddresses[i] = ss_angleaddresses[i];
+        real_ss_targets[i] =        ss_targets[i];
+    }
+    
+    memset(ssfilename, 0, 16);
+    sprintf(ssfilename, "SS_%08lX.bin", real_ss_crc32);
+    ssfile = openstealthfile(ssfilename, stealthdir, webstealthdir, SS_FILE_OK_IF_MISSING, "the online verified database");
+    if (ssfile == NULL) {
+      return false;
+    }
+    memset(ss, 0, 2048);
+    // make sure that ssfile is 2048 bytes before reading it
+    long long stealthfilesize = getfilesize(ssfile);
+    if (stealthfilesize == -1) {  // seek error
+        fclose(ssfile);
+      return false;
+    }
+    if (stealthfilesize != 2048) {
+        fclose(ssfile);
+        deletestealthfile(ssfilename, stealthdir, false);
+      return false;
+    }
+    if (trytoreadstealthfile(ss, 1, 2048, ssfile, ssfilename, 0) != 0) {
+        fclose(ssfile);
+        deletestealthfile(ssfilename, stealthdir, false);
+      return false;
+    }
+    fclose(ssfile);
+    if (getzeros(ss, 0, 2047) == 2048) {
+        // blank
+        deletestealthfile(ssfilename, stealthdir, false);
+      return false;
+    }
+    if (verbose) printf("%s", newline);
+    checkss();
+    if (ss_stealthfailed || ss_stealthuncertain) {
+        // ss failed stealth check against the xex
+        delete_ss_and_return_false = true;
+    }
+    if (real_ss_crc32 != ss_crc32) {
+        // file has the wrong crc
+        delete_ss_and_return_false = true;
+    }
+    ss_stealthfailed =       real_ss_stealthfailed;
+    ss_stealthuncertain =    real_ss_stealthuncertain;
+    ss_foundtimestamp =      real_ss_foundtimestamp;
+    fixedss =                real_fixedss;
+    drtfucked =              real_drtfucked;
+    ss_replay_table_offset = real_ss_replay_table_offset;
+    ss_replay_table_length = real_ss_replay_table_length;
+    ss_crc32 =               real_ss_crc32;
+    ss_rawcrc32 =            real_ss_rawcrc32;
+    ss_authored =            real_ss_authored;
+    ss_staticcrc32 =         real_ss_staticcrc32;
+    ss_num_angles =          real_ss_num_angles;
+    ss_num_targets =         real_ss_num_targets;
+    for (i=0;i<4;i++) {
+        ss_angleaddresses[i] = real_ss_angleaddresses[i];
+        ss_targets[i]        = real_ss_targets[i];
+    }
+    if (delete_ss_and_return_false) {
+        ssv2 = real_ssv2;
+        deletestealthfile(ssfilename, stealthdir, false);
+      return false;
+    }
+    else if (ssv2) {
+        ssv2 = real_ssv2;
+      return true;
+    }
+    else {
+        ssv2 = real_ssv2;
+      return false;
+    }
+}
+
+void printextendedsscrfailedmessage() {
+    printstderr = true;
+    color(yellow);
+    fprintf(stderr, "\nExtended C/R failed. If you still have the original disc, please insert it into\n"
+           "a ripping drive, press Ctrl+C on this window and launch abgx360 again. You will\n"
+           "need to close all other apps that have a read/write handle open on the drive.\n"
+           "If you no longer have the original, go ahead and continue with the upload.\n");
+    color(normal);
+    printstderr = false;
+  return;
+}
+
+int doautoupload(char *argv[], bool upload_ss_only) {
     int i, a;
+    bool have_median_ss = false;
+    char *drive_used_for_extended_cr = NULL;
+    unsigned char median_ss[2048];
     printf("%sStarting AutoUpload%s", newline, newline);
     if (xex_crc32 == 0 || ss_crc32 == 0 || ss_rawcrc32 == 0 || pfi_crc32 == 0 || dmi_crc32 == 0 || video_crc32 == 0 || videoL0_crc32 == 0 || videoL1_crc32 == 0) {
         color(yellow);
@@ -6238,20 +8438,123 @@ int doautoupload(char *argv[]) {
         }
         else {
             checkgamecrcnever = true;
-            gamecrcfailed = true;
+            if (!usercancelledgamecrc) gamecrcfailed = true;
         }
     }
     if (game_crc32 == 0) {
+        color(yellow);
         printf("Game partition CRC is required for AutoUpload, cannot continue%s", newline);
+        color(normal);
       return 1;
     }
-
-    // check for unverified inis with matching xex_crc32, ss_crc32, ss_rawcrc32, pfi_crc32, dmi_crc32, video_crc32, videoL0_crc32, videoL1_crc32, game_crc32
-    // if found, there is no point in bothering the user to upload a duplicate ini that will be rejected
-    printf("%sChecking to see if this upload is a duplicate and would be rejected%s", sp5, newline);
-    if (unverifiediniexists()) {
-        printf("An exact match already exists and is waiting to be verified, upload was aborted%s", newline);
-      return 1;
+    
+    if (!upload_ss_only) {
+        // check for unverified inis with matching xex_crc32, ss_crc32, ss_rawcrc32, pfi_crc32, dmi_crc32, video_crc32, videoL0_crc32, videoL1_crc32, game_crc32
+        // if found, there is no point in bothering the user to upload a duplicate ini that will be rejected
+        printf("%sChecking to see if this upload is a duplicate and would be rejected%s", sp5, newline);
+        if (unverifiediniexists()) {
+            printf("An exact match already exists and is waiting to be verified, upload was aborted%s", newline);
+          return 1;
+        }
+    }
+    
+    // todo: test this on non-WIN32
+    if (iso_has_ssv2) {
+        if (upload_ss_only) {
+            // iso is verified but there is no ssv2 in the db, so do a bunch of c/r to get the median angle deviations and upload that ss
+            printf("Doing extended SS C/R to get the most accurate angles...%s", newline);
+            #ifdef WIN32
+                HANDLE real_hDevice =                 hDevice;
+            #else
+                int real_fd =                         fd;
+                #if defined(__FreeBSD__)
+                    struct cam_device *real_cam_dev = cam_dev;
+                #endif
+            #endif
+            char *real_isofilename =                  isofilename;
+            bool real_writefile =                     writefile;
+            FILE *real_fp =                           fp;
+            long long real_fpfilesize =               fpfilesize;
+            bool real_drive_speed_needs_to_be_reset = drive_speed_needs_to_be_reset;
+            if (origarg) {  // origarg means the user supplied the drive letter (windows) or device name (other systems) of the drive they want to do c/r on
+                if (doextendedsscr(argv[origarg], median_ss) == 0) {
+                    have_median_ss = true;
+                    drive_used_for_extended_cr = isofilename;
+                }
+                else printextendedsscrfailedmessage();
+            }
+            else if (doextendedsscr(NULL, median_ss) == 0) {
+                // the drive with the game will be automatically searched for
+                have_median_ss = true;
+                drive_used_for_extended_cr = isofilename;
+            }
+            else printextendedsscrfailedmessage();
+            #ifdef WIN32
+                hDevice =                   real_hDevice;
+            #else
+                fd =                        real_fd;
+                #if defined(__FreeBSD__)
+                    cam_dev =               real_cam_dev;
+                #endif
+            #endif
+            isofilename =                   real_isofilename;
+            writefile =                     real_writefile;
+            fp =                            real_fp;
+            fpfilesize =                    real_fpfilesize;
+            drive_speed_needs_to_be_reset = real_drive_speed_needs_to_be_reset;
+        }
+        else {
+            // check and see if the existing ss in the db is v2
+            printf("%sChecking to see if the existing SS file in the db is SSv1...%s", newline, newline);
+            if (valid_ssv2_exists_in_db()) {
+                if (verbose) printf("%s", newline);
+                printf("A valid SSv2 already exists in the db, no point in doing extended SS C/R%s", newline);
+            }
+            else {
+                // iso is not verified and there is no ssv2 in the db, so do a bunch of c/r to get the median angle deviations and upload that ss
+                if (verbose) printf("%s", newline);
+                printf("Doing extended SS C/R to get the most accurate angles...%s", newline);
+                #ifdef WIN32
+                    HANDLE real_hDevice =                 hDevice;
+                #else
+                    int real_fd =                         fd;
+                    #if defined(__FreeBSD__)
+                        struct cam_device *real_cam_dev = cam_dev;
+                    #endif
+                #endif
+                char *real_isofilename =                  isofilename;
+                bool real_writefile =                     writefile;
+                FILE *real_fp =                           fp;
+                long long real_fpfilesize =               fpfilesize;
+                bool real_drive_speed_needs_to_be_reset = drive_speed_needs_to_be_reset;
+                if (origarg) {  // origarg means the user supplied the drive letter (windows) or device name (other systems) of the drive they want to do c/r on
+                    if (doextendedsscr(argv[origarg], median_ss) == 0) {
+                        have_median_ss = true;
+                        drive_used_for_extended_cr = isofilename;
+                    }
+                    else printextendedsscrfailedmessage();
+                }
+                else if (doextendedsscr(NULL, median_ss) == 0) {
+                    // the drive with the game will be automatically searched for
+                    have_median_ss = true;
+                    drive_used_for_extended_cr = isofilename;
+                }
+                else printextendedsscrfailedmessage();
+                #ifdef WIN32
+                    hDevice =                   real_hDevice;
+                #else
+                    fd =                        real_fd;
+                    #if defined(__FreeBSD__)
+                        cam_dev =               real_cam_dev;
+                    #endif
+                #endif
+                isofilename =                   real_isofilename;
+                writefile =                     real_writefile;
+                fp =                            real_fp;
+                fpfilesize =                    real_fpfilesize;
+                drive_speed_needs_to_be_reset = real_drive_speed_needs_to_be_reset;
+            }
+        }
     }
     
     #ifndef WIN32
@@ -6261,30 +8564,81 @@ int doautoupload(char *argv[]) {
     // get these values from the user
     char ini_discsource[14] = {0}, ini_gamename[151] = {0}, ini_gamertag[151] = {0}, ini_drivename[9] = {0}, ini_drivefw[30] = {0}, ini_notes[151] = {0}, ini_temp[4];
     
+    int num_times_entered = -1;
+    
+    startenteringdetails:
+    num_times_entered++;
+    
+    memset(ini_discsource, 0, 14);
+    memset(ini_gamename, 0, 151);
+    memset(ini_gamertag, 0, 151);
+    memset(ini_drivename, 0, 9);
+    memset(ini_drivefw, 0, 30);
+    memset(ini_notes, 0, 151);
+    
     printstderr = true;
     color(white);
     fprintf(stderr, "\nPlease enter values for the ini file. Press enter for the [default value].\n");
     color(normal);
     printstderr = false;
     
-    fprintf(stderr, "Enter Nickname [%s]: ", argv[autouploaduserarg]);
+    fprintf(stderr, "\nEnter Nickname [%s]: ", argv[autouploaduserarg]);
     readstdin(ini_gamertag, 151);
     if (!strlen(ini_gamertag)) strncpy(ini_gamertag, argv[autouploaduserarg], 150);
 
     if (foundgamename) {
-        fprintf(stderr, "Enter Game Name for %s [%s]: ", isofilename, gamename);
+        fprintf(stderr, "\nEnter Game Name for %s\n[%s]: ", isofilename, gamename);
         readstdin(ini_gamename, 151);
         if (!strlen(ini_gamename)) strcpy(ini_gamename, gamename);
     }
     else while (!strlen(ini_gamename)) {
-        fprintf(stderr, "Enter Game Name for %s: ", isofilename);
+        fprintf(stderr, "\nEnter Game Name for %s\n: ", isofilename);
         readstdin(ini_gamename, 151);
+    }
+    
+    if (have_median_ss && num_times_entered == 0 && drive_used_for_extended_cr != NULL) {
+        // automatically fill in some details if we recognize the drive and fw used during extended c/r
+        // (the user can still reject this info if they want and enter their own details on the next run through)
+        bool detailsfilled = false;
+        if (strlen(drive_used_for_extended_cr) > 34 &&
+            memcmp(drive_used_for_extended_cr, "PLDS DG-16D2S ", 14) == 0 &&
+            strstr(drive_used_for_extended_cr, "<LITEON-AP25V3.0         DG-16D2S>") != NULL) {
+            strcpy(ini_discsource, "Retail Disc");
+            strcpy(ini_drivename, "DG-16D2S");
+            strcpy(ini_drivefw, "iXtreme v3.0");
+            detailsfilled = true;
+        }
+        else if (strlen(drive_used_for_extended_cr) > 33 &&
+            memcmp(drive_used_for_extended_cr, "PBDS VAD6038-", 13) == 0 &&
+            strstr(drive_used_for_extended_cr, "<BenqAP25v3.0            VAD6038>") != NULL) {
+            strcpy(ini_discsource, "Retail Disc");
+            strcpy(ini_drivename, "VAD6038");
+            strcpy(ini_drivefw, "iXtreme v3.0");
+            detailsfilled = true;
+        }
+        else if (strlen(drive_used_for_extended_cr) > 34 &&
+            memcmp(drive_used_for_extended_cr, "TSSTcorp DVD-ROM TS-H943A ", 26) == 0 &&
+            strstr(drive_used_for_extended_cr, "<iXTREME1.6-SAMANTHA-1.0-TS-H943A>") != NULL) {
+            strcpy(ini_discsource, "Retail Disc");
+            strcpy(ini_drivename, "TS-H943A");
+            strcpy(ini_drivefw, "Samantha v1.0");
+            detailsfilled = true;
+        }
+        if (detailsfilled) {
+            fprintf(stderr, "\nDisc Source, Ripping Drive and Firmware Version have been automatically filled\n"
+                            "in based on the drive we just used for extended SS C/R\n");
+            goto enternotes;
+        }
     }
     
     i = 0;
     memset(ini_temp, 0, 4);
     while (i != 1 && i != 2 && i != 3) {
-        fprintf(stderr, "Enter Disc Source (1=Scene Release, 2=Other Release, 3=Retail Disc): ");
+        fprintf(stderr, "\nEnter Disc Source\n"
+                        "1=Scene Release\n"
+                        "2=Other Release\n"
+                        "3=Retail Disc\n"
+                        ": ");
         readstdin(ini_temp, 4);
         i = (int) strtol(ini_temp, NULL, 10);
     }
@@ -6301,15 +8655,32 @@ int doautoupload(char *argv[]) {
         i = 0;
         a = 0;
         memset(ini_temp, 0, 4);
-        fprintf(stderr, "Enter Ripping Drive (1=Unknown, 2=SH-D162C, 3=SH-D162D, 4=SH-D163A, 5=SH-D163B,\n"
-                        "6=TS-H943A, 7=GDR3120L, 8=VAD6038, 9=DG-16D2S, 0=Other) [1]: ");
+        fprintf(stderr, "\nEnter Ripping Drive\n"
+                        "1=Unknown\n"
+                        "2=Kreon....SH-D162C\n"
+                        "3=Kreon....SH-D162D\n"
+                        "4=Kreon....SH-D163A\n"
+                        "5=Kreon....SH-D163B\n"
+                        "6=Samsung..TS-H943A\n"
+                        "7=Hitachi..GDR3120L\n"
+                        "8=BenQ.....VAD6038\n"
+                        "9=Liteon...DG-16D2S\n"
+                        "0=Other\n"
+                        "[1]: ");
         readstdin(ini_temp, 4);
         i = (int) strtol(ini_temp, NULL, 10);
         memset(ini_temp, 0, 4);
         if (i == 2) {
             strcpy(ini_drivename, "SH-D162C");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=0.5, 3=0.60, 4=0.80, 5=0.81, 6=1.00,\n"
-                            "7=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=0.5\n"
+                            "3=0.60\n"
+                            "4=0.80\n"
+                            "5=0.81\n"
+                            "6=1.00\n"
+                            "7=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
             if      (a == 2) strcpy(ini_drivefw, "0.5");
@@ -6322,44 +8693,66 @@ int doautoupload(char *argv[]) {
         }
         else if (i == 3) {
             strcpy(ini_drivename, "SH-D162D");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=1.00, 3=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=1.00\n"
+                            "3=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "1.00");
+            if      (a == 2) strcpy(ini_drivefw, "1.00");
             else if (a == 3) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 4) {
             strcpy(ini_drivename, "SH-D163A");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=0.80, 3=1.00, 4=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=0.80\n"
+                            "3=1.00\n"
+                            "4=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "0.80");
+            if      (a == 2) strcpy(ini_drivefw, "0.80");
             else if (a == 3) strcpy(ini_drivefw, "1.00");
             else if (a == 4) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 5) {
             strcpy(ini_drivename, "SH-D163B");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=1.00, 3=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=1.00\n"
+                            "3=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "1.00");
+            if      (a == 2) strcpy(ini_drivefw, "1.00");
             else if (a == 3) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 6) {
             strcpy(ini_drivename, "TS-H943A");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=Xtreme 4.x, 3=Xtreme 5.x, 4=iXtreme v1.6,\n"
-                            "5=iXtreme v1.6 0800 standalone, 6=iXtreme v1.61, 7=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=Xtreme 4.x\n"
+                            "3=Xtreme 5.x\n"
+                            "4=iXtreme v1.6\n"
+                            "5=iXtreme v1.6 0800 standalone\n"
+                            "6=iXtreme v1.61\n"
+                            "7=Samantha v1.0\n"
+                            "8=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "4.x");
+            if      (a == 2) strcpy(ini_drivefw, "4.x");
             else if (a == 3) strcpy(ini_drivefw, "5.x");
             else if (a == 4) strcpy(ini_drivefw, "iXtreme v1.6");
             else if (a == 5) strcpy(ini_drivefw, "iXtreme v1.6 0800 standalone");
             else if (a == 6) strcpy(ini_drivefw, "iXtreme v1.61");
-            else if (a == 7) strcpy(ini_drivefw, "Other");
+            else if (a == 7) strcpy(ini_drivefw, "Samantha v1.0");
+            else if (a == 8) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 7) {
@@ -6368,28 +8761,44 @@ int doautoupload(char *argv[]) {
         }
         else if (i == 8) {
             strcpy(ini_drivename, "VAD6038");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=iXtreme v1.41 0800 (Benq0800.bin),\n"
-                            "3=iXtreme v1.6, 4=iXtreme v1.6 0800 standalone, 5=iXtreme v1.61,\n"
-                            "6=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=iXtreme v1.41 0800 (Benq0800.bin)\n"
+                            "3=iXtreme v1.6\n"
+                            "4=iXtreme v1.6 0800 standalone\n"
+                            "5=iXtreme v1.61\n"
+                            "6=iXtreme v3.0\n"
+                            "7=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "iXtreme v1.41 0800");
+            if      (a == 2) strcpy(ini_drivefw, "iXtreme v1.41 0800");
             else if (a == 3) strcpy(ini_drivefw, "iXtreme v1.6");
             else if (a == 4) strcpy(ini_drivefw, "iXtreme v1.6 0800 standalone");
             else if (a == 5) strcpy(ini_drivefw, "iXtreme v1.61");
-            else if (a == 6) strcpy(ini_drivefw, "Other");
+            else if (a == 6) strcpy(ini_drivefw, "iXtreme v3.0");
+            else if (a == 7) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 9) {
             strcpy(ini_drivename, "DG-16D2S");
-            fprintf(stderr, "Enter Firmware Version (1=Unknown, 2=iXtreme v1.6 (74850C),\n"
-                            "3=iXtreme v1.6 (83850C), 4=iXtreme v1.6 0800 standalone, 5=Other) [1]: ");
+            fprintf(stderr, "\nEnter Firmware Version\n"
+                            "1=Unknown\n"
+                            "2=iXtreme v1.6 (74850C)\n"
+                            "3=iXtreme v1.6 (83850C)\n"
+                            "4=iXtreme v1.6 0800 standalone\n"
+                            "5=iXtreme v1.61\n"
+                            "6=iXtreme v3.0\n"
+                            "7=Other\n"
+                            "[1]: ");
             readstdin(ini_temp, 4);
             a = (int) strtol(ini_temp, NULL, 10);
-            if (a == 2) strcpy(ini_drivefw, "iXtreme v1.6 (74850C)");
+            if      (a == 2) strcpy(ini_drivefw, "iXtreme v1.6 (74850C)");
             else if (a == 3) strcpy(ini_drivefw, "iXtreme v1.6 (83850C)");
             else if (a == 4) strcpy(ini_drivefw, "iXtreme v1.6 0800 standalone");
-            else if (a == 5) strcpy(ini_drivefw, "Other");
+            else if (a == 5) strcpy(ini_drivefw, "iXtreme v1.61");
+            else if (a == 6) strcpy(ini_drivefw, "iXtreme v3.0");
+            else if (a == 7) strcpy(ini_drivefw, "Other");
             else strcpy(ini_drivefw, "Unknown");
         }
         else if (i == 0) {
@@ -6402,12 +8811,47 @@ int doautoupload(char *argv[]) {
         }
     }
     
-    fprintf(stderr, "Enter additional Notes [abgx360 %s]: ", headerversion);
+    enternotes:
+    fprintf(stderr, "\nEnter additional Notes [abgx360 %s]: ", headerversion);
     readstdin(ini_notes, 151 - 11 - strlen(headerversion));  // leave enough room for abgx360 version stamp
     if (strlen(ini_notes)) strcat(ini_notes, " ");
     strcat(ini_notes, "[abgx360 ");
     strcat(ini_notes, headerversion);
     strcat(ini_notes, "]");
+    
+    // confirm info
+    memset(ini_temp, 0, 4);
+    printstderr = true;
+    color(white);
+    fprintf(stderr, "\nYou have entered the following information:\n\n"
+                    "        Nickname: %s\n"
+                    "       Game Name: %s\n"
+                    "     Disc Source: %s\n"
+                    "   Ripping Drive: %s\n"
+                    "Firmware Version: %s\n"
+                    "           Notes: %s\n",
+                    ini_gamertag, ini_gamename, ini_discsource, ini_drivename, ini_drivefw, ini_notes);
+    while (ini_temp[0] != 'y' && ini_temp[0] != 'n' && ini_temp[0] != 'Y' && ini_temp[0] != 'N') {
+        fprintf(stderr, "\nIs this correct? (y/n) ");
+        readstdin(ini_temp, 4);
+    }
+    color(normal);
+    printstderr = false;
+    if (ini_temp[0] == 'n' || ini_temp[0] == 'N') {
+        goto startenteringdetails;
+    }
+    // make sure they didn't accidentally enter their password (might as well make this case insensitive)
+    if ( (strlen(argv[autouploadpassarg]) == strlen(ini_gamertag) && strcasecmp(argv[autouploadpassarg], ini_gamertag) == 0) ||
+         (strlen(argv[autouploadpassarg]) == strlen(ini_gamename) && strcasecmp(argv[autouploadpassarg], ini_gamename) == 0) ||
+         (strlen(argv[autouploadpassarg]) <= strlen(ini_notes) && strncasecmp(argv[autouploadpassarg], ini_notes, strlen(argv[autouploadpassarg])) == 0) ) {
+        printstderr = true;
+        color(red);
+        fprintf(stderr, "\nI DIDN'T ASK YOU FOR YOUR PASSWORD! PLEASE READ THIS TIME!\n");
+        color(normal);
+        printstderr = false;
+        goto startenteringdetails;
+    }
+    printf("%s", newline);
     
     // write ini file
     int userstealthpathlength = 0;
@@ -6427,7 +8871,7 @@ int doautoupload(char *argv[]) {
     memset(autouploadpfifilename, 0, userstealthpathlength + 17);
     if (!homeless) sprintf(autouploadpfifilename, "%s%s%sPFI_%08lX.bin", homedir, abgxdir, userstealthdir, pfi_crc32);
     else sprintf(autouploadpfifilename, "PFI_%08lX.bin", pfi_crc32);
-    if (extractstealthfile(fp, isofilename, 0xFD8E800LL, "PFI", autouploadpfifilename) != 0) {
+    if (extractstealthfile(fp, isofilename, video - (xgd3 ? 0x9800 : 0x1800), "PFI", autouploadpfifilename) != 0) {
         color(yellow);
         printf("AutoUpload Aborted%s", newline);
         color(normal);
@@ -6438,18 +8882,41 @@ int doautoupload(char *argv[]) {
     memset(autouploaddmifilename, 0, userstealthpathlength + 17);
     if (!homeless) sprintf(autouploaddmifilename, "%s%s%sDMI_%08lX.bin", homedir, abgxdir, userstealthdir, dmi_crc32);
     else sprintf(autouploaddmifilename, "DMI_%08lX.bin", dmi_crc32);
-    if (extractstealthfile(fp, isofilename, 0xFD8F000LL, "DMI", autouploaddmifilename) != 0) {
+    if (extractstealthfile(fp, isofilename, video - (xgd3 ? 0x9000 : 0x1000), "DMI", autouploaddmifilename) != 0) {
         color(yellow);
         printf("AutoUpload Aborted%s", newline);
         color(normal);
       return 1;
     }
-    // extract ss
+    // extract ss (or preferably use median ss created from extended c/r routines)
     char autouploadssfilename[userstealthpathlength + 16];  // 15 + 1
     memset(autouploadssfilename, 0, userstealthpathlength + 16);
     if (!homeless) sprintf(autouploadssfilename, "%s%s%sSS_%08lX.bin", homedir, abgxdir, userstealthdir, ss_crc32);
     else sprintf(autouploadssfilename, "SS_%08lX.bin", ss_crc32);
-    if (extractstealthfile(fp, isofilename, 0xFD8F800LL, "SS", autouploadssfilename) != 0) {
+    if (have_median_ss) {
+        printf("Saving Median SS to %s%s%s%s", quotation, autouploadssfilename, quotation, newline);
+        FILE *medianssfile = fopen(autouploadssfilename, "wb");
+    	if (medianssfile == NULL) {
+            color(red);
+            printf("ERROR: Failed to open %s%s%s for writing! (%s) Saving was aborted!%s", quotation, autouploadssfilename, quotation, strerror(errno), newline);
+            color(yellow);
+            printf("AutoUpload Aborted%s", newline);
+            color(normal);
+          return 1;
+        }
+        if (trytowritestealthfile(median_ss, 1, 2048, medianssfile, autouploadssfilename, 0) != 0) {
+            color(yellow);
+            printf("AutoUpload Aborted%s", newline);
+            color(normal);
+            fclose(medianssfile);
+          return 1;
+        }
+        color(green);
+        printf("Saving was successful%s", newline);
+        color(normal);
+        fclose(medianssfile);
+    }
+    else if (extractstealthfile(fp, isofilename, video - (xgd3 ? 0x8800 : 0x800), "SS", autouploadssfilename) != 0) {
         color(yellow);
         printf("AutoUpload Aborted%s", newline);
         color(normal);
@@ -6468,7 +8935,8 @@ int doautoupload(char *argv[]) {
     strcat(curloutputfilename, "curl.txt");
     if (debug) printf("curloutputfilename = %s%s", curloutputfilename, newline);
     
-    fprintf(stderr, "Doing AutoUpload...\n");
+    doupload:
+    fprintf(stderr, "\nDoing AutoUpload...\n");
     if (extraverbose) fprintf(stderr, "\n");
     printstderr = true;
     color(blue);
@@ -6521,7 +8989,7 @@ int doautoupload(char *argv[]) {
         color(yellow);
         printf("ERROR: Failed to open cURL output file (%s), result of AutoUpload is unknown%s", strerror(errno), newline);
         color(normal);
-      return 1;
+        goto prompttoretryupload;
     }
     else {
         memset(buffer, 0, 2048);
@@ -6534,7 +9002,7 @@ int doautoupload(char *argv[]) {
                 color(yellow);
                 printf("Server replied: An unspecified error occurred!%s", newline);
                 color(normal);
-              return 1;
+                goto prompttoretryupload;
             }
             else {
                 if (strlen(buffer) != 4) {
@@ -6542,39 +9010,58 @@ int doautoupload(char *argv[]) {
                     printf("ERROR: Server reply is invalid, result of AutoUpload is unknown%s", newline);
                     color(normal);
                     if (extraverbose) printf("Server reply: %s%s", buffer, newline);
-                  return 1;
+                    goto prompttoretryupload;
                 }
-                if      (buffer[0] == '1') { color(green);  printf("Server replied: DMI uploaded perfectly%s", newline);                                         color(normal); }
-                else if (buffer[0] == '2') { color(yellow); printf("Server replied: DMI file has a different checksum to that in the ini, rejected%s", newline); color(normal); }
+                if      (buffer[0] == '1') { color(green);  printf("Server replied: DMI uploaded perfectly%s", newline);                                          color(normal); }
+                else if (buffer[0] == '2') { color(yellow); printf("Server replied: DMI file has a different checksum to that in the ini, rejected%s", newline);  color(normal); }
                 else if (buffer[0] == '3')                  printf("Server replied: DMI file already exists, ignored%s", newline);
-                else if (buffer[0] == '4') { color(yellow); printf("Server replied: Unspecified error in DMI upload%s", newline);                                color(normal); }
-                if      (buffer[1] == '1') { color(green);  printf("Server replied: PFI uploaded perfectly%s", newline);                                         color(normal); }
-                else if (buffer[1] == '2') { color(yellow); printf("Server replied: PFI file has a different checksum to that in the ini, rejected%s", newline); color(normal); }
+                else if (buffer[0] == '4') { color(yellow); printf("Server replied: Unspecified error in DMI upload%s", newline);                                 color(normal); }
+                if      (buffer[1] == '1') { color(green);  printf("Server replied: PFI uploaded perfectly%s", newline);                                          color(normal); }
+                else if (buffer[1] == '2') { color(yellow); printf("Server replied: PFI file has a different checksum to that in the ini, rejected%s", newline);  color(normal); }
                 else if (buffer[1] == '3')                  printf("Server replied: PFI file already exists, ignored%s", newline);
-                else if (buffer[1] == '4') { color(yellow); printf("Server replied: Unspecified error in PFI upload%s", newline);                                color(normal); }
-                if      (buffer[2] == '1') { color(green);  printf("Server replied: SS uploaded perfectly%s", newline);                                          color(normal); }
-                else if (buffer[2] == '2') { color(yellow); printf("Server replied: SS file has a different checksum to that in the ini, rejected%s", newline);  color(normal); }
+                else if (buffer[1] == '4') { color(yellow); printf("Server replied: Unspecified error in PFI upload%s", newline);                                 color(normal); }
+                if      (buffer[2] == '1') { color(green);  printf("Server replied: SS uploaded perfectly%s", newline);                                           color(normal); }
+                else if (buffer[2] == '2') { color(yellow); printf("Server replied: SS file has a different checksum to that in the ini, rejected%s", newline);   color(normal); }
                 else if (buffer[2] == '3')                  printf("Server replied: SS file already exists, ignored%s", newline);
-                else if (buffer[2] == '4') { color(yellow); printf("Server replied: Unspecified error in SS upload%s", newline);                                 color(normal); }
-                if      (buffer[3] == '0') { color(yellow); printf("Server replied: Ini file too large!%s", newline);                                            color(normal); }
-                else if (buffer[3] == '1') { color(green);  printf("Server replied: New DMI found and added to database%s", newline);                            color(normal); }
-                else if (buffer[3] == '2') { color(green);  printf("Server replied: Ini already exists and has been verified, nothing to do here%s", newline);   color(normal); }
-                else if (buffer[3] == '3') { color(yellow); printf("Server replied: Files do not match! Verification unsuccessful%s", newline);                  color(normal); }
-                else if (buffer[3] == '4') { color(green);  printf("Server replied: Files match! Verification completed successfully!%s", newline);              color(normal); }
+                else if (buffer[2] == '4') { color(yellow); printf("Server replied: Unspecified error in SS upload%s", newline);                                  color(normal); }
+                if      (buffer[3] == '0') { color(yellow); printf("Server replied: Ini file too large!%s", newline);                                             color(normal); }
+                else if (buffer[3] == '1') { color(green);  printf("Server replied: Files match! Verification completed successfully!\n"
+                                                                   "A new DMI was also found and has been added to the existing verified ini%s", newline);        color(normal); }
+                else if (buffer[3] == '2') { color(green);  printf("Server replied: Ini already exists and has been verified, nothing to do here%s", newline);    color(normal); }
+                else if (buffer[3] == '3') { color(yellow); printf("Server replied: Files do not match! Verification unsuccessful%s", newline);                   color(normal); }
+                else if (buffer[3] == '4') { color(green);  printf("Server replied: Files match! Verification completed successfully!%s", newline);               color(normal); }
                 else if (buffer[3] == '5')                  printf("Server replied: Ini added to unverified folder, awaiting verification upload%s", newline);
                 else if (buffer[3] == '6')                  printf("Server replied: Raw SS matches. File may be duplicate, rejected%s", newline);
-                else if (buffer[3] == '7') { color(yellow); printf("Server replied: Game data checksum is invalid! Perhaps you forgot to check it%s", newline);  color(normal); }
-                else if (buffer[3] == '8') { color(yellow); printf("Server replied: Ini file is invalid or could not be loaded%s", newline);                     color(normal); }
+                else if (buffer[3] == '7') { color(yellow); printf("Server replied: Game data checksum is invalid! Perhaps you forgot to check it%s", newline);   color(normal); }
+                else if (buffer[3] == '8') { color(yellow); printf("Server replied: Ini file is invalid or could not be loaded%s", newline);                      color(normal); }
+                else if (buffer[3] == '9') { color(yellow); printf("Server replied: Possible exception to authoring rules (rejected), tell Seacrest%s", newline); color(normal); }
             }
         }
         else {
             color(yellow);
             printf("ERROR: cURL output file was empty, result of AutoUpload is unknown%s", newline);
             color(normal);
-          return 1;
+            goto prompttoretryupload;
         }
     }
   return 0;
+    
+    prompttoretryupload:
+    memset(ini_temp, 0, 4);
+    printstderr = true;
+    color(white);
+    while (ini_temp[0] != 'y' && ini_temp[0] != 'n' && ini_temp[0] != 'Y' && ini_temp[0] != 'N') {
+        fprintf(stderr, "\nWould you like to retry the upload? (y/n) ");
+        readstdin(ini_temp, 4);
+    }
+    color(normal);
+    printstderr = false;
+    if (ini_temp[0] == 'y' || ini_temp[0] == 'Y') {
+        formpost = NULL;
+        lastptr = NULL;
+        goto doupload;
+    }
+  return 1;
 }
 
 int writeini(char *inifilename, char *ini_discsource, char *ini_gamename, char *ini_gamertag, char *ini_drivename,
@@ -6617,7 +9104,7 @@ int writeini(char *inifilename, char *ini_discsource, char *ini_gamename, char *
     }
     
     initcheckwrite();
-    if (checkwriteandprinterrors(buffer, 1, strlen(buffer), inifile, 0, 0, inifilename, "writing ini") != 0) {
+    if (checkwriteandprinterrors(buffer, 1, strlen(buffer), inifile, 0, 0, inifilename, "Writing ini") != 0) {
         fclose(inifile);
         remove(inifilename);
       return 1;
@@ -6831,11 +9318,11 @@ int doverify() {
                 verify_found_bad_pfi_or_video = true;
                 autoupload = false;
             }
-            // make the splitvid check possible
-            if (ini_video == video_crc32 && ini_v0 == videoL0_crc32 && ini_v1 == videoL1_crc32) {
+            // make the splitvid check possible (obsolete, but doing this isn't a bad idea anyway...)
+            if (video_stealthuncertain && ini_video == video_crc32 && ini_v0 == videoL0_crc32 && ini_v1 == videoL1_crc32) {
                 video_stealthuncertain = false;
             }
-            if (ini_pfi == pfi_crc32) {
+            if (pfi_stealthuncertain && ini_pfi == pfi_crc32) {
                 pfi_stealthuncertain = false;
             }
             color(yellow);
@@ -7035,6 +9522,13 @@ int doverify() {
         verify_found_bad_pfi_or_video = true;
         autoupload = false;
     }
+    // make the splitvid check possible (obsolete, but doing this isn't a bad idea anyway...)
+    if (video_stealthuncertain && ini_video == video_crc32 && ini_v0 == videoL0_crc32 && ini_v1 == videoL1_crc32) {
+        video_stealthuncertain = false;
+    }
+    if (pfi_stealthuncertain && ini_pfi == pfi_crc32) {
+        pfi_stealthuncertain = false;
+    }
     // display results of our check for any matching dmi
     if (verified_dmi) {
         if (verbose) {
@@ -7093,7 +9587,7 @@ int doverify() {
         }
         else {
             checkgamecrcnever = true;
-            gamecrcfailed = true;
+            if (!usercancelledgamecrc) gamecrcfailed = true;
         }
     }
     if (verbose && printextraline) printf("%s", newline);
@@ -7172,7 +9666,6 @@ int doautofix() {
     printf("%sStarting AutoFix%s", newline, newline);
     if ((stayoffline || localonly) && !offlinewarningprinted) {
         color(yellow);
-        //if (verbose) printf("%s", newline);
         printf("You need to enable online functions (assuming your connection works and the db%s"
                "is up) if you want to check for the latest files in the online database.%s", newline, newline);
         color(normal);
@@ -7419,11 +9912,17 @@ int doautofix() {
         else videofile = openstealthfile(videofilename, stealthdir, webstealthdir, GIANT_VIDEO_FILE, "the online verified database");
         if (videofile == NULL) {
             color(yellow);
-            if (!video_file_is_hosted) printf("Failed to find or open '%s' (%s)%s"
-                "This is a very large video partition that isn't hosted on the database...%s"
-                "You will have to find it elsewhere and put it in your StealthFiles folder - %s"
-                "Check the Download page on abgx360.net%s",
-                videofilename, strerror(errno), newline, newline, newline, newline);
+            if (!video_file_is_hosted) {
+                printf("Failed to find or open '%s' (%s)%s"
+                       "This is a very large video partition that isn't hosted on the database, so%s"
+                       "you'll have to find it elsewhere and put it in your StealthFiles folder --%s",
+                       videofilename, strerror(errno), newline, newline, newline);
+                if (layerbreak == 2133520) {
+                    printf("Since XGD3 video partitions are unique for every game, you probably won't find%s"
+                           "it online and will have to rip another copy of the game instead%s", newline, newline);
+                }
+                else printf("Check the Download page on abgx360.net%s", newline);
+            }
             else printf("ERROR: Failed to find or open '%s' (%s)%s", videofilename, strerror(errno), newline);
             color(normal);
           return 1;
@@ -7431,7 +9930,7 @@ int doautofix() {
         // check to see if autofix video is valid for this game
         printf("%sVerifying %s is valid before using it for AutoFix%s", sp5, videofilename, newline);
         if (verbose) printf("%s", newline);
-        checkvideo(videofilename, videofile, false, false);
+        checkvideo(videofilename, videofile, true, false);
         if (verbose) printf("%s", newline);
         if (video_stealthfailed || video_stealthuncertain) {
             // video failed stealth check
@@ -7485,14 +9984,10 @@ int doautofix() {
         fprintf(stderr, "Image is just a game partition, rebuilding... ");
         if (rebuildiso(isofilename) != 0) {
             rebuildfailed = true;
-            if (rebuildlowspace) {
-                color(red);
-                printf("Rebuilding Failed! Your ISO is now probably corrupt!%s", newline);
-            }
-            else {
-                color(yellow);
-                printf("Rebuilding Failed!%s", newline);
-            }
+            color(red);
+            printf("Rebuilding Failed!");
+            if (rebuildlowspace) printf(" Your ISO is now probably corrupt!");
+            printf("%s", newline);
             color(normal);
           return 1;
         }
@@ -7505,13 +10000,75 @@ int doautofix() {
     if (fixvideo) {
         // patch video
         if (verbose) printf("%sPatching Video from %s%s", sp5, videofilename, newline);
+        if (!pfi_foundsectorstotal) {
+            // we need PFI to determine how to patch video
+            // shouldn't get here though... if pfi was bad, a valid one would have had to have been checked by this function already
+            color(red);
+            printf("Patching was aborted because there is no PFI to describe the Video data areas!%s", newline);
+            color(normal);
+            fclose(videofile);
+          return 1;
+        }
         videofilesize = getfilesize(videofile);
         if (videofilesize == -1) {  // seek error
             fclose(videofile);
           return 1;
         }
-        sizeoverbuffer = videofilesize / BIGBUF_SIZE;
-        bufferremainder = videofilesize % BIGBUF_SIZE;
+        if (videofilesize < pfi_sectorstotal*2048) {
+            // the supplied file is not large enough based on the pfi data area size
+            color(red);
+            printf("ERROR: %s%s%s (%"LL"d bytes) is smaller than the PFI data area size (%"LL"d bytes) Patching was aborted!%s",
+                   quotation, videofilename, quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
+            color(normal);
+            fclose(videofile);
+          return 1;
+        }
+        if (videofilesize > pfi_sectorstotal*2048) {
+            // should not happen
+            color(red);
+            printf("ERROR: %s%s%s (%"LL"d bytes) is larger than the PFI data area size (%"LL"d bytes) Patching was aborted!%s",
+                   quotation, videofilename, quotation, videofilesize, (long long) pfi_sectorstotal*2048, newline);
+            color(normal);
+            fclose(videofile);
+          return 1;
+        }
+        // iso size should be at least [pfi_offsetL1 + pfi_sectorsL1*2048]
+        if ((unsigned long long) fpfilesize < pfi_offsetL1 + pfi_sectorsL1*2048) {
+            printf("ISO size is too small to contain the L1 Video, extending...%s", newline);
+            if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1*2048, false) != 0) {
+                fclose(videofile);
+              return 1;
+            }
+            // get the new filesize
+            fpfilesize = getfilesize(fp);
+            if (fpfilesize == -1) {  // seek error
+                fclose(videofile);
+              return 1;
+            }
+        }
+        else if ((unsigned long long) fpfilesize > pfi_offsetL1 + pfi_sectorsL1*2048) {
+            // this really doesn't matter unless the image is too big to burn
+            printf("ISO size is larger than necessary, truncating...%s", newline);
+            if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1*2048, false) != 0) {
+                fclose(videofile);
+              return 1;
+            }
+            // get the new filesize
+            fpfilesize = getfilesize(fp);
+            if (fpfilesize == -1) {  // seek error
+                fclose(videofile);
+              return 1;
+            }
+        }
+        // check that L0 data area does not overlap stealth files or game data
+        if (pfi_sectorsL0 > video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0)) {
+            color(yellow);
+            printf("PFI L0 Data Area is too large! (%lu sectors) Patching was aborted!%s", pfi_sectorsL0, newline);
+            color(normal);
+            fclose(videofile);
+          return 1;
+        }
+        // seek to the start of L0 Video and start patching
         if (fseeko(fp, 0, SEEK_SET) != 0) {
             printseekerror(isofilename, "Patching video file");
             fclose(videofile);
@@ -7522,24 +10079,62 @@ int doautofix() {
             fclose(videofile);
           return 1;
         }
+        sizeoverbuffer = pfi_sectorsL0*2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL0*2048 % BIGBUF_SIZE;
         initcheckread();
         initcheckwrite();
-        for (m=0;m<sizeoverbuffer;m++) {
-            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, videofile, m, 0, videofilename, "patching") != 0) {
+        for (m=0; m<sizeoverbuffer; m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, videofile, m, 0,
+                                        videofilename, "Patching L0 Video") != 0) {
                 fclose(videofile);
               return 1;
             }
-            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0, isofilename, "patching") != 0) {
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 0,
+                                         isofilename, "Patching L0 Video") != 0) {
                 fclose(videofile);
               return 1;
             }
         }
         if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, videofile, 0, videofilesize - bufferremainder, videofilename, "patching") != 0) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, videofile, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                        videofilename, "Patching L0 Video") != 0) {
                 fclose(videofile);
               return 1;
             }
-            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, videofilesize - bufferremainder, isofilename, "patching") !=0) {
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_sectorsL0*2048 - bufferremainder,
+                                         isofilename, "Patching L0 Video") != 0) {
+                fclose(videofile);
+              return 1;
+            }
+        }
+        // seek to the start of L1 Video and continue patching
+        if (fseeko(fp, pfi_offsetL1, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Patching video file");
+            fclose(videofile);
+          return 1;
+        }
+        sizeoverbuffer = pfi_sectorsL1*2048 / BIGBUF_SIZE;
+        bufferremainder = pfi_sectorsL1*2048 % BIGBUF_SIZE;
+        for (m=0; m<sizeoverbuffer; m++) {
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, videofile, m, pfi_sectorsL0*2048,
+                                        videofilename, "Patching L1 Video") != 0) {
+                fclose(videofile);
+              return 1;
+            }
+            if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, pfi_offsetL1,
+                                         isofilename, "Patching L1 Video") != 0) {
+                fclose(videofile);
+              return 1;
+            }
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, videofile, 0, pfi_sectorstotal*2048 - bufferremainder,
+                                        videofilename, "Patching L1 Video") != 0) {
+                fclose(videofile);
+              return 1;
+            }
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 + pfi_sectorsL1*2048 - bufferremainder,
+                                         isofilename, "Patching L1 Video") != 0) {
                 fclose(videofile);
               return 1;
             }
@@ -7547,21 +10142,55 @@ int doautofix() {
         donecheckread(videofilename);
         donecheckwrite(isofilename);
         fclose(videofile);
-        if (verbose) fprintf(stderr, "     Padding Video... ");
-        if (padzeros(fp, isofilename, videofilesize, (long long) total_sectors_available_for_video_data*2048) != 0) return 1;
-        if (verbose) fprintf(stderr, "Done\n");
+        
+        // pad L0 video
+        if (pfi_sectorsL0 == video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0)) {
+            // there is no L0 video padding
+            if (verbose) printf("Skipped padding L0 Video because there is no padding needed%s", newline);
+        }
+        else {
+            if (verbose) printf("%sPadding L0 Video... ", sp5);
+            if (padzeros(fp, isofilename, pfi_sectorsL0*2048,
+                         (long long) video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048) != 0) return 1;
+            if (verbose) printf("Done%s", newline);
+        }
+        // pad L1 video
+        unsigned long long padding_offsetL1start = assume_start_offset_of_L1_padding();
+        if (padding_offsetL1start == 0) {
+            color(yellow);
+            printf("Cannot pad L1 Video because assume_start_offset_of_L1_padding() needs to be updated%s", newline);
+            color(normal);
+          return 1;
+        }
+        if (pfi_offsetL1 == padding_offsetL1start) {
+            // there is no L1 video padding
+            if (verbose) printf("Skipped padding L1 Video because there is no padding needed%s", newline);
+        }
+        else if (pfi_offsetL1 < padding_offsetL1start) {
+            // L1 video overlaps game data
+            if (verbose) printf("Skipped padding L1 Video because there is no padding needed (PFI L1 Data Area overlaps the game partition)%s", newline);
+        }
+        else {
+            if (verbose) printf("%sPadding L1 Video... ", sp5);
+            if (padzeros(fp, isofilename, padding_offsetL1start, pfi_offsetL1) != 0) return 1;
+            if (verbose) printf("Done%s", newline);
+        }
     }
     if (fixpfi) {  // patch pfi
         if (verbose) printf("%sPatching PFI from %s%s", sp5, pfifilename, newline);
-        if (trytowritestealthfile(autofix_pfi, 1, 2048, fp, isofilename, 0xFD8E800LL) != 0) return 1;
+        if (trytowritestealthfile(autofix_pfi, 1, 2048, fp, isofilename, video - (xgd3 ? 0x9800 : 0x1800)) != 0) return 1;
     }
     if (!keepdmi) {  // patch dmi
         if (verbose) printf("%sPatching DMI from %s%s", sp5, dmifilename, newline);
-        if (trytowritestealthfile(autofix_dmi, 1, 2048, fp, isofilename, 0xFD8F000LL) != 0) return 1;
+        if (trytowritestealthfile(autofix_dmi, 1, 2048, fp, isofilename, video - (xgd3 ? 0x9000 : 0x1000)) != 0) return 1;
     }
     if (fixss) {  // patch ss
         if (verbose) printf("%sPatching SS from %s%s", sp5, ssfilename, newline);
-        if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, 0xFD8F800LL) != 0) return 1;
+        if (trytowritestealthfile(ss, 1, 2048, fp, isofilename, video - (xgd3 ? 0x8800 : 0x800)) != 0) return 1;
+        else {
+            if (ssv2) iso_has_ssv2 = true;
+            else iso_has_ssv2 = false;
+        }
     }
     
     color(green);
@@ -7601,7 +10230,7 @@ int doautofix() {
             }
             else {
                 checkgamecrcnever = true;
-                gamecrcfailed = true;
+                if (!usercancelledgamecrc) gamecrcfailed = true;
             }
         }
         if (game_crc32 == 0) {
@@ -7628,264 +10257,6 @@ int doautofix() {
         if (game_crc32 != 0 && ini_game != game_crc32) {
             printbadgamecrcerror();
           return 3;
-        }
-    }
-  return 0;
-}
-
-int doaddsplitvid() {
-    int i;
-    unsigned long m;
-    bool openforwriting = false;
-    unsigned long VideoL1onL0_crc32 = 0, VideoL1onL1_crc32 = 0;
-    if (video == 0) {
-        color(yellow);
-        printf("Image is just a game partition, SplitVid check aborted%s", newline);
-        color(normal);
-      return 1;
-    }
-    if (video_crc32 == 0 || pfi_crc32 == 0 || !pfi_foundsectorstotal || pfi_stealthfailed || pfi_stealthuncertain || video_stealthfailed || video_stealthuncertain) {
-        color(yellow);
-        printf("Cannot check SplitVid due to invalid or uncertain PFI/Video%s", newline);
-        color(normal);
-      return 1;
-    }
-    // check to see if data is already valid first
-    // filesize should be at least [pfi_offsetL1 + pfi_sectorsL1 * 2048]
-    if ((unsigned long long) fpfilesize < pfi_offsetL1 + pfi_sectorsL1 * 2048) {
-        if (!writefile) {
-            color(yellow);
-            printf("Size is too small for SplitVid but writing is disabled, cannot fix!%s", newline);
-            color(normal);
-          return 1;
-        }
-        printf("Size is too small for SplitVid, extending...%s", newline);
-        if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1 * 2048, false) != 0) return 1;
-        // get the new filesize
-        fpfilesize = getfilesize(fp);
-        if (fpfilesize == -1) return 1;  // seek error
-        goto patchsplitvid;  // file had to be extended so we know splitvid is invalid
-    }
-    else if ((unsigned long long) fpfilesize > pfi_offsetL1 + pfi_sectorsL1 * 2048) {
-        // this really doesn't matter unless the image is too big to burn
-        if (writefile) {
-            printf("Size is too large for SplitVid, truncating...%s", newline);
-            if (dotruncate(isofilename, fpfilesize, pfi_offsetL1 + pfi_sectorsL1 * 2048, false) != 0) return 1;
-            // get the new filesize
-            fpfilesize = getfilesize(fp);
-            if (fpfilesize == -1) return 1;  // seek error
-        }
-        else if (!dvdarg) {
-            color(yellow);
-            printf("Size is larger than necessary for SplitVid but would have been truncated if writing was enabled%s", newline);
-            color(normal);
-        }
-    }
-    // compare crc of [pfi_sectorsL1] sectors at [pfi_offsetL0end + 1] to [pfi_sectorsL1] sectors at [pfi_offsetL1]
-    fprintf(stderr, "Comparing L1 Video on L0 to L1 Video on L1... ");
-    if (fseeko(fp, pfi_offsetL0end + 1, SEEK_SET) != 0) {
-        printseekerror(isofilename, "Checking SplitVid");
-      return 1;
-    }
-    memset(bigbuffer, 0, BIGBUF_SIZE);
-    sizeoverbuffer = pfi_sectorsL1 * 2048 / BIGBUF_SIZE;
-    bufferremainder = pfi_sectorsL1 * 2048 % BIGBUF_SIZE;
-    initcheckread();
-    for (m=0; m<sizeoverbuffer; m++) {
-        if (sizeoverbuffer >= 50 && m && (m % (2 * sizeoverbuffer / 100) == 0) && (m / (2 * sizeoverbuffer / 100) <= 100)) {
-            for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-            charsprinted = fprintf(stderr, "%2lu%% ", m / (2 * sizeoverbuffer / 100));
-        }
-        if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, pfi_offsetL0end + 1, "L1 Video on L0", "Checking SplitVid") != 0) return 1;
-        VideoL1onL0_crc32 = crc32(VideoL1onL0_crc32, bigbuffer, BIGBUF_SIZE);
-    }
-    if (bufferremainder) {
-        if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL0end + 1 + (pfi_sectorsL1 * 2048) - bufferremainder, "L1 Video on L0", "Checking SplitVid") != 0) return 1;
-        VideoL1onL0_crc32 = crc32(VideoL1onL0_crc32, bigbuffer, bufferremainder);
-    }
-    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-    donecheckread(isofilename);
-    if (fseeko(fp, pfi_offsetL1, SEEK_SET) != 0) {
-        printseekerror(isofilename, "Checking SplitVid");
-      return 1;
-    }
-    initcheckread();
-    for (m=0; m<sizeoverbuffer; m++) {
-        if (sizeoverbuffer >= 50 && m && (m % (2 * sizeoverbuffer / 100) == 0) && (m / (2 * sizeoverbuffer / 100) <= 100)) {
-            for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-            charsprinted = fprintf(stderr, "%2lu%% ", m / (2 * sizeoverbuffer / 100) + 50);
-        }
-        if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, pfi_offsetL1, "L1 Video on L1", "Checking SplitVid") != 0) return 1;
-        VideoL1onL1_crc32 = crc32(VideoL1onL1_crc32, bigbuffer, BIGBUF_SIZE);
-    }
-    if (bufferremainder) {
-        if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 + (pfi_sectorsL1 * 2048) - bufferremainder, "L1 Video on L1", "Checking SplitVid") != 0) return 1;
-        VideoL1onL1_crc32 = crc32(VideoL1onL1_crc32, bigbuffer, bufferremainder);
-    }
-    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-    for (i=0;i<charsprinted;i++) fprintf(stderr, " ");
-    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-    donecheckread(isofilename);
-    if (VideoL1onL0_crc32 == VideoL1onL1_crc32) {
-        color(green);
-        printf("SplitVid is valid%s", newline);
-        color(normal);
-      goto checkL1padding;
-    }
-    
-    patchsplitvid:
-    // copy [pfi_sectorsL1] sectors from [pfi_offsetL0end + 1] to [pfi_offsetL1]
-    if (!writefile) {
-        color(yellow); printf("SplitVid is invalid but writing is disabled, unable to fix!%s", newline); color(normal);
-      return 1;
-    }
-    printf("SplitVid is invalid, fixing...%s", newline);
-    if (!openforwriting) {
-        fp = freopen(isofilename, "rb+", fp);
-        if (fp == NULL) {
-            color(yellow); printf("ERROR: Failed to reopen %s for writing! (%s) Unable to fix SplitVid!%s", isofilename, strerror(errno), newline); color(normal);
-            fp = fopen(isofilename, "rb");
-            if (fp == NULL) {
-                color(red); printf("ERROR: Failed to reopen %s for reading! (%s) Game over man... Game over!%s", isofilename, strerror(errno), newline); color(normal);
-              exit(1);
-            }
-          return 1;
-        }
-        openforwriting = true;
-    }
-    initcheckread(); initcheckwrite();
-    for (m=0;m<pfi_sectorsL1;m++) {
-        if (fseeko(fp, pfi_offsetL0end + 1 + (m * 2048), SEEK_SET) != 0) {
-            printseekerror(isofilename, "Fixing SplitVid");
-          return 1;
-        }
-        if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, pfi_offsetL0end + 1 + (m * 2048), "L1 Video on L0", "Fixing SplitVid") != 0) return 1;
-        if (fseeko(fp, pfi_offsetL1 + (m * 2048), SEEK_SET) != 0) {
-            printseekerror(isofilename, "Fixing SplitVid");
-          return 1;
-        }
-        if (checkwriteandprinterrors(ubuffer, 1, 2048, fp, 0, pfi_offsetL1 + (m * 2048), "L1 Video on L1", "Fixing SplitVid") != 0) return 1;
-    }
-    donecheckread(isofilename); donecheckwrite(isofilename);
-    color(green); printf("SplitVid was added successfully!%s", newline); color(normal);
-    
-    checkL1padding:
-    if (checkpadding) {
-        // ((pfi_offsetL1 - 7572881408) / 2048) sectors should be blank starting at offset 7572881408
-        if (fseeko(fp, 7572881408LL, SEEK_SET) != 0) {
-            printseekerror(isofilename, "Checking zero padding");
-          return 1;
-        }
-        memset(bigbuffer, 0, BIGBUF_SIZE);
-        sizeoverbuffer = (unsigned long) (pfi_offsetL1 - 7572881408LL) / BIGBUF_SIZE;
-        bufferremainder = (unsigned long) (pfi_offsetL1 - 7572881408LL) % BIGBUF_SIZE;
-        initcheckread();
-        bool videoL1zeropadding = true;
-        long dataloop = 0;
-        if (debug) printf("size = %lu, sizeoverbuffer = %lu, bufferremainder = %lu%s", (unsigned long) (pfi_offsetL1 - 7572881408LL), sizeoverbuffer, bufferremainder, newline);
-        fprintf(stderr, "Checking L1 Video padding... ");
-        for (m=0;m<sizeoverbuffer;m++) {
-            if (sizeoverbuffer >= 100 && m && (m % (sizeoverbuffer / 100) == 0) && (m / (sizeoverbuffer / 100) <= 100)) {
-                for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-                charsprinted = fprintf(stderr, "%2lu%% ", m / (sizeoverbuffer / 100));
-            }
-            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 7572881408LL, "L1 Video Padding", "checking zero padding") != 0) return 1;
-            if (getzeros(bigbuffer, 0, BIGBUF_SIZE - 1) != BIGBUF_SIZE) {
-                videoL1zeropadding = false;
-                dataloop = m;
-                if (debug) printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
-                                  (unsigned long long) m*BIGBUF_SIZE + 7572881408LL, (unsigned long long) ftello(fp), dataloop, newline);
-              goto skipL1remainder;
-            }
-        }
-        if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 - bufferremainder, "L1 Video Padding", "checking zero padding") != 0) return 1;
-            if (getzeros(bigbuffer, 0, bufferremainder - 1) != bufferremainder) {
-                videoL1zeropadding = false;
-                dataloop = -1;  // identify that data was found in the bufferremainder
-                if (debug) printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
-                                   pfi_offsetL1 - bufferremainder, (unsigned long long) ftello(fp), dataloop, newline);
-              goto skipL1remainder;
-            }
-        }
-        skipL1remainder:
-        for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-        for (i=0;i<charsprinted;i++) fprintf(stderr, " ");
-        for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-        donecheckread("L1 Video padding");
-
-        if (videoL1zeropadding) {
-            color(green);
-            printf("L1 Video is zero padded%s", newline);
-            color(normal);
-        }
-        else {
-            if (!writefile) {
-                color(yellow); printf("L1 Video padding contains bad data but writing is disabled, unable to fix!%s", newline); color(normal);
-              return 1;
-            }
-            printf("L1 Video padding contains bad data, fixing...%s", newline);
-            if (extraverbose) {
-                if (dataloop == -1) memset(bigbuffer+bufferremainder, 0, BIGBUF_SIZE - bufferremainder);
-                unsigned long sectoroffset = 0;
-                for (i=0;i<(BIGBUF_SIZE/2048);i++) {
-                    if (debug) printf("%d: %lu zeros%s", i, getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047), newline);
-                    if (getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047) != 2048) {
-                        sectoroffset = (unsigned long) i*2048;
-                      break;
-                    }
-                }
-                printf("Showing first sector of bad data (0x%"LL"X) in hex and ascii:%s", dataloop == -1 ? (pfi_offsetL1 - bufferremainder + sectoroffset) : (7572881408LL + (unsigned long long) dataloop*BIGBUF_SIZE + (unsigned long long) sectoroffset), newline);
-                hexdump(bigbuffer+sectoroffset, 0, 2048);
-                printf("%s", newline);
-            }
-            if (!openforwriting) {
-                fp = freopen(isofilename, "rb+", fp);
-                if (fp == NULL) {
-                    color(red);
-                    printf("ERROR: Failed to reopen %s for writing! (%s) Fixing zero padding failed!%s", isofilename, strerror(errno), newline);
-                    color(normal);
-                    fp = fopen(isofilename, "rb");
-                    if (fp == NULL) {
-                        color(red);
-                        printf("ERROR: Failed to reopen %s for reading! (%s) Game over man... Game over!%s", isofilename, strerror(errno), newline);
-                        color(normal);
-                      exit(1);
-                    }
-                  return 1;
-                }
-                openforwriting = true;
-            }
-            if (dataloop == -1) {
-                if (fseeko(fp, pfi_offsetL1 - bufferremainder, SEEK_SET) != 0) {
-                    printseekerror(isofilename, "Fixing zero padding");
-                  return 1;
-                }
-            }
-            else if (fseeko(fp, 7572881408LL + (unsigned long long) dataloop*BIGBUF_SIZE, SEEK_SET) != 0) {
-                printseekerror(isofilename, "Fixing zero padding");
-              return 1;
-            }
-            if (debug) {
-                printf("Current offset: 0x%"LL"X%s", (unsigned long long) ftello(fp), newline);
-            }
-            initcheckwrite();
-            memset(bigbuffer, 0, BIGBUF_SIZE);
-            if (dataloop == -1) {
-                if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 - bufferremainder, "L1 Video padding", "fixing zero padding") != 0) return 1;
-            }
-            else {
-                for (m=0;m<sizeoverbuffer - dataloop;m++) {
-                    if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, fp, m, 7572881408LL + (unsigned long long) dataloop*BIGBUF_SIZE, "L1 Video padding", "fixing zero padding") != 0) return 1;
-                }
-                if (bufferremainder) {
-                    if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, fp, 0, pfi_offsetL1 - bufferremainder, "L1 Video padding", "fixing zero padding") != 0) return 1;
-                }
-            }
-            donecheckwrite("L1 Video padding");
-            color(green);
-            printf("L1 Video padding fixed successfully%s", newline);
-            color(normal);
         }
     }
   return 0;
@@ -7925,6 +10296,8 @@ void printhtmltop(int argc, char *argv[]) {
                    ".hexoffset{color: #808080;}\n"
                    ".darkgray{color: #808080;}\n"
                    ".filename{color: #CCCCCC; background-color: #0000FF;}\n"
+                   ".blackonyellow{color: #000000; background-color: #FFFF00;}\n"
+                   ".blackonred{color: #000000; background-color: #FF0000;}\n"
                    ".normal_u{color: #CCCCCC; font-family: Code2000, "                      // 51,239 chars, 61,864 glyphs, 20,924 CJK, v1.16
                                                           "\"Arial Unicode MS\", "          // 38,917 chars, 50,377 glyphs, 20,902 CJK, v1.00
                                                           "\"TITUS Cyberbit Unicode\", "    // 36,161 chars,      ? glyphs,      ? CJK, v4.0
@@ -8048,96 +10421,42 @@ void color(char *color) {
     if (stripcolors) {
       return;
     }
+    if (html && !printstderr) {
+        if (unicode) {
+            if      (strcmp(color, normal) == 0)   printf("</span><span class=normal_u>");
+            else if (strcmp(color, white) == 0)    printf("</span><span class=white_u>");
+            else if (strcmp(color, darkgray) == 0) printf("</span><span class=darkgray_u>");
+            else printf("</span>\n\n<!-- BUG in color()! -->\n\n<span class=normal_u>");  // shouldn't get here... you either forgot to use endunicode() or you used another color without adding it directly above this line
+        }
+        else printf("%s", color);
+      return;
+    }
     #ifdef WIN32
-        if (!html) {
-            if (strcmp(color, normal) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 7);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
-            }
-            else if (strcmp(color, white) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 15);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 15);
-            }
-            else if (strcmp(color, green) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 10);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 10);
-            }
-            else if (strcmp(color, blue) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 9);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 9);
-            }
-            else if (strcmp(color, darkblue) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 1);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 1);
-            }
-            else if (strcmp(color, yellow) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 14);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
-            }
-            else if (strcmp(color, red) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 12);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 12);
-            }
-            else if (strcmp(color, darkgray) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 8);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 8);
-            }
-            else if (strcmp(color, arrow) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 9);  // blue
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 9);
-            }
-            else if (strcmp(color, box) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 9);  // blue
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 9);
-            }
-            else if (strcmp(color, wtfhexcolor) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 12);  // red
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 12);
-            }
-            else if (strcmp(color, wtfcharcolor) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 207);  // white on red background
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 207);
-            }
-            else if (strcmp(color, hexoffsetcolor) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 8); // dark gray
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 8);
-            }
-            else if (strcmp(color, cyan) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 11);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 11);
-            }
-            else if (strcmp(color, brown) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 6);
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 6);
-            }
-            else if (strcmp(color, filename) == 0) {
-                if (printstderr) SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), 151);  // light gray on blue
-                else SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 151);
-            }
-        }
-        else {
-            if (unicode) {
-                if      (strcmp(color, normal) == 0)   printf("</span><span class=normal_u>");
-                else if (strcmp(color, white) == 0)    printf("</span><span class=white_u>");
-                else if (strcmp(color, darkgray) == 0) printf("</span><span class=darkgray_u>");
-                else printf("</span>\n\n<!-- BUG in color()! -->\n\n<span class=normal_u>");  // shouldn't get here... you either forgot to use endunicode() or you used another color without adding it directly above this line
-            }
-            else printf("%s", color);
-        }
+        HANDLE hConsoleOutput;
+        if (printstderr) hConsoleOutput = GetStdHandle(STD_ERROR_HANDLE);
+        else             hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hConsoleOutput == INVALID_HANDLE_VALUE) return;
+        if      (strcmp(color, normal) == 0)         SetConsoleTextAttribute(hConsoleOutput, 7);
+        else if (strcmp(color, white) == 0)          SetConsoleTextAttribute(hConsoleOutput, 15);
+        else if (strcmp(color, green) == 0)          SetConsoleTextAttribute(hConsoleOutput, 10);
+        else if (strcmp(color, blue) == 0)           SetConsoleTextAttribute(hConsoleOutput, 9);
+        else if (strcmp(color, darkblue) == 0)       SetConsoleTextAttribute(hConsoleOutput, 1);
+        else if (strcmp(color, yellow) == 0)         SetConsoleTextAttribute(hConsoleOutput, 14);
+        else if (strcmp(color, red) == 0)            SetConsoleTextAttribute(hConsoleOutput, 12);
+        else if (strcmp(color, darkgray) == 0)       SetConsoleTextAttribute(hConsoleOutput, 8);
+        else if (strcmp(color, arrow) == 0)          SetConsoleTextAttribute(hConsoleOutput, 9);   // blue
+        else if (strcmp(color, box) == 0)            SetConsoleTextAttribute(hConsoleOutput, 9);   // blue
+        else if (strcmp(color, wtfhexcolor) == 0)    SetConsoleTextAttribute(hConsoleOutput, 12);  // red
+        else if (strcmp(color, wtfcharcolor) == 0)   SetConsoleTextAttribute(hConsoleOutput, 207); // white on red background
+        else if (strcmp(color, hexoffsetcolor) == 0) SetConsoleTextAttribute(hConsoleOutput, 8);   // dark gray
+        else if (strcmp(color, cyan) == 0)           SetConsoleTextAttribute(hConsoleOutput, 11);
+        else if (strcmp(color, brown) == 0)          SetConsoleTextAttribute(hConsoleOutput, 6);
+        else if (strcmp(color, filename) == 0)       SetConsoleTextAttribute(hConsoleOutput, 151); // light gray on blue
+        else if (strcmp(color, blackonyellow) == 0)  SetConsoleTextAttribute(hConsoleOutput, 224); // black on yellow background
+        else if (strcmp(color, blackonred) == 0)     SetConsoleTextAttribute(hConsoleOutput, 192); // black on red background
     #else
-        if (!html) {
-            if (printstderr) fprintf(stderr, "%s", color);
-            else printf("%s", color);
-        }
-        else {
-            if (unicode) {
-                if      (strcmp(color, normal) == 0)   printf("</span><span class=normal_u>");
-                else if (strcmp(color, white) == 0)    printf("</span><span class=white_u>");
-                else if (strcmp(color, darkgray) == 0) printf("</span><span class=darkgray_u>");
-                else printf("</span>\n\n<!-- BUG in color()! -->\n\n<span class=normal_u>");  // shouldn't get here... you either forgot to use endunicode() or you used another color without adding it directly above this line
-            }
-            else printf("%s", color);
-        }
+        if (printstderr) fprintf(stderr, "%s", color);
+        else printf("%s", color);
     #endif
   return;
 }
@@ -8239,7 +10558,7 @@ void makedat() {
     unsigned short u;
     unsigned char datfilebuffer[MAX_DATFILE_SIZE];
     unsigned long m, n;
-    static unsigned long datentries = 8;  // update this if adding more
+    static unsigned long datentries = 12;  // update this if adding more
     FILE *datfile = fopen("abgx360.dat", "wb");
     if (datfile != NULL) {
         memset(datfilebuffer, 0, MAX_DATFILE_SIZE);
@@ -8314,17 +10633,47 @@ void makedat() {
         datfilebuffer[n+7] = (unsigned char) ((lastknownwave & 0xFF00000000000000LL) >> 56);
         n += 8;  // don't forget to increment n with data size
         m += 8;  // ready for next entry
-        // total_sectors_available_for_video_data - LSB
-        memcpy(datfilebuffer+m, "TSAV", 4);  // identify this entry as total_sectors_available_for_video_data
+        // xgd2_total_sectors_available_for_video_data - LSB -- for the benefit of 1.0.4 and 1.0.5
+        // this is the old way of preventing older versions of abgx360 from blanking out new stealth sectors if fixing video padding is enabled
+        // (works for XGD2 only)
+        // you would need to change this to "unsigned long xgd2_total_sectors_available_for_video_data = 129824L - xgd2_number_of_stealth_sectors;"
+        // if you wind up having to split number_of_stealth_sectors as mentioned below
+        unsigned long xgd2_total_sectors_available_for_video_data = 129824L - number_of_stealth_sectors; // hopefully we won't have more than 129824 stealth sectors! lol
+        memcpy(datfilebuffer+m, "TSAV", 4);  // identify this entry as xgd2_total_sectors_available_for_video_data
         datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
         datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
         datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
         datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
-        datfilebuffer[n] =   (unsigned char)  (total_sectors_available_for_video_data & 0xFFL);  // save the actual total_sectors_available_for_video_data at n (4 bytes)
-        datfilebuffer[n+1] = (unsigned char) ((total_sectors_available_for_video_data & 0xFF00L) >> 8);
-        datfilebuffer[n+2] = (unsigned char) ((total_sectors_available_for_video_data & 0xFF0000L) >> 16);
-        datfilebuffer[n+3] = (unsigned char) ((total_sectors_available_for_video_data & 0xFF000000L) >> 24);
+        datfilebuffer[n] =   (unsigned char)  (xgd2_total_sectors_available_for_video_data & 0xFFL);  // save the actual xgd2_total_sectors_available_for_video_data at n (4 bytes)
+        datfilebuffer[n+1] = (unsigned char) ((xgd2_total_sectors_available_for_video_data & 0xFF00L) >> 8);
+        datfilebuffer[n+2] = (unsigned char) ((xgd2_total_sectors_available_for_video_data & 0xFF0000L) >> 16);
+        datfilebuffer[n+3] = (unsigned char) ((xgd2_total_sectors_available_for_video_data & 0xFF000000L) >> 24);
         n += 4;  // don't forget to increment n with data size
+        m += 8;  // ready for next entry
+        // number_of_stealth_sectors - LSB -- for 1.0.6+
+        // if you ever wind up having to split this into xgd2_number_of_stealth_sectors and xgd3_number_of_stealth_sectors
+        // (for example: if there were new stealth sectors needed for XGD3 ISOs only [and they weren't placed in the 16 sectors of xgd3 stealth
+        // padding between the SS and game data]) then you should use the greater of the two here for the benefit of older versions
+        memcpy(datfilebuffer+m, "NoSS", 4);  // identify this entry as number_of_stealth_sectors
+        datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
+        datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
+        datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
+        datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
+        datfilebuffer[n] =   (unsigned char)  (number_of_stealth_sectors & 0xFFL);  // save the actual number_of_stealth_sectors at n (4 bytes)
+        datfilebuffer[n+1] = (unsigned char) ((number_of_stealth_sectors & 0xFF00L) >> 8);
+        datfilebuffer[n+2] = (unsigned char) ((number_of_stealth_sectors & 0xFF0000L) >> 16);
+        datfilebuffer[n+3] = (unsigned char) ((number_of_stealth_sectors & 0xFF000000L) >> 24);
+        n += 4;  // don't forget to increment n with data size
+        m += 8;  // ready for next entry
+        // xgd3_stealth_padding_bitfield - MSB -- for 1.0.6+
+        memcpy(datfilebuffer+m, "3SPB", 4);  // identify this entry as xgd3_stealth_padding_bitfield
+        datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
+        datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
+        datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
+        datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
+        datfilebuffer[n]   = (unsigned char) ((xgd3_stealth_padding_bitfield & 0xFF00) >> 8);  // save the xgd3_stealth_padding_bitfield at n (2 bytes)
+        datfilebuffer[n+1] = (unsigned char)  (xgd3_stealth_padding_bitfield & 0x00FF);
+        n += 2;  // don't forget to increment n with data size
         m += 8;  // ready for next entry
         // media ids for AP25 games with no AP25 flag in the xex
         memcpy(datfilebuffer+m, "APMI", 4);  // identify this entry as AP25 media ids
@@ -8342,6 +10691,62 @@ void makedat() {
         }
         n += NUM_CURRENTAP25MEDIAIDS * 4;  // don't forget to increment n with data size
         m += 8;  // ready for next entry
+        // title ids for AP25 games with no AP25 flag in the xex
+        memcpy(datfilebuffer+m, "APTI", 4);  // identify this entry as AP25 title ids
+        datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
+        datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
+        datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
+        datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
+        datfilebuffer[n] =   (unsigned char) ((NUM_CURRENTAP25TITLEIDS & 0xFF000000) >> 24);  // save number of AP25 title ids
+        datfilebuffer[n+1] = (unsigned char) ((NUM_CURRENTAP25TITLEIDS & 0x00FF0000) >> 16);
+        datfilebuffer[n+2] = (unsigned char) ((NUM_CURRENTAP25TITLEIDS & 0x0000FF00) >> 8);
+        datfilebuffer[n+3] = (unsigned char)  (NUM_CURRENTAP25TITLEIDS & 0x000000FF);
+        n += 4;
+        for (i=0;i<NUM_CURRENTAP25TITLEIDS;i++) {  // save each title id starting at n (4 bytes each)
+            for (j=0;j<4;j++) datfilebuffer[i*4+n+j] = currentap25titleids[i].mediaid[j];  // save the titleid
+        }
+        n += NUM_CURRENTAP25TITLEIDS * 4;  // don't forget to increment n with data size
+        m += 8;  // ready for next entry
+        // AP25 disc profile ids
+        memcpy(datfilebuffer+m, "ADPI", 4);  // identify this entry as AP25 disc profile ids
+        datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
+        datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
+        datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
+        datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
+        datfilebuffer[n] =   (unsigned char) ((NUM_CURRENTAP25DISCPROFILEIDS & 0xFF000000) >> 24);  // save number of AP25 disc profile ids
+        datfilebuffer[n+1] = (unsigned char) ((NUM_CURRENTAP25DISCPROFILEIDS & 0x00FF0000) >> 16);
+        datfilebuffer[n+2] = (unsigned char) ((NUM_CURRENTAP25DISCPROFILEIDS & 0x0000FF00) >> 8);
+        datfilebuffer[n+3] = (unsigned char)  (NUM_CURRENTAP25DISCPROFILEIDS & 0x000000FF);
+        n += 4;
+        for (i=0;i<NUM_CURRENTAP25DISCPROFILEIDS;i++) {  // save each disc profile id starting at n (4 bytes each)
+            for (j=0;j<4;j++) datfilebuffer[i*4+n+j] = currentap25discprofileids[i].mediaid[j];  // save the disc profile id
+        }
+        n += NUM_CURRENTAP25DISCPROFILEIDS * 4;  // don't forget to increment n with data size
+        m += 8;  // ready for next entry
+        /*
+        // DAE versions and descriptions for displaying dashboard versions
+        memcpy(datfilebuffer+m, "DAEV", 4);  // identify this entry as DAE versions
+        datfilebuffer[m+4] = (unsigned char) ((n & 0xFF000000L) >> 24);  // give the address where it will be stored in the dat file (n)
+        datfilebuffer[m+5] = (unsigned char) ((n & 0x00FF0000L) >> 16);
+        datfilebuffer[m+6] = (unsigned char) ((n & 0x0000FF00L) >> 8);
+        datfilebuffer[m+7] = (unsigned char)  (n & 0x000000FFL);
+        datfilebuffer[n] =   (unsigned char) ((NUM_CURRENTDAEVERSIONS & 0xFF000000) >> 24);  // save number of DAE versions
+        datfilebuffer[n+1] = (unsigned char) ((NUM_CURRENTDAEVERSIONS & 0x00FF0000) >> 16);
+        datfilebuffer[n+2] = (unsigned char) ((NUM_CURRENTDAEVERSIONS & 0x0000FF00) >> 8);
+        datfilebuffer[n+3] = (unsigned char)  (NUM_CURRENTDAEVERSIONS & 0x000000FF);
+        n += 4;
+        for (i=0;i<NUM_CURRENTDAEVERSIONS;i++) {  // save each entry starting at n (1 byte for flags, 2 bytes for version, 2 bytes for description length and strlen(currentdaeversions[i].description) bytes for description)
+            datfilebuffer[n] =   currentdaeversions[i].flags;
+            datfilebuffer[n+1] = (unsigned char) ((currentdaeversions[i].version & 0xFF00) >> 8);  // save the DAE version
+            datfilebuffer[n+2] = (unsigned char)  (currentdaeversions[i].version & 0x00FF);
+            u = (unsigned short) strlen(currentdaeversions[i].description);
+            datfilebuffer[n+3] = (unsigned char) ((u & 0xFF00) >> 8);
+            datfilebuffer[n+4] = (unsigned char)  (u & 0x00FF);
+            memcpy(datfilebuffer+n+5, currentdaeversions[i].description, (size_t) u);
+            n += 5 + u;
+        }
+        m += 8;  // ready for next entry
+        */
         // pfi/video exceptions - for the benefit of v1.0.1 and v1.0.2
         struct pfiexception {unsigned char mediaid[16]; unsigned long long authored; unsigned int wave;};
         #define NUM_CURRENTPFIEXCEPTIONS 8  // update this when adding new exceptions
@@ -8396,7 +10801,7 @@ void makedat() {
         datfilebuffer[n+2] = (unsigned char) ((NUM_CURRENTPFIENTRIES & 0x0000FF00) >> 8);
         datfilebuffer[n+3] = (unsigned char)  (NUM_CURRENTPFIENTRIES & 0x000000FF);
         n += 4;
-        for (i=0;i<NUM_CURRENTPFIENTRIES;i++) {  // save each exception starting at n (1 byte for flags (currently none), 4 bytes for crc, 20 bytes for sha1, 2 bytes for description length and strlen(currentpfientries[i].description) bytes for description
+        for (i=0;i<NUM_CURRENTPFIENTRIES;i++) {  // save each entry starting at n (1 byte for flags [currently none], 4 bytes for crc, 20 bytes for sha1, 2 bytes for description length and strlen(currentpfientries[i].description) bytes for description)
             datfilebuffer[n] = 0x00;
             datfilebuffer[n+1] = (unsigned char) ((currentpfientries[i].crc & 0xFF000000) >> 24);  // save the crc
             datfilebuffer[n+2] = (unsigned char) ((currentpfientries[i].crc & 0x00FF0000) >> 16);
@@ -8421,7 +10826,7 @@ void makedat() {
         datfilebuffer[n+2] = (unsigned char) ((NUM_CURRENTVIDEOENTRIES & 0x0000FF00) >> 8);
         datfilebuffer[n+3] = (unsigned char)  (NUM_CURRENTVIDEOENTRIES & 0x000000FF);
         n += 4;
-        for (i=0;i<NUM_CURRENTVIDEOENTRIES;i++) {  // save each exception starting at n (1 byte for flags (currently only a hosted flag), 4 bytes for crc, 20 bytes for sha1, 2 bytes for description length and strlen(currentvideoentries[i].description) bytes for description
+        for (i=0;i<NUM_CURRENTVIDEOENTRIES;i++) {  // save each entry starting at n (1 byte for flags [currently only a hosted flag], 4 bytes for crc, 20 bytes for sha1, 2 bytes for description length and strlen(currentvideoentries[i].description) bytes for description)
             if (currentvideoentries[i].hosted) datfilebuffer[n] = 0x01;
             else datfilebuffer[n] = 0x00;
             datfilebuffer[n+1] = (unsigned char) ((currentvideoentries[i].crc & 0xFF000000) >> 24);  // save the crc
@@ -8458,7 +10863,7 @@ void makedat() {
             hexdump(datfilebuffer, 0, n);
         }
         initcheckwrite();
-        if (checkwriteandprinterrors(datfilebuffer, 1, n, datfile, 0, 0, "abgx360.dat", "writing") != 0) {
+        if (checkwriteandprinterrors(datfilebuffer, 1, n, datfile, 0, 0, "abgx360.dat", "Writing") != 0) {
             fclose(datfile);
             return;
         }
@@ -8499,7 +10904,7 @@ void checkdat() {
         unsigned char datfilebuffer[datfilesize];
         memset(datfilebuffer, 0, datfilesize);
         initcheckread();
-        if (checkreadandprinterrors(datfilebuffer, 1, datfilesize, datfile, 0, 0, "abgx360.dat", "reading abgx360.dat") != 0) return;
+        if (checkreadandprinterrors(datfilebuffer, 1, datfilesize, datfile, 0, 0, "abgx360.dat", "Checking abgx360.dat") != 0) return;
         donecheckread("abgx360.dat");
         fclose(datfile);
         // see if the file is valid before pulling values from it
@@ -8537,17 +10942,33 @@ void checkdat() {
           return;
         }
         unsigned long datentries = getuintmsb(datfilebuffer+0xC0);
-        unsigned long lastknownwave_offset = 0, pfientries_offset = 0, videoentries_offset = 0,
-                      tsav_offset = 0, ap25mediaids_offset = 0;
+        unsigned long lastknownwave_offset = 0, pfientries_offset = 0, videoentries_offset = 0, noss_offset = 0,
+                      xgd3spb_offset = 0, ap25mediaids_offset = 0, ap25titleids_offset = 0, ap25discprofileids_offset = 0;
+                      //daeversions_offset = 0;
         if (debug) printf("%s:%slatestversion = 0x%06lX, datentries = %lu%s", datpathbuffer, newline, latestversion, datentries, newline);
         if (datentries) {
             for (m=0;m<datentries;m++) {
                 if (0xC8+(m*8)+8 >= datfilesize) break;
-                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x004C4B57) lastknownwave_offset = getuintmsb(datfilebuffer+0xCC+(m*8));
-                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x00504649) pfientries_offset =    getuintmsb(datfilebuffer+0xCC+(m*8));
-                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x00564944) videoentries_offset =  getuintmsb(datfilebuffer+0xCC+(m*8));
-                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x54534156) tsav_offset =          getuintmsb(datfilebuffer+0xCC+(m*8));
-                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x41504D49) ap25mediaids_offset =  getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x004C4B57) lastknownwave_offset =      getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x00504649) pfientries_offset =         getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x00564944) videoentries_offset =       getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x4E6F5353) noss_offset =               getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x33535042) xgd3spb_offset =            getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x41504D49) ap25mediaids_offset =       getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x41505449) ap25titleids_offset =       getuintmsb(datfilebuffer+0xCC+(m*8));
+                if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x41445049) ap25discprofileids_offset = getuintmsb(datfilebuffer+0xCC+(m*8));
+                //if (getuintmsb(datfilebuffer+0xC8+(m*8)) == 0x44414556) daeversions_offset =        getuintmsb(datfilebuffer+0xCC+(m*8));
+            }
+            if (debug) {
+                printf("lastknownwave_offset = %s 0x%08lX%s", sp4, lastknownwave_offset, newline);
+                printf("pfientries_offset = %s 0x%08lX%s", sp7,    pfientries_offset, newline);
+                printf("videoentries_offset = %s 0x%08lX%s", sp5,  videoentries_offset, newline);
+                printf("noss_offset = %s%s 0x%08lX%s", sp10, sp3,  noss_offset, newline);
+                printf("xgd3spb_offset = %s 0x%08lX%s", sp10,      xgd3spb_offset, newline);
+                printf("ap25mediaids_offset = %s 0x%08lX%s", sp5,  ap25mediaids_offset, newline);
+                printf("ap25titleids_offset = %s 0x%08lX%s", sp5,  ap25titleids_offset, newline);
+                printf("ap25discprofileids_offset = 0x%08lX%s",    ap25discprofileids_offset, newline);
+                //printf("daeversions_offset = %s 0x%08lX%s", sp6,   daeversions_offset, newline);
             }
         }
         if (lastknownwave_offset && (lastknownwave_offset + 8) <= datfilesize) {
@@ -8558,9 +10979,13 @@ void checkdat() {
                 printf("%s", newline);
             }
         }
-        if (tsav_offset && (tsav_offset + 4) <= datfilesize) {
-            total_sectors_available_for_video_data = getuint(datfilebuffer+tsav_offset);
-            if (debug) printf("total_sectors_available_for_video_data = %lu%s", total_sectors_available_for_video_data, newline);
+        if (noss_offset && (noss_offset + 4) <= datfilesize) {
+            number_of_stealth_sectors = getuint(datfilebuffer+noss_offset);
+            if (debug) printf("number_of_stealth_sectors = %lu%s", number_of_stealth_sectors, newline);
+        }
+        if (xgd3spb_offset && (xgd3spb_offset + 2) <= datfilesize) {
+            xgd3_stealth_padding_bitfield = getwordmsb(datfilebuffer+xgd3spb_offset);
+            if (debug) printf("xgd3_stealth_padding_bitfield = 0x%04X%s", xgd3_stealth_padding_bitfield, newline);
         }
         if (ap25mediaids_offset && (ap25mediaids_offset + 4) <= datfilesize) {
             num_ap25mediaids = getuintmsb(datfilebuffer+ap25mediaids_offset);
@@ -8591,6 +11016,112 @@ void checkdat() {
                 mostrecentap25mediaids = datfileap25mediaids;
             }
         }
+        if (ap25titleids_offset && (ap25titleids_offset + 4) <= datfilesize) {
+            num_ap25titleids = getuintmsb(datfilebuffer+ap25titleids_offset);
+            datfileap25titleids = calloc(num_ap25titleids, sizeof(struct mediaidshort));
+            if (datfileap25titleids == NULL) {
+                if (debug) {
+                    color(red);
+                    printf("ERROR: Memory allocation for datfileap25titleids failed!%s", newline);
+                    color(normal);
+                }    
+                num_ap25titleids = NUM_CURRENTAP25TITLEIDS;
+            }
+            else {
+                n = ap25titleids_offset + 4;
+                for (m=0;m<num_ap25titleids;m++) {
+                    if (n + 4 > datfilesize) {
+                        num_ap25titleids = NUM_CURRENTAP25TITLEIDS;
+                      return;
+                    }
+                    for (i=0;i<4;i++) datfileap25titleids[m].mediaid[i] = datfilebuffer[n+i];
+                    if (debug) {
+                        printf("datfileap25titleids[%lu].mediaid = ", m);
+                        for (i=0;i<4;i++) printf("%02X", datfileap25titleids[m].mediaid[i]);
+                        printf("%s", newline);
+                    }
+                    n += 4;
+                }
+                mostrecentap25titleids = datfileap25titleids;
+            }
+        }
+        if (ap25discprofileids_offset && (ap25discprofileids_offset + 4) <= datfilesize) {
+            num_ap25discprofileids = getuintmsb(datfilebuffer+ap25discprofileids_offset);
+            datfileap25discprofileids = calloc(num_ap25discprofileids, sizeof(struct mediaidshort));
+            if (datfileap25discprofileids == NULL) {
+                if (debug) {
+                    color(red);
+                    printf("ERROR: Memory allocation for datfileap25discprofileids failed!%s", newline);
+                    color(normal);
+                }    
+                num_ap25discprofileids = NUM_CURRENTAP25DISCPROFILEIDS;
+            }
+            else {
+                n = ap25discprofileids_offset + 4;
+                for (m=0;m<num_ap25discprofileids;m++) {
+                    if (n + 4 > datfilesize) {
+                        num_ap25discprofileids = NUM_CURRENTAP25DISCPROFILEIDS;
+                      return;
+                    }
+                    for (i=0;i<4;i++) datfileap25discprofileids[m].mediaid[i] = datfilebuffer[n+i];
+                    if (debug) {
+                        printf("datfileap25discprofileids[%lu].mediaid = ", m);
+                        for (i=0;i<4;i++) printf("%02X", datfileap25discprofileids[m].mediaid[i]);
+                        printf("%s", newline);
+                    }
+                    n += 4;
+                }
+                mostrecentap25discprofileids = datfileap25discprofileids;
+            }
+        }
+        /*
+        if (daeversions_offset && (daeversions_offset + 4) <= datfilesize) {
+            num_daeversions = getuintmsb(datfilebuffer+daeversions_offset);
+            datfiledaeversions = calloc(num_daeversions, sizeof(struct flagverdescription));
+            if (datfiledaeversions == NULL) {
+                if (debug) {
+                    color(red);
+                    printf("ERROR: Memory allocation for datfiledaeversions failed!%s", newline);
+                    color(normal);
+                }    
+                num_daeversions = NUM_CURRENTDAEVERSIONS;
+            }
+            else {
+                n = daeversions_offset + 4;
+                for (m=0;m<num_daeversions;m++) {
+                    if (n + 5 > datfilesize) {
+                        num_daeversions = NUM_CURRENTDAEVERSIONS;
+                      return;
+                    }
+                    datfiledaeversions[m].flags = datfilebuffer[n];
+                    datfiledaeversions[m].version = getwordmsb(datfilebuffer+n+1);
+                    u = getwordmsb(datfilebuffer+n+3);
+                    if (n + 5 + u > datfilesize) {
+                        num_daeversions = NUM_CURRENTDAEVERSIONS;
+                      return;
+                    }
+                    if ( (s = (char *) calloc(u+1, sizeof(char))) == NULL ) {
+                        if (debug) {
+                            color(red);
+                            printf("ERROR: Memory allocation for datfiledaeversions[%lu].description failed!%s", m, newline);
+                            color(normal);
+                        }
+                        num_daeversions = NUM_CURRENTDAEVERSIONS;
+                      return;
+                    }
+                    memcpy(s, datfilebuffer+n+5, u);
+                    datfiledaeversions[m].description = s;
+                    if (debug) {
+                        printf("datfiledaeversions[%lu].flags %s = 0x%02X%s", m, sp5, datfiledaeversions[m].flags, newline);
+                        printf("datfiledaeversions[%lu].version %s = %u%s", m, sp3, datfiledaeversions[m].version, newline);
+                        printf("datfiledaeversions[%lu].description = %s%s%s", m, datfiledaeversions[m].description, newline, newline);
+                    }
+                    n += 5 + u;
+                }
+                mostrecentdaeversions = datfiledaeversions;
+            }
+        }
+        */
         if (pfientries_offset && (pfientries_offset + 4) <= datfilesize) {
             num_pfientries = getuintmsb(datfilebuffer+pfientries_offset);
             datfilepfientries = calloc(num_pfientries, sizeof(struct waveentry));
@@ -8754,6 +11285,17 @@ void getinivalue(char *buffer, int bufferstart, char *nameofvalue, int value, ch
                     if (debug) printf("getinivalue - %s - %s: %s, strlen(%s) = %u%s%s", nameofvalue, nameofvalue, webdat, nameofvalue, (unsigned int) strlen(webdat), newline, newline);
                 }
             }
+            else if (value == WEB_TOPOLOGY) {
+                webtopology = calloc(b - a + 1, sizeof(char));
+                if (webtopology == NULL) {
+                    webtopology = defaultvalue;
+                    if (debug) printf("getinivalue - %s - calloc failed, %s: %s%s", nameofvalue, nameofvalue, webtopology, newline);
+                }
+                else {
+                    strncpy(webtopology, buffer+a, b - a);
+                    if (debug) printf("getinivalue - %s - %s: %s, strlen(%s) = %u%s%s", nameofvalue, nameofvalue, webtopology, nameofvalue, (unsigned int) strlen(webtopology), newline, newline);
+                }
+            }
             else if (value == WEB_STEALTHDIR) {
                 webstealthdir = calloc(b - a + 1, sizeof(char));
                 if (webstealthdir == NULL) {
@@ -8787,6 +11329,30 @@ void getinivalue(char *buffer, int bufferstart, char *nameofvalue, int value, ch
                     if (debug) printf("getinivalue - %s - %s: %s, strlen(%s) = %u%s%s", nameofvalue, nameofvalue, webunverifiedinidir, nameofvalue, (unsigned int) strlen(webunverifiedinidir), newline, newline);
                 }
             }
+            /*
+            else if (value == WEB_AP25AUTOUPLOAD) {
+                ap25autouploadwebaddress = calloc(b - a + 1, sizeof(char));
+                if (ap25autouploadwebaddress == NULL) {
+                    ap25autouploadwebaddress = defaultvalue;
+                    if (debug) printf("getinivalue - %s - calloc failed, %s: %s%s", nameofvalue, nameofvalue, ap25autouploadwebaddress, newline);
+                }
+                else {
+                    strncpy(ap25autouploadwebaddress, buffer+a, b - a);
+                    if (debug) printf("getinivalue - %s - %s: %s, strlen(%s) = %u%s%s", nameofvalue, nameofvalue, ap25autouploadwebaddress, nameofvalue, (unsigned int) strlen(ap25autouploadwebaddress), newline, newline);
+                }
+            }
+            else if (value == WEB_DAE) {
+                webdae = calloc(b - a + 1, sizeof(char));
+                if (webdae == NULL) {
+                    webdae = defaultvalue;
+                    if (debug) printf("getinivalue - %s - calloc failed, %s: %s%s", nameofvalue, nameofvalue, webdae, newline);
+                }
+                else {
+                    strncpy(webdae, buffer+a, b - a);
+                    if (debug) printf("getinivalue - %s - %s: %s, strlen(%s) = %u%s%s", nameofvalue, nameofvalue, webdae, nameofvalue, (unsigned int) strlen(webdae), newline, newline);
+                }
+            }
+            */
         }
     }
   return;
@@ -8794,34 +11360,49 @@ void getinivalue(char *buffer, int bufferstart, char *nameofvalue, int value, ch
 
 void checkini() {
     memset(buffer, 0, 2048);
-    if (!homeless) { strcat(buffer, homedir); strcat(buffer, abgxdir); }
+    if (!homeless) {
+        strcat(buffer, homedir);
+        strcat(buffer, abgxdir);
+    }
     strcat(buffer, "abgx360.ini");
     FILE *inifile = fopen(buffer, "rb");
     if (inifile != NULL) {
         unsigned long m = 0;
         memset(buffer, 0, 2048);
         while (fgets(buffer, 2048, inifile) != NULL && m < 2000) {  // 2000 lines limit
-            if (memcmp(buffer, "web_inidir:", 11) == 0) {
-                getinivalue(buffer, 11, "webinidir", WEB_INIDIR, "http://abgx360.net/Apps/verified/");
+            if      (memcmp(buffer, "web_inidir:", 11) == 0) {
+                getinivalue(buffer, 11, "webinidir",            WEB_INIDIR,           "http://abgx360.net/Apps/verified/");
             }
             else if (memcmp(buffer, "web_stealthdir:", 15) == 0) {
-                getinivalue(buffer, 15, "webstealthdir", WEB_STEALTHDIR, "http://abgx360.net/Apps/StealthFiles/");
+                getinivalue(buffer, 15, "webstealthdir",        WEB_STEALTHDIR,       "http://abgx360.net/Apps/StealthFiles/");
             }
             else if (memcmp(buffer, "web_csv:", 8) == 0) {
-                getinivalue(buffer, 8, "webcsv", WEB_CSV, "http://abgx360.net/Apps/Stealth360/GameNameLookup.csv");
+                getinivalue(buffer, 8, "webcsv",                WEB_CSV,              "http://abgx360.net/Apps/Stealth360/GameNameLookup.csv");
             }
             else if (memcmp(buffer, "web_dat:", 8) == 0) {
-                getinivalue(buffer, 8, "webdat", WEB_DAT, "http://abgx360.net/Apps/Stealth360/abgx360.dat");
+                getinivalue(buffer, 8, "webdat",                WEB_DAT,              "http://abgx360.net/Apps/Stealth360/abgx360.dat");
+            }
+            else if (memcmp(buffer, "web_topology:", 13) == 0) {
+                getinivalue(buffer, 13, "webtopology",          WEB_TOPOLOGY,         "http://abgx360.net/Apps/topology.php");
             }
             else if (memcmp(buffer, "web_autoupload:", 15) == 0) {
-                getinivalue(buffer, 15, "autouploadwebaddress", WEB_AUTOUPLOAD, "http://abgx360.net/Apps/Control/AutoUpload.php");
+                getinivalue(buffer, 15, "autouploadwebaddress", WEB_AUTOUPLOAD,       "http://abgx360.net/Apps/Control/AutoUpload.php");
             }
             else if (memcmp(buffer, "web_unverifiedinidir:", 21) == 0) {
-                getinivalue(buffer, 21, "webunverifiedinidir", WEB_UNVERIFIEDINIDIR, "http://abgx360.net/Apps/unverified/");
+                getinivalue(buffer, 21, "webunverifiedinidir",  WEB_UNVERIFIEDINIDIR, "http://abgx360.net/Apps/unverified/");
             }
+            /*
+            else if (memcmp(buffer, "web_ap25autoupload:", 19) == 0) {
+                getinivalue(buffer, 19, "ap25autouploadwebaddress", WEB_AP25AUTOUPLOAD, "http://abgx360.net/Apps/Control/AP25AutoUpload.php");
+            }
+            else if (memcmp(buffer, "web_dae:", 8) == 0) {
+                getinivalue(buffer, 8, "webdae",                    WEB_DAE,          "http://abgx360.net/Apps/Stealth360/dae.bin");
+            }
+            */
             memset(buffer, 0, 2048);
             m++;
         }
+        fclose(inifile);
     }
   return;
 }
@@ -9008,7 +11589,7 @@ void printwtfcharcolor() {
 void hexdump(unsigned char* ptr, int stealthtype, int bytes) {
     int a, b, c;
     unsigned char thisline[16], lastline[16];
-    bool pfihex = false, dmihex = false, foundusbcorruption = false;
+    bool pfihex = false, dmihex = false, foundusbcorruption = false, matchedbefore = false;
     if (stealthtype == PFI_HEX && bytes == 2048) pfihex = true;
     else if (stealthtype == DMI_HEX && bytes == 2048) {
         dmihex = true;
@@ -9028,7 +11609,9 @@ void hexdump(unsigned char* ptr, int stealthtype, int bytes) {
         if ((a > 0) && (memcmp(thisline, lastline, 16) == 0)) {
             // it does, but don't print another "*" if we just did
             if (!matchedbefore) {
-                color(hexoffsetcolor); printf("%s%s*", newline, sp5); color(normal);
+                color(hexoffsetcolor);
+                printf("%s%s*", newline, sp5);
+                color(normal);
                 matchedbefore = true;
             }
             continue;
@@ -9159,18 +11742,20 @@ int checkgame() {
     unsigned long m, rootsize, defaultxexsize = 0;
     unsigned long long rootsector, rootaddress, defaultxexaddress, defaultxexsector = 0;
     if (verbose) printf("Checking Game%s", newline);
-    // seek to sector 32
+    // seek to sector 32 of the game partition and read it into ubuffer
     if (fseeko(fp, 32*2048+video, SEEK_SET) != 0) {
         printseekerror(isofilename, "Checking sector 32");
       return 1;
     }
     memset(ubuffer, 0, 2048);
     initcheckread();
-    if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 32*2048+video, isofilename, "checking sector 32") != 0) return 1;
+    if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, 32*2048+video, isofilename, "Checking sector 32") != 0) return 1;
     donecheckread(isofilename);
+    // get the location and size of the rootsector
     rootsector = getuint(ubuffer+20);
     rootaddress = rootsector*2048+video;
     rootsize = getuint(ubuffer+24);
+    // show the input file/drive name and size if verbose, and show the layerbreak if it's a dvd
     if (verbose || L0capacity != -1) {
         if (verbose) printf("%sISO: %s%s%s%s", sp5, quotation, isofilename, quotation, newline);
         if (L0capacity != -1) {
@@ -9180,33 +11765,25 @@ int checkgame() {
                 printf("Layerbreak: Unknown%s", newline);
             }
             else {
-                if (L0capacity == 1913760) color(green);
+                if (L0capacity == layerbreak) color(green);
+                else if (L0capacity == 2086912 && layerbreak == 2133520) color(yellow);
                 else color(red);
                 if (verbose) printf("%s", sp5);
-                printf("Layerbreak: %"LL"d%s", L0capacity, newline);
+                printf("Layerbreak: %"LL"d", L0capacity);
+                if (L0capacity != layerbreak) printf(" (should have been %ld)", layerbreak);
+                printf("%s", newline);
             }
             color(normal);
         }
         if (verbose) printf("%sSize: %"LL"d bytes", sp5, fpfilesize);
     }
-    if (video == 0) {  // just a game partition
-        if (fpfilesize < 7307001856LL) {
-            color(red);
-            if (verbose) printf(" (filesize too small!)%s", newline);
-            printf("Warning: This ISO is short %"LL"d bytes! Part of the game data is missing!%s"
-                   "%s(should have been exactly %"LL"d bytes)%s",
-                   7307001856LL - fpfilesize, newline, sp9, 7307001856LL, newline);
-            color(normal);
-            isotoosmall = true;
-        }
-        else if (verbose) printf("%s", newline);
-    }
-    else if (fpfilesize < 7307001856LL + (long long) video) {
+    // make sure the input filesize isn't too small -- we'll use isotoosmall to abort rebuilding and checking the game crc
+    if (video != 0 && (fpfilesize < (xgd3 ? 8662351872LL : 7307001856LL) + (long long) video)) {
         color(red);
         if (verbose) printf(" (filesize too small!)%s", newline);
         printf("Warning: This ISO is short %"LL"d bytes! Part of the game data is missing!%s"
                "%s(should have been at least %"LL"d bytes)%s",
-               7307001856LL + video - fpfilesize, newline, sp9, 7307001856LL + video, newline);
+               (xgd3 ? 8662351872LL : 7307001856LL) + video - fpfilesize, newline, sp9, (xgd3 ? 8662351872LL : 7307001856LL) + video, newline);
         color(normal);
         isotoosmall = true;
     }
@@ -9221,7 +11798,7 @@ int checkgame() {
         printseekerror(isofilename, "Checking the root sector");
       return 1;
     }
-    // create an array for the rootsector with the correct size (max 5000 sectors)
+    // create a buffer for the rootsector with the correct size (max 5000 sectors)
     if (rootsize > 10240000) {
         rootsize = 10240000;
         color(yellow);
@@ -9242,8 +11819,9 @@ int checkgame() {
         color(normal);
       exit(1);
     }
+    // read the rootsector into the buffer
     initcheckread();
-    if (checkreadandprinterrors(rootbuffer, 1, rootsize, fp, 0, rootaddress, isofilename, "checking the root sector") != 0) {
+    if (checkreadandprinterrors(rootbuffer, 1, rootsize, fp, 0, rootaddress, isofilename, "Checking the root sector") != 0) {
         free(rootbuffer);
       return 1;
     }
@@ -9259,10 +11837,11 @@ int checkgame() {
         free(rootbuffer);
       return 1;
     }
-    // case insensitive search for "default.xex" (0x80 tells us it's a file and 0x0B = 11 chars in filename)
+    // case insensitive search of the rootsector for "default.xex" (0x80 tells us it's a file and 0x0B = 11 chars in filename)
     char defaultxex[13] = {0x80,0x0B,'d','e','f','a','u','l','t','.','x','e','x'};
     for (m=0; m<rootsize-12; m++) {
         if (strncasecmp(rootbuffer+m, defaultxex, 13) == 0) {
+            // found it, get the location and size
             defaultxexsector = getint(rootbuffer+m-8);
             defaultxexsize = getint(rootbuffer+m-4);
           break;
@@ -9280,6 +11859,7 @@ int checkgame() {
     if (extraverbose) printf("%sdefault.xex sector: %"LL"u (0x%"LL"X), %lu bytes%s",
                               sp5, defaultxexsector, defaultxexaddress, defaultxexsize, newline);
     if (!dontparsefs) {
+        // try to parse the filesystem -- if there are no problems then display it if requested and check for random padding
         if (converttosectors(rootsize) > MAX_DIR_SECTORS) {
             if (verbose) printf("%s", sp5);
             color(yellow);
@@ -9300,7 +11880,7 @@ int checkgame() {
           exit(1);
         }
         memset(dirprefix, 0, 2048);
-        // read rootsector
+        // read rootsector into fsbuffer
         if (readblock(isofilename, "Parsing filesystem and checking random padding", fp, rootsector, (unsigned char*) fsbuffer, converttosectors(rootsize))) {
             free(fsbuffer);
           goto skipparsingfs;
@@ -9369,7 +11949,10 @@ int checkgame() {
         }
         if (verbose && !parsingfsfailed) {
             printf("%sFiles in ISO: %lu, Folders in ISO: %lu%s", sp5, totalfiles, totaldirectories, newline);
-            printf("%sTotal bytes used: %"LL"u (%.2f%%)%s", sp5, totalbytes, (float) totalbytes/72986092, newline);
+            // Note: the percentage of total bytes used will be incorrect if this is just an xgd3 game partition (video == 0)
+            // we would have to check the xex first for the disc profile id to determine if this is an xgd3 game...
+            // but it's not really important since this is just superfluous information
+            printf("%sTotal bytes used: %"LL"u (%.2f%%)%s", sp5, totalbytes, (double) totalbytes/(xgd3 ? 86623477.76 : 72986091.52), newline);
         }
         if (!parsingfsfailed) {
             // check for random padding
@@ -9391,32 +11974,45 @@ int checkgame() {
                 }
                 // dont' display files but add to filesystem structure
                 parse(isofilename, "Parsing filesystem and checking random padding", 0, 0, 0, fp, true, true, dirprefix);
-                filesystem[totalfiles + totaldirectories].datasector = 32L;  // sector 32 has data (it tells us where the rootsector is)
-                filesystem[totalfiles + totaldirectories].datalength = 2L;   // as well as sector 33
-                filesystem[totalfiles + totaldirectories + 1].datasector = rootsector;  // don't forget to add the rootsector
+                // add data sectors that aren't specified by the filesystem
+                // sector 32 has data (it tells us where the rootsector is)
+                filesystem[totalfiles + totaldirectories].datasector = 32L;
+                filesystem[totalfiles + totaldirectories].datalength = 1L;
+                // don't forget to add the rootsector
+                filesystem[totalfiles + totaldirectories + 1].datasector = rootsector;
                 filesystem[totalfiles + totaldirectories + 1].datalength = converttosectors(rootsize);
-                filesystem[totalfiles + totaldirectories + 2].datasector = 3567872L;  // add the very last sector that probably doesn't even exist unless image is splitvid (doesn't matter, this is just for hole calculation)
+                // add the very last sector that only exists if the image has L1 video (doesn't matter, this is just for hole calculation)
+                // Note: the latter (3567872L) will incorrectly be used if this is just an xgd3 game partition (video == 0)
+                // we would have to check the xex first for the disc profile id to determine if this is an xgd3 game...
+                // but it's not really important since there should still be holes available to check
+                filesystem[totalfiles + totaldirectories + 2].datasector = (xgd3 ? 4229664L : 3567872L);
                 filesystem[totalfiles + totaldirectories + 2].datalength = 0L;
-                filesystem[totalfiles + totaldirectories + 3].datasector = 48L;  // sectors 48 - 4143 are reserved for some kind of data hash authentication
-                filesystem[totalfiles + totaldirectories + 3].datalength = 4096L;
+                if (!xgd3) {
+                    // XGD2 sectors 48 - 4143 are reserved for storage of data hashes used by the kernel during disc authentication
+                    // Note: this will incorrectly be added if this is just an xgd3 game partition (video == 0)
+                    // we would have to check the xex first for the disc profile id to determine if this is an xgd3 game...
+                    // but it's not really important since there should still be holes available to check
+                    filesystem[totalfiles + totaldirectories + 3].datasector = 48L;
+                    filesystem[totalfiles + totaldirectories + 3].datalength = 4096L;
+                }
                 if (debugfs) {
                     printf("filesystem:%s", newline);
-                    for (m=0;m<totalfiles + totaldirectories + 4;m++) {
+                    for (m=0;m<totalfiles + totaldirectories + (xgd3 ? 3 : 4);m++) {
                         printf("%lu: %lu, %lu%s", m, filesystem[m].datasector, filesystem[m].datalength, newline);
                     }
                 }
                 // sort datasectors
-                qsort(filesystem, totalfiles + totaldirectories + 4, sizeof(struct filesys), compfilesys);
+                qsort(filesystem, totalfiles + totaldirectories + (xgd3 ? 3 : 4), sizeof(struct filesys), compfilesys);
                 if (debugfs) {
                     printf("filesystem (sorted):%s", newline);
-                    for (m=0;m<totalfiles + totaldirectories + 4;m++) {
+                    for (m=0;m<totalfiles + totaldirectories + (xgd3 ? 3 : 4);m++) {
                         printf("%lu: %lu, %lu%s", m, filesystem[m].datasector, filesystem[m].datalength, newline);
                     }
                 }
-                holes = calloc(totalfiles + totaldirectories + 4, sizeof(struct filesys));
+                holes = calloc(totalfiles + totaldirectories + (xgd3 ? 3 : 4), sizeof(struct filesys));
                 if (holes != NULL) {
                     unsigned long holesector = 0L;
-                    for (m=0;m<totalfiles + totaldirectories + 4;m++) {
+                    for (m=0;m<totalfiles + totaldirectories + (xgd3 ? 3 : 4);m++) {
                         if (filesystem[m].datasector > holesector) {
                             holes[holecount].datasector = holesector;
                             holes[holecount].datalength = filesystem[m].datasector - holesector;
@@ -9426,8 +12022,11 @@ int checkgame() {
                     }
                     if (debugfs) {
                         printf("holes:%s", newline);
-                        for (m=0;m<holecount;m++) printf("%lu: %lu, %lu, 0x%"LL"X%s", m, holes[m].datasector, holes[m].datalength,
-                                     (unsigned long long) (holes[m].datasector + holes[m].datalength - 1) * 2048 + video, newline);
+                        for (m=0;m<holecount;m++) printf("%3lu: %7lu, %7lu, 0x%09"LL"X - 0x%09"LL"X%s",
+                                                         m, holes[m].datasector, holes[m].datalength,
+                                                         (unsigned long long) holes[m].datasector * 2048 + video,
+                                                         (unsigned long long) (holes[m].datasector + holes[m].datalength) * 2048 + video - 1,
+                                                         newline);
                     }
                     // search the first and last sector of all holes up to a maximum of 20 holes for random padding
                     for (m=0;m<(holecount <= 20 ? holecount : 20);m++) {
@@ -9437,7 +12036,7 @@ int checkgame() {
                         }
                         initcheckread();
                         if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, (unsigned long long) holes[m].datasector * 2048 + video,
-                                                    isofilename, "random padding check") != 0) break;
+                                                    isofilename, "Random padding check") != 0) break;
                         donecheckread(isofilename);
                         sectorschecked++;
                         if (debugfs) {
@@ -9459,7 +12058,7 @@ int checkgame() {
                             initcheckread();
                             if (checkreadandprinterrors(ubuffer, 1, 2048, fp, 0, (unsigned long long)
                                                         (holes[m].datasector + holes[m].datalength - 1) * 2048 + video,
-                                                        isofilename, "random padding check") != 0) break;
+                                                        isofilename, "Random padding check") != 0) break;
                             donecheckread(isofilename);
                             sectorschecked++;
                             if (debugfs) {
@@ -9553,7 +12152,7 @@ int checkgame() {
     // read the default.xex into the buffer (already seeked to it)
     initcheckread();
     if (checkreadandprinterrors(defaultxexbuffer, 1, defaultxexsize, fp, 0, defaultxexaddress,
-                                isofilename, "checking the default.xex") != 0) {
+                                isofilename, "Checking the default.xex") != 0) {
         free(defaultxexbuffer);
       return 1;
     }
@@ -9577,6 +12176,18 @@ int checkgame() {
       return 1;
     }
     free(defaultxexbuffer);
+    // had to copy this to after the xex is checked since we need to check for the existence of the
+    // disc profile id if there is no video partition in order to determine if this is an xgd3 game
+    if (video == 0) {  // just a game partition
+        if (fpfilesize < (xgd3 ? 8662351872LL : 7307001856LL)) {
+            color(red);
+            printf("%sWarning: This ISO is short %"LL"d bytes! Part of the game data is missing!%s"
+                   "%s(should have been exactly %"LL"d bytes)%s", newline,
+                   (xgd3 ? 8662351872LL : 7307001856LL) - fpfilesize, newline, sp9, (xgd3 ? 8662351872LL : 7307001856LL), newline);
+            color(normal);
+            isotoosmall = true;
+        }
+    }
   return 0;
 }
 
@@ -10387,7 +12998,7 @@ void base64encode(unsigned char *data, unsigned long size, unsigned char *output
     }
 }
 
-void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resourcesize, unsigned char *titleid) {
+void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resourcesize) {
     int i, j, ret;
     char *spx;
     unsigned long m, n, x;
@@ -10646,12 +13257,13 @@ void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resources
                 }
                 else {
                     resource.titletype = getuintmsb(resourcebuffer+resource.XTHD_offset+16);
-                    if (titleid == NULL) {
+                    if (!foundtitleid) {
                         // this should only happen when checking a .spa file because checkdefaultxex() would have had to find a title id before getting to the point where it could call this function
-                        titleid = resourcebuffer+resource.XTHD_offset+12;
-                        if (debug || testing) printf("null titleid was replaced with XTHD titleid: %02X%02X%02X%02X%s", titleid[0], titleid[1], titleid[2], titleid[3], newline);
+                        memcpy(titleid, resourcebuffer+resource.XTHD_offset+12, 4);
+                        foundtitleid = true;
+                        if (debug || testing) printf("missing titleid was replaced with XTHD titleid: %02X%02X%02X%02X%s", titleid[0], titleid[1], titleid[2], titleid[3], newline);
                     }
-                    else if (debug || testing) printf("titleid passed to parsetitleidresource (or multiple XTHD entries): %02X%02X%02X%02X%s", titleid[0], titleid[1], titleid[2], titleid[3], newline);
+                    else if (debug || testing) printf("this titleid was already found and will be used: %02X%02X%02X%02X%s", titleid[0], titleid[1], titleid[2], titleid[3], newline);
                     if (debug || testing) printf("found XTHD: titleid: %02X%02X%02X%02X (%c%c-%u), titletype: %lu%s", resourcebuffer[resource.XTHD_offset+12], resourcebuffer[resource.XTHD_offset+13],
                                                   resourcebuffer[resource.XTHD_offset+14], resourcebuffer[resource.XTHD_offset+15], resourcebuffer[resource.XTHD_offset+12],
                                                   resourcebuffer[resource.XTHD_offset+13], getwordmsb(resourcebuffer+resource.XTHD_offset+14), resource.titletype, newline);
@@ -10732,7 +13344,7 @@ void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resources
             color(normal);
             extractimages = false;
         }
-        else if (titleid == NULL) {
+        else if (!foundtitleid) {
             color(yellow);
             printf("ERROR: Unable to extract images because the Title ID was not found%s", newline);
             color(normal);
@@ -10788,7 +13400,7 @@ void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resources
                           break;
                         }
                         initcheckwrite();
-                        if (checkwriteandprinterrors(resourcebuffer+imageoffset, 1, imagesize, imagefile, 0, 0, fullimagename, "extracting images") != 0) {
+                        if (checkwriteandprinterrors(resourcebuffer+imageoffset, 1, imagesize, imagefile, 0, 0, fullimagename, "Extracting images") != 0) {
                             fclose(imagefile);
                             extractimages = false;
                           break;
@@ -10893,9 +13505,9 @@ void parsetitleidresource(unsigned char *resourcebuffer, unsigned long resources
                                                                       0x49, 0x00, 0x6E, 0x00, 0x66, 0x00, 0x6F, 0x00, 0x72, 0x00, 0x6D, 0x00, 0x61, 0x00, 0x74, 0x00,
                                                                       0x69, 0x00, 0x6F, 0x00, 0x6E, 0x00, 0x20, 0x00};
                     static unsigned char offlinePlayersMax[38] =     {0x6F, 0x00, 0x66, 0x00, 0x66, 0x00, 0x6C, 0x00, 0x69, 0x00, 0x6E, 0x00, 0x65, 0x00, 0x50, 0x00,
-	                                                                  0x6C, 0x00, 0x61, 0x00, 0x79, 0x00, 0x65, 0x00, 0x72, 0x00, 0x73, 0x00, 0x4D, 0x00, 0x61, 0x00,
-	                                                                  0x78, 0x00, 0x3D, 0x00, 0x22, 0x00};
-	                static unsigned char systemLinkPlayersMax[44] =  {0x73, 0x00, 0x79, 0x00, 0x73, 0x00, 0x74, 0x00, 0x65, 0x00, 0x6D, 0x00, 0x4C, 0x00, 0x69, 0x00,
+                                                                      0x6C, 0x00, 0x61, 0x00, 0x79, 0x00, 0x65, 0x00, 0x72, 0x00, 0x73, 0x00, 0x4D, 0x00, 0x61, 0x00,
+                                                                      0x78, 0x00, 0x3D, 0x00, 0x22, 0x00};
+                    static unsigned char systemLinkPlayersMax[44] =  {0x73, 0x00, 0x79, 0x00, 0x73, 0x00, 0x74, 0x00, 0x65, 0x00, 0x6D, 0x00, 0x4C, 0x00, 0x69, 0x00,
                                                                       0x6E, 0x00, 0x6B, 0x00, 0x50, 0x00, 0x6C, 0x00, 0x61, 0x00, 0x79, 0x00, 0x65, 0x00, 0x72, 0x00,
                                                                       0x73, 0x00, 0x4D, 0x00, 0x61, 0x00, 0x78, 0x00, 0x3D, 0x00, 0x22, 0x00};
                     static unsigned char livePlayersMax[32] =        {0x6C, 0x00, 0x69, 0x00, 0x76, 0x00, 0x65, 0x00, 0x50, 0x00, 0x6C, 0x00, 0x61, 0x00, 0x79, 0x00,
@@ -12380,12 +14992,16 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
     unsigned char compressioninfo_tableflags[4] = {0x00,0x00,0x03,0xFF};
     unsigned long executioninfo_address = 0L;
     unsigned char executioninfo_tableflags[4] = {0x00,0x04,0x00,0x06};
+    unsigned long discprofileid_address = 0L;
+    unsigned char discprofileid_tableflags[4] = {0x00,0x00,0x43,0x04};
     unsigned long basefiletimestamp_address = 0L;
     unsigned char basefiletimestamp_tableflags[4] = {0x00,0x01,0x80,0x02};
     unsigned long originalname_address = 0L;
     unsigned char originalname_tableflags[4] = {0x00,0x01,0x83,0xFF};
     unsigned long ratings_address = 0L;
     unsigned char ratings_tableflags[4] = {0x00,0x04,0x03,0x10};
+    unsigned long importlibs_address = 0L;
+    unsigned char importlibs_tableflags[4] = {0x00,0x01,0x03,0xFF};
     bool foundsystemflags = false;
     unsigned long systemflags = 0L;
     unsigned char systemflags_tableflags[4] = {0x00,0x03,0x00,0x00};
@@ -12400,6 +15016,11 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         else if (memcmp(defaultxexbuffer+n, executioninfo_tableflags, 4) == 0) {
             executioninfo_address = getuintmsb(defaultxexbuffer+n+4);
         }
+        else if (memcmp(defaultxexbuffer+n, discprofileid_tableflags, 4) == 0) {
+            discprofileid_address = getuintmsb(defaultxexbuffer+n+4);
+            // if this was just a game partition, we will assume it needs to be rebuilt with xgd3 offsets if the xex has a disc profile id
+            if (video == 0) xgd3 = true;
+        }
         else if (memcmp(defaultxexbuffer+n, basefiletimestamp_tableflags, 4) == 0) {
             basefiletimestamp_address = getuintmsb(defaultxexbuffer+n+4);
         }
@@ -12408,6 +15029,9 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         }
         else if (memcmp(defaultxexbuffer+n, ratings_tableflags, 4) == 0) {
             ratings_address = getuintmsb(defaultxexbuffer+n+4);
+        }
+        else if (memcmp(defaultxexbuffer+n, importlibs_tableflags, 4) == 0) {
+            importlibs_address = getuintmsb(defaultxexbuffer+n+4);
         }
         else if (memcmp(defaultxexbuffer+n, systemflags_tableflags, 4) == 0) {
             foundsystemflags = true;
@@ -12419,9 +15043,11 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         printf("%s%sresourceinfo_address: 0x%lX%s", newline, sp5, resourceinfo_address, newline);
         printf("%scompressioninfo_address: 0x%lX%s", sp5, compressioninfo_address, newline);
         printf("%sexecutioninfo_address: 0x%lX%s", sp5, executioninfo_address, newline);
+        printf("%sdiscprofileid_address: 0x%lX%s", sp5, discprofileid_address, newline);
         printf("%sbasefiletimestamp_address: 0x%lX%s", sp5, basefiletimestamp_address, newline);
         printf("%soriginalname_address: 0x%lX%s", sp5, originalname_address, newline);
         printf("%sratings_address: 0x%lX%s", sp5, ratings_address, newline);
+        printf("%simportlibs_address: 0x%lX%s", sp5, importlibs_address, newline);
         if (foundsystemflags) printf("%sfound systemflags: 0x%08lX%s", sp5, systemflags, newline);
         else printf("%sdid not find systemflags%s", sp5, newline);
         printf("%s", newline);
@@ -12449,7 +15075,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         printf("%sImage Flags: %s ", sp5, sp9);
         if (imageflags & 0x00000002) { printf("%sManufacturing Utility%s", spx, newline); spx = sp28; }
         if (imageflags & 0x00000004) { printf("%sManufacturing Support Tool%s", spx, newline); spx = sp28; }
-        if (imageflags & 0x00000008) { printf("%sXGD2 Media Only%s", spx, newline); spx = sp28; }
+        if (imageflags & 0x00000008) { printf("%sOriginal Media Only%s", spx, newline); spx = sp28; }
         if (imageflags & 0x00000100) { printf("%sCardea Key (WMDRM-ND)%s", spx, newline); spx = sp28; }
         if (imageflags & 0x00000200) { printf("%sXeika Key (AP25)%s", spx, newline); spx = sp28; }
         if (imageflags & 0x00000400) { printf("%sTitle Usermode%s", spx, newline); spx = sp28; }
@@ -12463,11 +15089,11 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         if (imageflags & 0x04000000) { printf("%sKeyvault Privileges Required%s", spx, newline); spx = sp28; }
         if (imageflags & 0x08000000) { printf("%sActivation Required%s", spx, newline); spx = sp28; }
         if (imageflags & 0x10000000) { printf("%s4 KB Pages%s", spx, newline); spx = sp28; }
-        else { printf("%s64 KB Pages%s", spx, newline); spx = sp28; }
+        else                         { printf("%s64 KB Pages%s", spx, newline); spx = sp28; }
         if (imageflags & 0x20000000) { printf("%sNo Game Region%s", spx, newline); spx = sp28; }
         if (imageflags & 0x40000000) { printf("%sRevocation Check Optional%s", spx, newline); spx = sp28; }
         if (imageflags & 0x80000000) { printf("%sRevocation Check Required%s", spx, newline); spx = sp28; }
-        if (imageflags & 0x07FC00F1) printf("%sUnknown Image Flags: %08lX%s", spx, imageflags & 0x07FC00F1, newline);
+        if (imageflags & 0x03FC80F1)   printf("%sUnknown Image Flags: %08lX%s", spx, imageflags & 0x03FC80F1, newline);
         if (foundsystemflags) {
             if (systemflags == 0) printf("%sNo System Flags%s", sp5, newline);
             else {
@@ -12491,12 +15117,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                 if (systemflags & 0x00004000) { printf("%sCross Platform System Link%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x00008000) { printf("%sMultidisc Swap%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x00010000) { printf("%sSupports Insecure Multidisc Media%s", spx, newline); spx = sp28; }
-                if (systemflags & 0x00020000) {
-                    // AP25! oh noes!
-                    color(yellow);
-                    printf("%sAntiPiracy25 Media%s", spx, newline); spx = sp28;
-                    color(normal);
-                }
+                if (systemflags & 0x00020000) { printf("%sAntiPiracy25 Media%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x00040000) { printf("%sNo Confirm Exit%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x00080000) { printf("%sAllow Background Downloading%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x00100000) { printf("%sCreate Persistable Ram Drive%s", spx, newline); spx = sp28; }
@@ -12510,10 +15131,30 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                 if (systemflags & 0x10000000) { printf("%sTitle Install Incompatible%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x20000000) { printf("%sAllow Avatar Get Metadata by XUID%s", spx, newline); spx = sp28; }
                 if (systemflags & 0x40000000) { printf("%sAllow Controller Swapping%s", spx, newline); spx = sp28; }
-                if (systemflags & 0x80000000) printf("%sDash Extensibility Module%s", spx, newline);
+                if (systemflags & 0x80000000)   printf("%sDash Extensibility Module%s", spx, newline);
             }
         }
         else printf("%sNo System Flags%s", sp5, newline);
+    }
+    if (discprofileid_address) {
+        memcpy(xex_discprofileid, defaultxexbuffer+discprofileid_address, 16);
+        xex_founddiscprofileid = true;
+        if (!game_has_ap25) {
+            // check disc profile id against list of ap25 disc profile ids
+            for (m=0;m<num_ap25discprofileids;m++) {
+                if (memcmp(defaultxexbuffer+discprofileid_address+12, mostrecentap25discprofileids[m].mediaid, 4) == 0) {
+                    game_has_ap25 = true;
+                    break;
+                }
+            }
+        }
+        if (extraverbose) {
+            // print Disc Profile ID
+            printf("%sDisc Profile ID: %s ", sp5, sp5);
+            printmediaid(defaultxexbuffer+discprofileid_address);
+            //for (i=0; i<16; i++) printf("%02X", defaultxexbuffer[discprofileid_address+i]);
+            printf("%s", newline);
+        }
     }
     // get the basefile load address which will be used to find the relative location of the title id resource
     unsigned long basefile_loadaddress = getuintmsb(defaultxexbuffer+certoffset+0x110);
@@ -12525,12 +15166,13 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
     unsigned long titleidresource_size = 0L;
     unsigned int disc_num = 0;
     unsigned int num_discs = 0;
-    unsigned char titleid[4] = {0,0,0,0};
+    memset(titleid, 0, 4);
     if (executioninfo_address) {
         disc_num = (unsigned int) defaultxexbuffer[executioninfo_address+18];
         num_discs = (unsigned int) defaultxexbuffer[executioninfo_address+19];
         unsigned char titleidhex[9], cmp;
         memcpy(titleid, defaultxexbuffer+executioninfo_address+12, 4);
+        foundtitleid = true;
         if (extraverbose || extractimages) {
             if (verbose) printf("%s", sp5);
             printf("Title ID: ");
@@ -12539,12 +15181,21 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
             if ((titleid[0] < 0x20 || (titleid[0] > 0x7E && titleid[0] < 0xA1)) || (titleid[1] < 0x20 || (titleid[1] > 0x7E && titleid[1] < 0xA1))) printf("%s", newline);
             else printf(" (%c%c-%u)%s", titleid[0], titleid[1], getwordmsb(titleid+2), newline);
         }
+        if (!game_has_ap25) {
+            // check title id against list of title ids for ap25 discs with no ap25 xex flag
+            for (m=0;m<num_ap25titleids;m++) {
+                if (memcmp(titleid, mostrecentap25titleids[m].mediaid, 4) == 0) {
+                    game_has_ap25 = true;
+                    break;
+                }
+            }
+        }
         // convert 4 byte title id into 8 byte ascii hex representation for comparison to resource names
         memset(titleidhex, 0, 9);
         for (i=0; i<8; i++) {
-            if (i%2 == 0) cmp = titleid[i/2] & 0xF0;
-            else cmp = (titleid[i/2] & 0x0F) << 4;       
-            if (cmp == 0xF0) titleidhex[i] = 'F';
+            if (i%2 == 0) cmp =  titleid[i/2] & 0xF0;
+            else          cmp = (titleid[i/2] & 0x0F) << 4;       
+            if      (cmp == 0xF0) titleidhex[i] = 'F';
             else if (cmp == 0xE0) titleidhex[i] = 'E';
             else if (cmp == 0xD0) titleidhex[i] = 'D';
             else if (cmp == 0xC0) titleidhex[i] = 'C';
@@ -12631,12 +15282,111 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
             printf("%s", newline);
         }
     }
-    // image flag 0x08 at certoffset+0x10F indicates XGD2 original disc only
-    bool xgd2only = false;
-    if ((defaultxexbuffer[certoffset+0x10F] & 0x08) == 0x08) xgd2only = true;
-    if (extraverbose || (verbose && !xgd2only)) {
+    if (verbose && importlibs_address) {
+        // display the minimum kernel version required to run the game
+        unsigned long importlibs_length = getuintmsb(defaultxexbuffer+importlibs_address);
+        if (debug) printf("%simportlibs_length = %lu%s", sp5, importlibs_length, newline);
+        if (importlibs_length >= 12 && (importlibs_address + importlibs_length <= codeoffset)) {
+            unsigned long libnames_length = getuintmsb(defaultxexbuffer+importlibs_address+4);
+            unsigned long libnames_count = getuintmsb(defaultxexbuffer+importlibs_address+8);
+            if (debug) printf("%slibnames_length = %lu%s%slibnames_count = %lu%s", sp5, libnames_length, newline, sp5, libnames_count, newline);
+            if (libnames_count > 0 && libnames_length > 0 && (importlibs_address + 12 + libnames_length <= codeoffset)) {
+                // get names of the import libraries (only used for debug output, but might be useful if the name is the only way to tell if it's a system lib)
+                char libnames[libnames_count][libnames_length+1];
+                for (m=0;m<libnames_count;m++) memset(libnames[m], 0, libnames_length+1);
+                n = 0;
+                unsigned long current_char = 0;
+                unsigned long libversion[libnames_count];
+                unsigned long libversion_min[libnames_count];
+                unsigned long libversion_min_greatest = 0;
+                for (m=0;m<libnames_count;m++) {
+                    libversion[m] = 0;
+                    libversion_min[m] = 0;
+                }
+                for (m=0;m<libnames_length;m++) {
+                    if (n >= libnames_count) {
+                        if (debug) { color(yellow); printf("n (%lu) %s= libnames_count%s", n, greaterthan, newline); color(normal); }
+                        break;
+                    }
+                    if (defaultxexbuffer[importlibs_address+12+m] != 0) {
+                        libnames[n][current_char] = (char) defaultxexbuffer[importlibs_address+12+m];
+                        current_char++;
+                    }
+                    else {
+                        while (defaultxexbuffer[importlibs_address+12+m] == 0 || defaultxexbuffer[importlibs_address+12+m+1] == 0) m++;
+                        m--; // the for loop will do m++
+                        n++;
+                        current_char = 0;
+                    }
+                }
+                // find the greatest minimum version number of all import libs (this does not differentiate between system libs even though it probably should)
+                if (importlibs_address + 12 + libnames_length + 36 <= codeoffset) {
+                    unsigned long ver_addr = importlibs_address + 12 + libnames_length + 28;
+                    unsigned long lib_length = getuintmsb(defaultxexbuffer+importlibs_address+12+libnames_length);
+                    for (m=0;m<libnames_count;m++) {
+                        libversion[m] = getuintmsb(defaultxexbuffer+ver_addr);
+                        libversion_min[m] = getuintmsb(defaultxexbuffer+ver_addr+4);
+                        if (libversion_min[m] > libversion_min_greatest) libversion_min_greatest = libversion_min[m];
+                        if (ver_addr + lib_length + 8 <= codeoffset) {
+                            ver_addr += lib_length;
+                            lib_length = getuintmsb(defaultxexbuffer+ver_addr-28);
+                        }
+                        else break;
+                    }
+                }
+                if (debug) {
+                    // show import libraries and their version numbers
+                    unsigned long chars_printed;
+                    printf("%s%sImport Libraries:%s", newline, sp5, newline);
+                    for (n=0;n<libnames_count;n++) {
+                        printf("%s", sp5);
+                        m = 0;
+                        chars_printed = 0;
+                        while (libnames[n][m] != 0 && m < libnames_length) {
+                            chars_printed += printf("%c", libnames[n][m]);
+                            m++;
+                        }
+                        for (m=5+chars_printed;m<28;m++) printf("%s", sp1);
+                        printf("v%lu.%lu.%04lu.%lu %s(min v%lu.%lu.%04lu.%lu)",
+                               (libversion[n]     & 0xF0000000) >> 28, (libversion[n]     & 0x0F000000) >> 24,
+                               (libversion[n]     & 0x00FFFF00) >> 8,  (libversion[n]     & 0x000000FF),
+                               sp1,
+                               (libversion_min[n] & 0xF0000000) >> 28, (libversion_min[n] & 0x0F000000) >> 24,
+                               (libversion_min[n] & 0x00FFFF00) >> 8,  (libversion_min[n] & 0x000000FF));
+                        printf("%s", newline);
+                    }
+                    printf("%s", newline);
+                }
+                // actually display the minimum kernel version required to run the game
+                if (libversion_min_greatest > 0) {
+                    printf("%sMin Kernel Required: %s v%lu.%lu.%lu.%lu%s", sp5, sp1,
+                           (libversion_min_greatest & 0xF0000000) >> 28, (libversion_min_greatest & 0x0F000000) >> 24,
+                           (libversion_min_greatest & 0x00FFFF00) >> 8,  (libversion_min_greatest & 0x000000FF), newline);
+                }
+            }
+            else if (debug) {
+                color(yellow);
+                printf("ERROR: libnames_length and/or libnames_count%s", newline);
+                color(normal);
+            }
+        }
+        else if (debug) {
+            color(yellow);
+            printf("ERROR: importlibs_length%s", newline);
+            color(normal);
+        }
+    }
+    if (debug && !importlibs_address) {
+        color(yellow);
+        printf("ERROR: !importlibs_address%s", newline);
+        color(normal);
+    }
+    // image flag 0x08 at certoffset+0x10F indicates original disc only
+    bool originaldisconly = false;
+    if ((defaultxexbuffer[certoffset+0x10F] & 0x08) == 0x08) originaldisconly = true;
+    if (extraverbose || (verbose && !originaldisconly)) {
         printf("%sAllowed Media Types: %s ", sp5, sp1);
-        if (xgd2only) printf("DVD-XGD2 (Xbox 360 original disc)%s", newline);
+        if (originaldisconly) printf("Xbox 360 Original Disc%s", newline);
         else {
             // allowed media type flags are at certoffset + 0x17C - 0x17F
             color(cyan);
@@ -12647,7 +15397,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
             else {
                 spx = sp0;
                 if (defaultxexbuffer[certoffset+0x17F] & 0x01) { printf("%sHard Disk%s", spx, newline); spx = sp28; }
-                if (defaultxexbuffer[certoffset+0x17F] & 0x02) { printf("%sDVD-X2 (Xbox1 Original Disc)%s", spx, newline); spx = sp28; }
+                if (defaultxexbuffer[certoffset+0x17F] & 0x02) { printf("%sXbox1 Original Disc%s", spx, newline); spx = sp28; }
                 if (defaultxexbuffer[certoffset+0x17F] & 0x04) { printf("%sDVD/CD%s", spx, newline); spx = sp28; }
                 if (defaultxexbuffer[certoffset+0x17F] & 0x08) { printf("%sDVD-5%s", spx, newline); spx = sp28; }
                 if (defaultxexbuffer[certoffset+0x17F] & 0x10) { printf("%sDVD-9%s", spx, newline); spx = sp28; }
@@ -12664,7 +15414,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                 if (defaultxexbuffer[certoffset+0x17C] & 0x08) { printf("%sLive Signed Package%s", spx, newline); spx = sp28; }
                 if (defaultxexbuffer[certoffset+0x17C] & 0x10) { printf("%sXbox Package%s", spx, newline); spx = sp28; }
                 if ((defaultxexbuffer[certoffset+0x17C] & 0xE0) || (defaultxexbuffer[certoffset+0x17D] & 0xFF) ||
-                    (defaultxexbuffer[certoffset+0x17E] & 0xF0) || (defaultxexbuffer[certoffset+0x17F] & 0x40)) {
+                    (defaultxexbuffer[certoffset+0x17E] & 0xE0) || (defaultxexbuffer[certoffset+0x17F] & 0x40)) {
                     // unknown media type(s) (E0FFE040)
                     printf("%sUnknown Media: 0x%02X%02X%02X%02X%s", spx,
                             defaultxexbuffer[certoffset+0x17C] & 0xE0, defaultxexbuffer[certoffset+0x17D] & 0xFF,
@@ -12690,146 +15440,203 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
             gamerating = defaultxexbuffer[ratings_address];
             if (gamerating != 255) {
                 printf("%sESRB: %s ", spx, sp2);
-                if (gamerating == 0)       printf("eC (Early Childhood)%s", newline);
-                else if (gamerating == 2)  printf("E (Everyone 6+)%s", newline);
-                else if (gamerating == 4)  printf("E10+ (Everyone 10+)%s", newline);
-                else if (gamerating == 6)  printf("T (Teen 13+)%s", newline);
-                else if (gamerating == 8)  printf("M (Mature 17+)%s", newline);
-                else if (gamerating == 14) printf("AO (Adults Only 18+)%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("eC (Early Childhood)%s", newline); break;  // ESRB_EC
+                    case  2: printf("E (Everyone 6+)%s", newline); break;       // ESRB_E
+                    case  4: printf("E10+ (Everyone 10+)%s", newline); break;   // ESRB_E10+
+                    case  6: printf("T (Teen 13+)%s", newline); break;          // ESRB_T
+                    case  8: printf("M (Mature 17+)%s", newline); break;        // ESRB_M
+                    case 14: printf("AO (Adults Only 18+)%s", newline); break;  // undefined in 20871 and probably more
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // PEGI (Pan European Game Information)
             gamerating = defaultxexbuffer[ratings_address+1];
             if (gamerating != 255) {
                 printf("%sPEGI: %s ", spx, sp2);
-                if (gamerating == 0)       printf("3+%s", newline);
-                else if (gamerating == 4)  printf("7+%s", newline);
-                else if (gamerating == 9)  printf("12+%s", newline);
-                else if (gamerating == 13) printf("16+%s", newline);
-                else if (gamerating == 14) printf("18+%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("3+%s", newline); break;   // PEGI_3
+                    case  4: printf("7+%s", newline); break;   // PEGI_7
+                    case  9: printf("12+%s", newline); break;  // PEGI_12
+                    case 13: printf("16+%s", newline); break;  // PEGI_16
+                    case 14: printf("18+%s", newline); break;  // PEGI_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // PEGI (Pan European Game Information) - Finland
             gamerating = defaultxexbuffer[ratings_address+2];
             if (gamerating != 255) {
                 printf("%sPEGI-FI: ", spx);
-                if (gamerating == 0)       printf("3+%s", newline);
-                else if (gamerating == 4)  printf("7+%s", newline);
-                else if (gamerating == 8)  printf("11+%s", newline);
-                else if (gamerating == 12) printf("15+%s", newline);
-                else if (gamerating == 14) printf("18+%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("3+%s", newline); break;   // PEGI_3
+                    case  4: printf("7+%s", newline); break;   // PEGI_7
+                    case  8: printf("11+%s", newline); break;  // PEGI_11
+                    case 12: printf("15+%s", newline); break;  // PEGI_15
+                    case 14: printf("18+%s", newline); break;  // PEGI_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // PEGI (Pan European Game Information) - Portugal
             gamerating = defaultxexbuffer[ratings_address+3];
             if (gamerating != 255) {
                 printf("%sPEGI-PT: ", spx);
-                if (gamerating == 1)       printf("4+%s", newline);
-                else if (gamerating == 3)  printf("6+%s", newline);
-                else if (gamerating == 9)  printf("12+%s", newline);
-                else if (gamerating == 13) printf("16+%s", newline);
-                else if (gamerating == 14) printf("18+%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  1: printf("4+%s", newline); break;   // PEGI_4
+                    case  3: printf("6+%s", newline); break;   // PEGI_6
+                    case  9: printf("12+%s", newline); break;  // PEGI_12
+                    case 13: printf("16+%s", newline); break;  // PEGI_16
+                    case 14: printf("18+%s", newline); break;  // PEGI_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // BBFC (British Board of Film Classification) - UK/Ireland
             gamerating = defaultxexbuffer[ratings_address+4];
             if (gamerating != 255) {
                 printf("%sBBFC: %s ", spx, sp2);
-                if (gamerating == 0)       printf("3+%s", newline);
-                else if (gamerating == 1)  printf("U (Universal)%s", newline);
-                else if (gamerating == 4)  printf("7+%s", newline);
-                else if (gamerating == 5)  printf("PG%s", newline);
-                else if (gamerating == 9)  printf("12+%s", newline);
-                else if (gamerating == 12) printf("15+%s", newline);
-                else if (gamerating == 13) printf("16+%s", newline);
-                else if (gamerating == 14) printf("18+%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("Uc (Universal Children)%s", newline); break;             // PEGIBBFC_3
+                    case  1: printf("U (Universal)%s", newline); break;                       // PEGIBBFC_4
+                    case  4: printf("7+%s", newline); break;                                  // PEGIBBFC_7
+                    case  5: printf("PG (Parental Guidance recommended)%s", newline); break;  // PEGIBBFC_8
+                    case  9: printf("12+%s", newline); break;                                 // PEGIBBFC_12
+                    case 12: printf("15+%s", newline); break;                                 // PEGIBBFC_15
+                    case 13: printf("16+%s", newline); break;                                 // PEGIBBFC_16
+                    case 14: printf("18+%s", newline); break;                                 // PEGIBBFC_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // CERO (Computer Entertainment Rating Organization)
             gamerating = defaultxexbuffer[ratings_address+5];
             if (gamerating != 255) {
                 printf("%sCERO: %s ", spx, sp2);
-                if (gamerating == 0)      printf("A (All Ages)%s", newline);
-                else if (gamerating == 2) printf("B (12+)%s", newline);
-                else if (gamerating == 4) printf("C (15+)%s", newline);
-                else if (gamerating == 6) printf("D (17+)%s", newline);
-                else if (gamerating == 8) printf("Z (18+)%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("A (All Ages)%s", newline); break;  // CERO_A
+                    case  2: printf("B (12+)%s", newline); break;       // CERO_B
+                    case  4: printf("C (15+)%s", newline); break;       // CERO_C
+                    case  6: printf("D (17+)%s", newline); break;       // CERO_D
+                    case  8: printf("Z (18+)%s", newline); break;       // CERO_Z
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // USK (Unterhaltungssoftware SelbstKontrolle)
             gamerating = defaultxexbuffer[ratings_address+6];
             if (gamerating != 255) {
                 printf("%sUSK: %s ", spx, sp3);
-                if (gamerating == 0)      printf("All Ages%s", newline);
-                else if (gamerating == 2) printf("6+%s", newline);
-                else if (gamerating == 4) printf("12+%s", newline);
-                else if (gamerating == 6) printf("16+%s", newline);
-                else if (gamerating == 8) printf("18+%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("All Ages%s", newline); break;  // USK_ALL_AGES
+                    case  2: printf("6+%s", newline); break;        // USK_6
+                    case  4: printf("12+%s", newline); break;       // USK_12
+                    case  6: printf("16+%s", newline); break;       // USK_16
+                    case  8: printf("18+%s", newline); break;       // USK_NO_YOUTH
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // OFLC (Office of Film and Literature Classification) - Australia
             gamerating = defaultxexbuffer[ratings_address+7];
             if (gamerating != 255) {
                 printf("%sOFLC-AU: ", spx);
-                if (gamerating == 0)      printf("G (General)%s", newline);
-                else if (gamerating == 2) printf("PG%s", newline);
-                else if (gamerating == 4) printf("M (Mature)%s", newline);
-                else if (gamerating == 6) printf("MA15+%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("G (General)%s", newline); break;                         // OFLC_AU_G
+                    case  2: printf("G8+ (General 8+)%s", newline); break;                    // OFLC_AU_G8
+                    case  3: printf("PG (Parental Guidance recommended)%s", newline); break;  // OFLC_AU_PG
+                    case  4: printf("M15+ (Unrestricted 15+)%s", newline); break;             // OFLC_AU_M15
+                    case  5: printf("M (Mature)%s", newline); break;                          // OFLC_AU_M
+                    case  6: printf("MA15+ (Restricted 15+)%s", newline); break;              // OFLC_AU_MA15
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // OFLC (Office of Film and Literature Classification) - New Zealand
             gamerating = defaultxexbuffer[ratings_address+8];
             if (gamerating != 255) {
                 printf("%sOFLC-NZ: ", spx);
-                if (gamerating == 0)      printf("G (General)%s", newline);
-                else if (gamerating == 2) printf("PG%s", newline);
-                else if (gamerating == 4) printf("M (Mature)%s", newline);
-                else if (gamerating == 6) printf("MA15+%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("G (General)%s", newline); break;                           // OFLC_NZ_A
+                    case  2: printf("PG (Parental Guidance recommended)%s", newline); break;    // OFLC_NZ_PG
+                    case  4: printf("R13 (Restricted 13+)%s", newline); break;                  // OFLC_NZ_R13
+                    case  6: printf("R15 (Restricted 15+)%s", newline); break;                  // OFLC_NZ_R15
+                    case 16: printf("M (Mature)%s", newline); break;                            // OFLC_NZ_M
+                    case 32: printf("R16 (Restricted 16+)%s", newline); break;                  // OFLC_NZ_R16
+                    case 48: printf("R18 (Restricted 18+)%s", newline); break;                  // OFLC_NZ_R18
+                    case 64: printf("R (Restricted to a certain audience)%s", newline); break;  // OFLC_NZ_R
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
-            // KMRB (Korea Media Rating Board)
+            // GRB (Game Rating Board) formerly known as KMRB (Korea Media Rating Board) -- this is missing in 20871 and probably more
             gamerating = defaultxexbuffer[ratings_address+9];
             if (gamerating != 255) {
-                printf("%sKMRB: %s ", spx, sp2);
-                if (gamerating == 0)      printf("All Ages%s", newline);
-                else if (gamerating == 2) printf("12+%s", newline);
-                else if (gamerating == 4) printf("15+%s", newline);
-                else if (gamerating == 6) printf("18+%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                printf("%sGRB: %s ", spx, sp3);
+                switch (gamerating) {
+                    case  0: printf("All Ages%s", newline); break;
+                    case  2: printf("12+%s", newline); break;
+                    case  4: printf("15+%s", newline); break;
+                    case  6: printf("18+%s", newline); break;
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
             // Brazil
             gamerating = defaultxexbuffer[ratings_address+10];
             if (gamerating != 255) {
                 printf("%sBrazil: %s", spx, sp1);
-                if (gamerating == 0)      printf("All Ages%s", newline);
-                else if (gamerating == 2) printf("12+%s", newline);
-                else if (gamerating == 4) printf("14+%s", newline);
-                else if (gamerating == 5) printf("16+%s", newline);
-                else if (gamerating == 8) printf("18+%s", newline);
-                else                      printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case 16: printf("L (All Ages)%s", newline); break;  // BRAZIL_L
+                    case 32: printf("10+%s", newline); break;           // BRAZIL_10
+                    case 48: printf("12+%s", newline); break;           // BRAZIL_12
+                    case 64: printf("14+%s", newline); break;           // BRAZIL_14
+                    case 80: printf("16+%s", newline); break;           // BRAZIL_16
+                    case 96: printf("18+%s", newline); break;           // BRAZIL_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
-            // FPB (Film and Publication Board)
+            // FPB (Film and Publication Board) - South Africa
             gamerating = defaultxexbuffer[ratings_address+11];
             if (gamerating != 255) {
                 printf("%sFPB: %s ", spx, sp3);
-                if (gamerating == 0)       printf("All Ages%s", newline);
-                else if (gamerating == 6)  printf("PG%s", newline);
-                else if (gamerating == 7)  printf("10+%s", newline);
-                else if (gamerating == 10) printf("13+%s", newline);
-                else if (gamerating == 13) printf("16+%s", newline);
-                else if (gamerating == 14) printf("18+%s", newline);
-                else                       printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                switch (gamerating) {
+                    case  0: printf("A (All Ages)%s", newline); break;                              // FPB_A
+                    case  6: printf("PG (Parental Guidance recommended)%s", newline); break;        // FPB_PG
+                    case  7: printf("10+%s", newline); break;                                       // FPB_10
+                    case  8: printf("13PG (13+ or Parental Guidance required)%s", newline); break;  // FPB_PG_CURRENT
+                    case 10: printf("13+%s", newline); break;                                       // FPB_13
+                    case 13: printf("16+%s", newline); break;                                       // FPB_16
+                    case 14: printf("18+%s", newline); break;                                       // FPB_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
+                spx = sp28;
+            }
+            // Taiwan
+            gamerating = defaultxexbuffer[ratings_address+12];
+            if (gamerating != 255) {
+                printf("%sTaiwan: %s", spx, sp1);
+                switch (gamerating) {
+                    case  1: printf("General audiences%s", newline); break;                        // TAIWAN_GENERAL
+                    case  2: printf("Protected (6+ and PG required for 6-11)%s", newline); break;  // TAIWAN_PROTECTED
+                    case  3: printf("PG (12+ and PG required for 12-17)%s", newline); break;       // TAIWAN_PG
+                    case  4: printf("Restricted 18+%s", newline); break;                           // TAIWAN_RESTRICTED
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
+                spx = sp28;
+            }
+            // Singapore
+            gamerating = defaultxexbuffer[ratings_address+13];
+            if (gamerating != 255) {
+                printf("%sSG: %s", spx, sp5);
+                switch (gamerating) {
+                    case  1: printf("G (General)%s", newline); break;                         // SINGAPORE_GENERAL
+                    case  2: printf("PG (Parental Guidance recommended)%s", newline); break;  // SINGAPORE_AGE_ADVISORY
+                    case  3: printf("M18 (Mature 18+)%s", newline); break;                    // SINGAPORE_MATURE_18
+                    default: printf("Undefined rating (0x%02X)%s", gamerating, newline);
+                }
                 spx = sp28;
             }
         }
@@ -13001,13 +15808,23 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
     // get default.xex media id (at certoffset + 0x140)
     memcpy(xex_mediaid, defaultxexbuffer+(certoffset+0x140), 16);
     xex_foundmediaid = true;
+    if (!game_has_ap25) {
+        // check media id against list of ap25 media ids for discs with no ap25 xex flag
+        for (m=0;m<num_ap25mediaids;m++) {
+            if (memcmp(xex_mediaid+12, mostrecentap25mediaids[m].mediaid, 4) == 0) {
+                game_has_ap25 = true;
+                break;
+            }
+        }
+    }
+    
 /*
     // calculate xex sha-1
     sha1_starts(&ctx);
     sha1_update(&ctx, defaultxexbuffer, defaultxexsize);
     sha1_finish(&ctx, xex_sha1);
     if (extraverbose) {
-        printf("%sXex SHA = ", sp5);
+        printf("%sXex SHA-1 = ", sp5);
         for (i=0; i<20; i++) printf("%02X", xex_sha1[i]);
         printf("%s", newline);
     }
@@ -13076,7 +15893,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                     printf("1st 2048 bytes of the title id resource:%s", newline);
                     hexdump(defaultxexbuffer+codeoffset+titleidresource_relativeaddress, 0, titleidresource_size > 2048 ? 2048 : titleidresource_size);
                 }
-                parsetitleidresource(defaultxexbuffer+codeoffset+titleidresource_relativeaddress, titleidresource_size, titleid);
+                parsetitleidresource(defaultxexbuffer+codeoffset+titleidresource_relativeaddress, titleidresource_size);
             }
         }
     }
@@ -13175,7 +15992,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                     color(normal);
                   break;
                 }
-                if (checkwriteandprinterrors(defaultxexbuffer+p+2, 1, (size_t) s, defaultcab, 0, defaultcab_totalsize, "default.cab", "decompressing the Xex") != 0) {
+                if (checkwriteandprinterrors(defaultxexbuffer+p+2, 1, (size_t) s, defaultcab, 0, defaultcab_totalsize, "default.cab", "Decompressing the Xex") != 0) {
                     decompressionfailed = true;
                   break;
                 }
@@ -13294,7 +16111,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
                                                         printf("1st 2048 bytes of the title id resource:%s", newline);
                                                         hexdump(resourcebuffer, 0, titleidresource_size > 2048 ? 2048 : titleidresource_size);
                                                     }
-                                                    parsetitleidresource(resourcebuffer, titleidresource_size, titleid);
+                                                    parsetitleidresource(resourcebuffer, titleidresource_size);
                                                 }
                                             }
                                             free(resourcebuffer);
@@ -13359,7 +16176,7 @@ int checkdefaultxex(unsigned char *defaultxexbuffer, unsigned long defaultxexsiz
         }
         else {
             checkgamecrcnever = true;
-            gamecrcfailed = true;
+            if (!usercancelledgamecrc) gamecrcfailed = true;
         }
         if (!verbose) printf("%s", newline);
     }
@@ -13531,12 +16348,13 @@ int docheckgamecrc() {
     unsigned long m, n;
     if (isotoosmall) {
         color(red);
-        printf("ERROR: ISO filesize is too small, Game CRC Check aborted!%s", newline);
+        printf("ERROR: ISO size is too small, Game CRC Check aborted!%s", newline);
         color(normal);
       return 1;
     }
     // check Game crc32
-    const unsigned long long gamesize = 7307001856LL;
+    // assume game partition size based on whether this is an xgd3 game
+    const unsigned long long gamesize = (xgd3 ? 8662351872LL : 7307001856LL);
     const unsigned long gamesizeoverbuffer = (unsigned long) (gamesize / BIGBUF_SIZE);
     game_crc32 = 0;
     if (fseeko(fp, video, SEEK_SET) != 0) {
@@ -13557,8 +16375,11 @@ int docheckgamecrc() {
     color(white);
     #ifdef WIN32
         if (dvdarg && BIGBUF_SIZE % 2048) {  // will only become true if BIGBUF_SIZE is changed to some weird value
-            color(normal); printstderr = false;
-            color(red); printf("ERROR: BIGBUF_SIZE is not an even multiple of 2048%s", newline); color(normal);
+            color(normal);
+            printstderr = false;
+            color(red);
+            printf("ERROR: BIGBUF_SIZE is not an even multiple of 2048%s", newline);
+            color(normal);
             if (debug) printf("BIGBUF_SIZE = %d%s", BIGBUF_SIZE, newline);
           return 1;
         }
@@ -13814,8 +16635,9 @@ int docheckgamecrc() {
 }
 
 bool lookslike360ss(unsigned char *ss) {
-    // startpsnL0 should be 0x04FB20
-    if ((ss[0x5] != 0x04) || (ss[0x6] != 0xFB) || (ss[0x7] != 0x20)) return false;
+    // startpsnL0 should be 0x04FB20 or 0x034100
+    if (((ss[0x5] != 0x04) || (ss[0x6] != 0xFB) || (ss[0x7] != 0x20)) &&
+        ((ss[0x5] != 0x03) || (ss[0x6] != 0x41) || (ss[0x7] != 0x00))) return false;
     // these 3 bytes should be zero
     if ((ss[0x4] != 0) || (ss[0x8] != 0) || (ss[0xC] != 0)) return false;
     // 0x4ba tells us the software version (0x02 = XBOX 360)
@@ -13877,10 +16699,29 @@ void printfixedshit(struct badshit shit) {
 
 int checkss() {
     int i;
+    unsigned int u;
     int foundangle359_count = 0;
-    ss_stealthfailed = false; ss_stealthuncertain = false; ss_foundtimestamp = false; ss_foundmediaid = false;
-    fixedss = false; drtfucked = false;
-    ss_crc32 = 0; ss_rawcrc32 = 0;
+    
+    // make sure to update valid_ssv2_exists_in_db() if you add more global vars to this function so that the original values can be preserved
+    ss_stealthfailed = false;
+    ss_stealthuncertain = false;
+    ss_foundtimestamp = false;
+    fixedss = false;
+    drtfucked = false;
+    ssv2 = false;
+    ss_replay_table_offset = 0;
+    ss_replay_table_length = 0;
+    ss_crc32 = 0;
+    ss_rawcrc32 = 0;
+    ss_authored = 0;
+    ss_staticcrc32 = 0;
+    ss_num_angles = 0;
+    ss_num_targets = 0;
+    for (i=0;i<4;i++) {
+        ss_angleaddresses[i] = 0;
+        ss_targets[i] = 0;
+    }
+    
     if (verbose && !minimal) printf("Checking SS%s", newline);
     // make sure ss isn't blank
     if (getzeros(ss, 0, 2047) == 2048) {
@@ -13911,7 +16752,27 @@ int checkss() {
           return 1;
         }
     }
-
+    
+    if      (memcmp(ss, "\xE1\x0F\x31\x10\x00\x04\xFB\x20\x00\xFB\x04\xDF\x00\x20\x33\x9F", 16) == 0) ss_replay_table_offset = 0x200; // XGD2
+    else if (memcmp(ss, "\xE1\x0F\x31\x10\x00\x03\x41\x00\x00\xFC\xAE\xFF\x00\x23\x8E\x0F", 16) == 0) ss_replay_table_offset = 0x20;  // XGD3
+    else {
+        // unknown XGD type
+        ss_replay_table_offset = 0x20; // have to use something... there will be obvious c/r data errors if this is wrong
+        if (debug) {
+            color(red);
+            printf("ERROR: Unknown XGD type!%s", newline);
+            color(normal);
+        }
+    }
+    
+    if (layerbreak == -1) {
+        // we're probably checking just an ss.bin
+        // assume the layerbreak based on replay table offset
+        if (ss_replay_table_offset == 0x200) layerbreak = 1913760;
+        else                                 layerbreak = 2133520;
+        if (debug) printf("layerbreak (%ld) assumed based on ss_replay_table_offset (0x%X)%s", layerbreak, ss_replay_table_offset, newline);
+    }
+    
     // get Starting PSN of Data Area
     unsigned char ss_startpsnL0hex[4] = {ss[7], ss[6], ss[5], 0x00};
     unsigned long ss_startpsnL0 = getuint(ss_startpsnL0hex);
@@ -13936,22 +16797,12 @@ int checkss() {
     unsigned long long ss_offsetL1 = ((unsigned long long) ss_startpsnL1 - (unsigned long long) layerbreakpsn) * 2048 +
                                      ((unsigned long long) layerbreak * 2048);
     unsigned long long ss_offsetL0end = (unsigned long long) (ss_endpsnL0 - ss_startpsnL0 + 1) * 2048 + ss_offsetL0 - 1;
-    unsigned long long ss_offsetend = (ss_endpsnL1 - ss_startpsnL1 + 1) * 2048 + ss_offsetL1 - 1;
+    unsigned long long ss_offsetend = (unsigned long long) (ss_endpsnL1 - ss_startpsnL1 + 1) * 2048 + ss_offsetL1 - 1;
     unsigned long ss_sectorstotal = ss_sectorsL0 + ss_sectorsL1;
 
     // print that shit
     if (extraverbose && !minimal) printpfitable(ss_startpsnL0, ss_endpsnL0, ss_startpsnL1, ss_endpsnL1, ss_sectorsL0, ss_sectorsL1,
                                                 ss_offsetL0, ss_offsetL0end, ss_offsetL1, ss_offsetend, ss_sectorstotal);
-    
-    if (ss_startpsnL0 != 0x04FB20 || ss_endpsnL0 != 0x20339F || ss_endpsnL1 != 0xFB04DF) {
-        stealthuncertain = true;
-        color(yellow);
-        printf("SS alternate PFI appears to have changed! The LayerBreak and/or game partition%s"
-               "size is probably different than what abgx360 is currently assuming! Check for%s"
-               "an update to this program before doing anything further... you definitely don't%s"
-               "want to burn a game with the wrong LayerBreak!%s%s", newline, newline, newline, newline, newline);
-        color(normal);
-    }
     
     // check for BCA (Burst Cutting Area) flag which indicates a unique barcode is
     // burned onto the original disc (but would any xbox 360 drives be able to read it?)
@@ -13964,7 +16815,7 @@ int checkss() {
 
     // get timestamps of authoring and mastering
     ss_authored = getuint64(ss+0x49F);
-    ss_mastered = getuint64(ss+0x5DF);
+    unsigned long long ss_mastered = getuint64(ss+0x5DF);
     ss_foundtimestamp = true;
     if (verbose) {
         printf("%sTimestamp of Authoring: ", sp5);
@@ -14011,15 +16862,15 @@ int checkss() {
         }
         printf("%s", newline);
     }
-    struct {unsigned char CT, CID, Mod, WTF, CD[4], Response[4]; unsigned int angle, matches; int drtmatch;} dcrtentry[21];
+    struct {unsigned char CT, CID, Tolerance, Type, CD[4], Response[4]; unsigned int angle, matches; int drtmatch;} dcrtentry[21];
     int CT01_count = 0;
     unsigned char CT01_firstCD[4];
     bool CT01_conflict = false;
     for (i=0;i<21;i++) {
         dcrtentry[i].CT = dcrt[i*12];
         dcrtentry[i].CID = dcrt[i*12+1];
-        dcrtentry[i].Mod = dcrt[i*12+2];
-        dcrtentry[i].WTF = dcrt[i*12+3];
+        dcrtentry[i].Tolerance = dcrt[i*12+2];
+        dcrtentry[i].Type = dcrt[i*12+3];
         memcpy(dcrtentry[i].CD, dcrt+i*12+4, 4);
         memcpy(dcrtentry[i].Response, dcrt+i*12+8, 4);
         dcrtentry[i].angle = (unsigned int) dcrt[i*12+10] << 8;
@@ -14035,29 +16886,51 @@ int checkss() {
     if (debug) for (i=0;i<21;i++) {
         printf("dcrtentry[%d].CT = %02X%s", i, dcrtentry[i].CT, newline);
         printf("dcrtentry[%d].CID = %02X%s", i, dcrtentry[i].CID, newline);
-        printf("dcrtentry[%d].Mod = %02X%s", i, dcrtentry[i].Mod, newline);
-        printf("dcrtentry[%d].WTF = %02X%s", i, dcrtentry[i].WTF, newline);
-        printf("dcrtentry[%d].CD = %02X%02X%02X%02X%s", i, dcrtentry[i].CD[0], dcrtentry[i].CD[1], dcrtentry[i].CD[2], dcrtentry[i].CD[3], newline);
-        printf("dcrtentry[%d].Response = %02X%02X%02X%02X%s", i, dcrtentry[i].Response[0], dcrtentry[i].Response[1], dcrtentry[i].Response[2], dcrtentry[i].Response[3], newline);
+        printf("dcrtentry[%d].Tolerance = %02X%s", i, dcrtentry[i].Tolerance, newline);
+        printf("dcrtentry[%d].Type = %02X%s", i, dcrtentry[i].Type, newline);
+        printf("dcrtentry[%d].CD = %02X%02X%02X%02X%s", i,
+               dcrtentry[i].CD[0], dcrtentry[i].CD[1], dcrtentry[i].CD[2], dcrtentry[i].CD[3], newline);
+        printf("dcrtentry[%d].Response = %02X%02X%02X%02X%s", i,
+               dcrtentry[i].Response[0], dcrtentry[i].Response[1], dcrtentry[i].Response[2], dcrtentry[i].Response[3], newline);
         printf("dcrtentry[%d].angle = %u%s", i, dcrtentry[i].angle, newline);
         printf("dcrtentry[%d].matches = %u%s", i, dcrtentry[i].matches, newline);
         printf("dcrtentry[%d].drtmatch = %d%s%s", i, dcrtentry[i].drtmatch, newline, newline);
     }
-    struct {unsigned char RT, CID, Mod, Data[6], CD[4], Response[5]; unsigned int angle, angle2; int deviation, deviation2, deviation3;} driveentry[21];
+    struct {unsigned char RT, CID, Mod, Data[6], CD[4], Response[5]; unsigned int angle, angle2; int deviation, deviation2, deviation3;}
+        driveentry[21];
     for (i=0;i<21;i++) {
         driveentry[i].RT = ss[0x730+i*9];
         driveentry[i].CID = ss[0x730+i*9+1];
         driveentry[i].Mod = ss[0x730+i*9+2];
         memcpy(driveentry[i].Data, ss+0x730+i*9+3, 6);
-        memcpy(driveentry[i].CD, ss+0x200+i*9, 4);
-        memcpy(driveentry[i].Response, ss+0x200+i*9+4, 5);
-        driveentry[i].angle   = (unsigned int) ss[0x200+i*9+5] << 8;
-        driveentry[i].angle  |= (unsigned int) ss[0x200+i*9+4];
-        driveentry[i].angle2  = (unsigned int) ss[0x200+i*9+8] << 8;
-        driveentry[i].angle2 |= (unsigned int) ss[0x200+i*9+7];
+        memcpy(driveentry[i].CD, ss+ss_replay_table_offset+i*9, 4);
+        memcpy(driveentry[i].Response, ss+ss_replay_table_offset+i*9+4, 5);
+        driveentry[i].angle   = (unsigned int) ss[ss_replay_table_offset+i*9+5] << 8;
+        driveentry[i].angle  |= (unsigned int) ss[ss_replay_table_offset+i*9+4];
+        driveentry[i].angle2  = (unsigned int) ss[ss_replay_table_offset+i*9+8] << 8;
+        driveentry[i].angle2 |= (unsigned int) ss[ss_replay_table_offset+i*9+7];
         driveentry[i].deviation = 0;
         driveentry[i].deviation2 = 0;
         driveentry[i].deviation3 = 0;
+        // store ccrt targets and the address of their replay table angles for use in doextendedsscr
+        // (we'll check later to make sure that both ss_num_targets and ss_num_angles are equal to 4)
+        // Note: ss_num_targets isn't an actual count of the ccrt target angles, it's the number of drive
+        // response angles that have at least one matching ccrt target angle (this is fine because stealth will fail
+        // and autoupload will be skipped if we have unmatched/multiple matched dcrt entries or CT/RT mismatches, which
+        // would certainly happen if there were indeed a different number of ccrt target angles and drive response angles)
+        if (driveentry[i].RT == 0x07 || driveentry[i].RT == 0x05) {
+            for (j=0;j<21;j++) {
+                if (dcrtentry[j].CID == driveentry[i].CID) {
+                    if (ss_num_targets < 4) {
+                        ss_targets[ss_num_targets] = dcrtentry[j].angle;
+                        ss_angleaddresses[ss_num_targets] = ss_replay_table_offset+i*9+4;
+                    }
+                    ss_num_targets++;
+                    break;
+                }
+            }
+            ss_num_angles++;
+        }
     }
     if (debug) for (i=0;i<21;i++) {
         printf("driveentry[%d].RT = %02X%s", i, driveentry[i].RT, newline);
@@ -14069,8 +16942,8 @@ int checkss() {
         printf("driveentry[%d].CD = %02X%02X%02X%02X%s", i,
                 driveentry[i].CD[0], driveentry[i].CD[1], driveentry[i].CD[2], driveentry[i].CD[3], newline);
         printf("driveentry[%d].Response = %02X%02X%02X%02X%02X%s", i,
-                driveentry[i].Response[0], driveentry[i].Response[1], driveentry[i].Response[2], driveentry[i].Response[3], driveentry[i].Response[4], newline);
-        //printf("driveentry[%d].WTF = %02X%s", i, driveentry[i].WTF, newline);
+                driveentry[i].Response[0], driveentry[i].Response[1], driveentry[i].Response[2],
+                driveentry[i].Response[3], driveentry[i].Response[4], newline);
         printf("driveentry[%d].angle = %u%s", i, driveentry[i].angle, newline);
         printf("driveentry[%d].angle2 = %u%s", i, driveentry[i].angle2, newline);
         printf("driveentry[%d].deviation = %d%s", i, driveentry[i].deviation, newline);
@@ -14091,9 +16964,9 @@ int checkss() {
         }
     }
     // see if this is ss v2
-    bool ssv2 = false;
     for (i=0;i<21;i++) {
-        // assuming ss v2 if at least one of the challenge types 24/25 have a non-zero second angle (ignoring unmatched or multiple matched dcrt entries)
+        // assuming ss v2 if at least one of the challenge types 24/25 have a non-zero second angle
+        // (ignoring unmatched or multiple matched dcrt entries)
         if (dcrtentry[i].matches == 1 && (dcrtentry[i].CT == 0x24 || dcrtentry[i].CT == 0x25) && driveentry[dcrtentry[i].drtmatch].angle2 != 0) {
             ssv2 = true;
             break;
@@ -14428,7 +17301,7 @@ int checkss() {
                     }
                     // cpr_mai bytes should match dcrt CD unless there are multiple entries with conflicting CD
                     // in that case we wouldn't know what cpr_mai should be
-                    else if (memcmp(dcrtentry[i].CD, ss+0x2D0, 4) != 0) {
+                    else if (memcmp(dcrtentry[i].CD, ss+ss_replay_table_offset+0xD0, 4) != 0) {
                         badcpr_mai.c[badcpr_mai.count] = i;
                         badcpr_mai.d[badcpr_mai.count] = dcrtentry[i].drtmatch;
                         badcpr_mai.data[badcpr_mai.count] = dcrtentry[i].CID;
@@ -14562,7 +17435,7 @@ int checkss() {
         highangledev3.count || mediumangledev3.count || userangledev3.count))
             printf("%s", newline);
     
-    if (extraverbose || (verbose && (unmatcheddcrtentry.count || multiplematcheddcrtentry.count || CTRTmismatch.count || badCD.count ||
+    if (extraverbose || showsstable || (verbose && (unmatcheddcrtentry.count || multiplematcheddcrtentry.count || CTRTmismatch.count || badCD.count ||
         badResponse.count || weirdCDResponse.count || unrecognizedCT.count || badcpr_mai.count || type0dataresponsemismatch.count ||
         baddcrtangle.count || baddriveangle.count || baddriveangle2.count || CT01conflictingCD.count ||
         highangledev.count || mediumangledev.count || userangledev.count ||
@@ -14575,149 +17448,256 @@ int checkss() {
         }
         else printf("%sSS Version: 1%s", sp5, newline);
         color(blue);
-        if (terminal) printf("%s컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴%s", sp5, newline);
-        else          printf("%s------------------------------------------------------------------------%s", sp5, newline);
+        if (terminal) printf("%s컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴%s", sp5, newline);
+        else          printf("%s--------------------------------------------------------------------------%s", sp5, newline);
         color(normal);
-        printf("%sCT RT CID Mod? Pad? Data %s CD %s Response %s Angle Deviation%s", sp5, sp8, sp5, sp1, newline);
+        printf("%sCT RT CID Tol Mod Typ Data %s CD %s Response %s Angle Deviation%s", sp5, sp8, sp5, sp1, newline);
         color(blue);
-        if (terminal) printf("%s컴 컴 컴%s 컴 %s 컴 %s 컴컴컴컴컴컴� 컴컴컴컴 컴컴컴컴컴 컴컴� 컴컴컴컴컴컴%s", sp5, sp1, sp1, sp1, newline);
-        else          printf("%s-- -- --%s -- %s -- %s ------------- -------- ---------- ----- ------------%s", sp5, sp1, sp1, sp1, newline);
+        if (terminal) printf("%s컴 컴 컴%s 컴%s 컴%s 컴%s 컴컴컴컴컴컴� 컴컴컴컴 컴컴컴컴컴 컴컴� 컴컴컴컴컴컴%s", sp5, sp1, sp1, sp1, sp1, newline);
+        else          printf("%s-- -- --%s --%s --%s --%s ------------- -------- ---------- ----- ------------%s", sp5, sp1, sp1, sp1, sp1, newline);
         color(normal);
         bool stayred;
         for (i=0;i<21;i++) {
             // print decrypted challenge response table entries
             if (!showfulltable && (dcrtentry[i].CT & 0xF0) == 0xF0) continue;
             printf("%s", sp5);
-            if (unrecognizedCT.count) for (j=0;j<unrecognizedCT.count;j++) if (unrecognizedCT.c[j] == i) color(yellow);
+            if (unrecognizedCT.count)
+                for (j=0;j<unrecognizedCT.count;j++)
+                    if (unrecognizedCT.c[j] == i) {
+                        color(yellow);
+                        break;
+                    }
             printf("%02X %s %02X%s %02X %s %02X %s%s ",
-                    dcrtentry[i].CT, sp2, dcrtentry[i].CID, sp1, dcrtentry[i].Mod, sp1, dcrtentry[i].WTF, sp10, sp5);
-            if (weirdCDResponse.count) for (j=0;j<weirdCDResponse.count;j++) if (weirdCDResponse.c[j] == i) color(red);
+                    dcrtentry[i].CT, sp2, dcrtentry[i].CID, sp1, dcrtentry[i].Tolerance, sp4, dcrtentry[i].Type, sp9, sp5);
+            if (weirdCDResponse.count)
+                for (j=0;j<weirdCDResponse.count;j++)
+                    if (weirdCDResponse.c[j] == i) {
+                        color(red);
+                        break;
+                    }
             if (CT01conflictingCD.count && dcrtentry[i].CT == 0x01) color(red);
             printf("%02X%02X", dcrtentry[i].CD[0], dcrtentry[i].CD[1]);
-            if (weirdCDResponse.count) for (j=0;j<weirdCDResponse.count;j++) if (weirdCDResponse.c[j] == i) color(normal);
+            if (weirdCDResponse.count)
+                for (j=0;j<weirdCDResponse.count;j++)
+                    if (weirdCDResponse.c[j] == i) {
+                        color(normal);
+                        break;
+                    }
             printf("%02X%02X ", dcrtentry[i].CD[2], dcrtentry[i].CD[3]);
             if (CT01conflictingCD.count && dcrtentry[i].CT == 0x01) color(normal);
-            if (weirdCDResponse.count) for (j=0;j<weirdCDResponse.count;j++) if (weirdCDResponse.c[j] == i) color(red);
+            if (weirdCDResponse.count)
+                for (j=0;j<weirdCDResponse.count;j++)
+                    if (weirdCDResponse.c[j] == i) {
+                        color(red);
+                        break;
+                    }
             printf("%02X%02X", dcrtentry[i].Response[0], dcrtentry[i].Response[1]);
-            if (weirdCDResponse.count) for (j=0;j<weirdCDResponse.count;j++) if (weirdCDResponse.c[j] == i) color(normal);
+            if (weirdCDResponse.count)
+                for (j=0;j<weirdCDResponse.count;j++)
+                    if (weirdCDResponse.c[j] == i) {
+                        color(normal);
+                        break;
+                    }
             printf("%02X%02X", dcrtentry[i].Response[2], dcrtentry[i].Response[3]);
-            if (unrecognizedCT.count) for (j=0;j<unrecognizedCT.count;j++) if (unrecognizedCT.c[j] == i) color(normal);
+            if (unrecognizedCT.count)
+                for (j=0;j<unrecognizedCT.count;j++)
+                    if (unrecognizedCT.c[j] == i) {
+                        color(normal);
+                        break;
+                    }
             if (dcrtentry[i].CT == 0x24 || dcrtentry[i].CT == 0x25) {  // corresponds to RT 7/5 in the DRT
-                printf(" %s %u", sp1, dcrtentry[i].angle);
-                if (dcrtentry[i].angle < 10) printf("%s", sp4);
-                else if (dcrtentry[i].angle < 100) printf("%s", sp3);
-                else if (dcrtentry[i].angle < 1000) printf("%s", sp2);
+                printf(" %s ", sp1);
+                if (dcrtentry[i].angle > 359) color(red);
+                printf("%u", dcrtentry[i].angle);
+                if      (dcrtentry[i].angle < 10)    printf("%s", sp4);
+                else if (dcrtentry[i].angle < 100)   printf("%s", sp3);
+                else if (dcrtentry[i].angle < 1000)  printf("%s", sp2);
                 else if (dcrtentry[i].angle < 10000) printf("%s", sp1);
                 if (dcrtentry[i].angle > 359) {
-                    color(red); printf(" INVALID ANGLE"); color(normal);
+                    printf(" INVAL. ANGLE");
+                    color(normal);
                 }
             }
             printf("%s", newline);
             if (dcrtentry[i].matches == 1) {
                 // print matching drive entry
                 stayred = false;
-                if (CTRTmismatch.count) for (j=0;j<CTRTmismatch.count;j++) if (CTRTmismatch.c[j] == i) { stayred = true; color(red); }
-                printf("%s%02X %02X%s %02X %s %02X", sp8, driveentry[dcrtentry[i].drtmatch].RT, driveentry[dcrtentry[i].drtmatch].CID, sp1,
-                       driveentry[dcrtentry[i].drtmatch].Mod, sp6, driveentry[dcrtentry[i].drtmatch].Data[0]);
-                if (type0dataresponsemismatch.count && !stayred) for (j=0;j<type0dataresponsemismatch.count;j++) if (type0dataresponsemismatch.c[j] == i) color(red);
+                if (CTRTmismatch.count)
+                    for (j=0;j<CTRTmismatch.count;j++)
+                        if (CTRTmismatch.c[j] == i) {
+                            stayred = true;
+                            color(red);
+                            break;
+                        }
+                printf("%s%02X %02X %s %02X %s %02X", sp8, driveentry[dcrtentry[i].drtmatch].RT, driveentry[dcrtentry[i].drtmatch].CID, sp4,
+                       driveentry[dcrtentry[i].drtmatch].Mod, sp4, driveentry[dcrtentry[i].drtmatch].Data[0]);
+                if (type0dataresponsemismatch.count && !stayred)
+                    for (j=0;j<type0dataresponsemismatch.count;j++)
+                        if (type0dataresponsemismatch.c[j] == i) {
+                            color(red);
+                            break;
+                        }
                 printf("%02X%02X", driveentry[dcrtentry[i].drtmatch].Data[1], driveentry[dcrtentry[i].drtmatch].Data[2]);
-                if (type0dataresponsemismatch.count && !stayred) for (j=0;j<type0dataresponsemismatch.count;j++) if (type0dataresponsemismatch.c[j] == i) color(normal);
+                if (type0dataresponsemismatch.count && !stayred)
+                    for (j=0;j<type0dataresponsemismatch.count;j++)
+                        if (type0dataresponsemismatch.c[j] == i) {
+                            color(normal);
+                            break;
+                        }
                 printf(" %02X", driveentry[dcrtentry[i].drtmatch].Data[3]);
-                if (type0dataresponsemismatch.count && !stayred) for (j=0;j<type0dataresponsemismatch.count;j++) if (type0dataresponsemismatch.c[j] == i) color(red);
+                if (type0dataresponsemismatch.count && !stayred)
+                    for (j=0;j<type0dataresponsemismatch.count;j++)
+                        if (type0dataresponsemismatch.c[j] == i) {
+                            color(red);
+                            break;
+                        }
                 printf("%02X%02X ", driveentry[dcrtentry[i].drtmatch].Data[4], driveentry[dcrtentry[i].drtmatch].Data[5]);
-                if (type0dataresponsemismatch.count && !stayred) for (j=0;j<type0dataresponsemismatch.count;j++) if (type0dataresponsemismatch.c[j] == i) color(normal);
-                if (badCD.count && !stayred) for (j=0;j<badCD.count;j++) if (badCD.c[j] == i) color(red);
+                if (type0dataresponsemismatch.count && !stayred)
+                    for (j=0;j<type0dataresponsemismatch.count;j++)
+                        if (type0dataresponsemismatch.c[j] == i) {
+                            color(normal);
+                            break;
+                        }
+                if (badCD.count && !stayred)
+                    for (j=0;j<badCD.count;j++)
+                        if (badCD.c[j] == i) {
+                            color(red);
+                            break;
+                        }
                 printf("%02X%02X%02X%02X ", driveentry[dcrtentry[i].drtmatch].CD[0], driveentry[dcrtentry[i].drtmatch].CD[1],
                         driveentry[dcrtentry[i].drtmatch].CD[2], driveentry[dcrtentry[i].drtmatch].CD[3]);
-                if (badCD.count && !stayred) for (j=0;j<badCD.count;j++) if (badCD.c[j] == i) color(normal);
-                if (badResponse.count && !stayred) for (j=0;j<badResponse.count;j++) if (badResponse.c[j] == i) color(red);
-                printf("%02X%02X%02X%02X%02X", driveentry[dcrtentry[i].drtmatch].Response[0], driveentry[dcrtentry[i].drtmatch].Response[1],
-                        driveentry[dcrtentry[i].drtmatch].Response[2], driveentry[dcrtentry[i].drtmatch].Response[3], driveentry[dcrtentry[i].drtmatch].Response[4]);
-                if (badResponse.count && !stayred) for (j=0;j<badResponse.count;j++) if (badResponse.c[j] == i) color(normal);
+                if (badCD.count && !stayred)
+                    for (j=0;j<badCD.count;j++)
+                        if (badCD.c[j] == i) {
+                            color(normal);
+                            break;
+                        }
+                if (badResponse.count && !stayred)
+                    for (j=0;j<badResponse.count;j++)
+                        if (badResponse.c[j] == i) {
+                            color(red);
+                            break;
+                        }
+                printf("%02X%02X%02X%02X%02X", driveentry[dcrtentry[i].drtmatch].Response[0],
+                       driveentry[dcrtentry[i].drtmatch].Response[1], driveentry[dcrtentry[i].drtmatch].Response[2],
+                       driveentry[dcrtentry[i].drtmatch].Response[3], driveentry[dcrtentry[i].drtmatch].Response[4]);
+                if (badResponse.count && !stayred)
+                    for (j=0;j<badResponse.count;j++)
+                        if (badResponse.c[j] == i) {
+                            color(normal);
+                            break;
+                        }
                 if (ssv2) {
                     if (dcrtentry[i].CT == 0x24 || dcrtentry[i].CT == 0x25) {  // corresponds to RT 7/5 in the DRT
-                        printf("%s%s%s v1 deviation from CCRT %s %u", newline, sp21, sp3, sp10, driveentry[dcrtentry[i].drtmatch].angle);
-                        if (driveentry[dcrtentry[i].drtmatch].angle < 10) printf("%s", sp4);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle < 100) printf("%s", sp3);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle < 1000) printf("%s", sp2);
+                        printf("%s %s %s v1 deviation from CCRT %s ", newline, sp21, sp3, sp10);
+                        if (driveentry[dcrtentry[i].drtmatch].angle > 359) color(red);
+                        printf("%u", driveentry[dcrtentry[i].drtmatch].angle);
+                        if      (driveentry[dcrtentry[i].drtmatch].angle < 10)    printf("%s", sp4);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle < 100)   printf("%s", sp3);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle < 1000)  printf("%s", sp2);
                         else if (driveentry[dcrtentry[i].drtmatch].angle < 10000) printf("%s", sp1);
-                        if (driveentry[dcrtentry[i].drtmatch].angle > 359) {
-                            color(red); printf(" INVALID ANGLE"); color(normal);
+                        if (driveentry[dcrtentry[i].drtmatch].angle > 359 || dcrtentry[i].angle > 359) {
+                            // drive angle 1 and ccrt target must be 0-359
+                            color(red);
+                            printf(" INVAL. ANGLE");
+                            color(normal);
                         }
-                        else if (dcrtentry[i].angle < 360 && driveentry[dcrtentry[i].drtmatch].angle2 < 360) {  // dcrt angle and drive angle 1 & 2 must be 0-359 or deviation isn't calculated
+                        else if (driveentry[dcrtentry[i].drtmatch].angle2 < 360) {  // drive angle 2 must also be 0-359 or deviation isn't calculated
                             // print angle 1 deviation from ccrt
                             printf("%s", sp1);
                             if (!trustssv2angles) {
-                                if (abs(driveentry[dcrtentry[i].drtmatch].deviation) > highangledev_value) color(red);
+                                if      (abs(driveentry[dcrtentry[i].drtmatch].deviation) > highangledev_value)   color(red);
                                 else if (abs(driveentry[dcrtentry[i].drtmatch].deviation) > mediumangledev_value) color(yellow);
                             }
-                            driveentry[dcrtentry[i].drtmatch].deviation == 0 ? printf(" 0") : printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 10) printf("%s", sp2);
+                            if (driveentry[dcrtentry[i].drtmatch].deviation == 0) printf(" 0");
+                            else printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation);
+                            if      (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 10)  printf("%s", sp2);
                             else if (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 100) printf("%s", sp1);
                             printf(" (%04.1f%%)", (float) abs(driveentry[dcrtentry[i].drtmatch].deviation) / 1.8);
-                            if (!trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation) > (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value)) color(normal);
+                            if (!trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation) >
+                                (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value))
+                                color(normal);
                         }
-                        printf("%s%s%s v2 deviation from CCRT %s %u", newline, sp21, sp3, sp10, driveentry[dcrtentry[i].drtmatch].angle2);
-                        if (driveentry[dcrtentry[i].drtmatch].angle2 < 10) printf("%s", sp4);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle2 < 100) printf("%s", sp3);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle2 < 1000) printf("%s", sp2);
+                        printf("%s %s %s v2 deviation from CCRT %s ", newline, sp21, sp3, sp10);
+                        if (driveentry[dcrtentry[i].drtmatch].angle2 > 359) color(red);
+                        printf("%u", driveentry[dcrtentry[i].drtmatch].angle2);
+                        if      (driveentry[dcrtentry[i].drtmatch].angle2 < 10)    printf("%s", sp4);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle2 < 100)   printf("%s", sp3);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle2 < 1000)  printf("%s", sp2);
                         else if (driveentry[dcrtentry[i].drtmatch].angle2 < 10000) printf("%s", sp1);
-                        if (driveentry[dcrtentry[i].drtmatch].angle2 > 359) {
-                            color(red); printf(" INVALID ANGLE"); color(normal);
+                        if (driveentry[dcrtentry[i].drtmatch].angle2 > 359 || dcrtentry[i].angle > 359) {
+                            // drive angle 2 and ccrt target must be 0-359
+                            color(red);
+                            printf(" INVAL. ANGLE");
+                            color(normal);
                         }
-                        else if (dcrtentry[i].angle < 360 && driveentry[dcrtentry[i].drtmatch].angle < 360) {  // dcrt angle and drive angle 1 & 2 must be 0-359 or deviation isn't calculated
+                        else if (driveentry[dcrtentry[i].drtmatch].angle < 360) {  // drive angle 1 must also be 0-359 or deviation isn't calculated
                             // print angle 2 deviation from ccrt
                             printf("%s", sp1);
                             if (!trustssv2angles) {
-                                if (abs(driveentry[dcrtentry[i].drtmatch].deviation2) > highangledev_value) color(red);
+                                if      (abs(driveentry[dcrtentry[i].drtmatch].deviation2) > highangledev_value)   color(red);
                                 else if (abs(driveentry[dcrtentry[i].drtmatch].deviation2) > mediumangledev_value) color(yellow);
                             }
-                            driveentry[dcrtentry[i].drtmatch].deviation2 == 0 ? printf(" 0") : printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation2);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation2) < 10) printf("%s", sp2);
+                            if (driveentry[dcrtentry[i].drtmatch].deviation2 == 0) printf(" 0");
+                            else printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation2);
+                            if      (abs(driveentry[dcrtentry[i].drtmatch].deviation2) < 10)  printf("%s", sp2);
                             else if (abs(driveentry[dcrtentry[i].drtmatch].deviation2) < 100) printf("%s", sp1);
                             printf(" (%04.1f%%)", (float) abs(driveentry[dcrtentry[i].drtmatch].deviation2) / 1.8);
-                            if (!trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation2) > (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value)) color(normal);
+                            if (!trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation2) >
+                                (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value))
+                                color(normal);
                         }
-                        printf("%s%s%s v1 deviation from v2 %s", newline, sp21, sp3, sp18);
-                        if (driveentry[dcrtentry[i].drtmatch].angle > 359) {
-                            color(red); printf(" INVALID ANGLE"); color(normal);
+                        printf("%s %s %s v1 deviation from v2 %s", newline, sp21, sp3, sp18);
+                        if (driveentry[dcrtentry[i].drtmatch].angle > 359 || driveentry[dcrtentry[i].drtmatch].angle2 > 359) {
+                            // drive angle 1 and drive angle 2 must be 0-359
+                            color(red);
+                            printf(" INVAL. ANGLE");
+                            color(normal);
                         }
-                        else if (dcrtentry[i].angle < 360 && driveentry[dcrtentry[i].drtmatch].angle2 < 360) {  // dcrt angle and drive angle 1 & 2 must be 0-359 or deviation isn't calculated
+                        else if (dcrtentry[i].angle < 360) {  // ccrt target must also be 0-359 or deviation isn't calculated
                             // print angle 1 deviation from angle 2
                             printf("%s", sp1);
                             if (trustssv2angles) {
-                                if (abs(driveentry[dcrtentry[i].drtmatch].deviation3) > highangledev_value) color(red);
+                                if      (abs(driveentry[dcrtentry[i].drtmatch].deviation3) > highangledev_value)   color(red);
                                 else if (abs(driveentry[dcrtentry[i].drtmatch].deviation3) > mediumangledev_value) color(yellow);
                             }
-                            driveentry[dcrtentry[i].drtmatch].deviation3 == 0 ? printf(" 0") : printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation3);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation3) < 10) printf("%s", sp2);
+                            if (driveentry[dcrtentry[i].drtmatch].deviation3 == 0) printf(" 0");
+                            else printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation3);
+                            if      (abs(driveentry[dcrtentry[i].drtmatch].deviation3) < 10)  printf("%s", sp2);
                             else if (abs(driveentry[dcrtentry[i].drtmatch].deviation3) < 100) printf("%s", sp1);
                             printf(" (%04.1f%%)", (float) abs(driveentry[dcrtentry[i].drtmatch].deviation3) / 1.8);
-                            if (trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation3) > (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value)) color(normal);
+                            if (trustssv2angles && abs(driveentry[dcrtentry[i].drtmatch].deviation3) >
+                                (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value))
+                                color(normal);
                         }
                     }
                 }
                 else {
                     // ss v1
                     if (dcrtentry[i].CT == 0x24 || dcrtentry[i].CT == 0x25) {  // corresponds to RT 7/5 in the DRT
+                        if (driveentry[dcrtentry[i].drtmatch].angle > 359) color(red);
                         printf(" %u", driveentry[dcrtentry[i].drtmatch].angle);
-                        if (driveentry[dcrtentry[i].drtmatch].angle < 10) printf("%s", sp4);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle < 100) printf("%s", sp3);
-                        else if (driveentry[dcrtentry[i].drtmatch].angle < 1000) printf("%s", sp2);
+                        if      (driveentry[dcrtentry[i].drtmatch].angle < 10)    printf("%s", sp4);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle < 100)   printf("%s", sp3);
+                        else if (driveentry[dcrtentry[i].drtmatch].angle < 1000)  printf("%s", sp2);
                         else if (driveentry[dcrtentry[i].drtmatch].angle < 10000) printf("%s", sp1);
                         if (driveentry[dcrtentry[i].drtmatch].angle > 359) {
-                            color(red); printf(" INVALID ANGLE"); color(normal);
+                            printf(" INVAL. ANGLE");
+                            color(normal);
                         }
                         else if (dcrtentry[i].angle < 360) {  // both dcrt angle and drive angle must be 0-359 or deviation isn't calculated
                             // print angle deviation
                             printf("%s", sp1);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation) > highangledev_value) color(red);
+                            if      (abs(driveentry[dcrtentry[i].drtmatch].deviation) > highangledev_value)   color(red);
                             else if (abs(driveentry[dcrtentry[i].drtmatch].deviation) > mediumangledev_value) color(yellow);
-                            driveentry[dcrtentry[i].drtmatch].deviation == 0 ? printf(" 0") : printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 10) printf("%s", sp2);
+                            if (driveentry[dcrtentry[i].drtmatch].deviation == 0) printf(" 0");
+                            else printf("%+d", driveentry[dcrtentry[i].drtmatch].deviation);
+                            if      (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 10)  printf("%s", sp2);
                             else if (abs(driveentry[dcrtentry[i].drtmatch].deviation) < 100) printf("%s", sp1);
                             printf(" (%04.1f%%)", (float) abs(driveentry[dcrtentry[i].drtmatch].deviation) / 1.8);
-                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation) > (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value)) color(normal);
+                            if (abs(driveentry[dcrtentry[i].drtmatch].deviation) >
+                                (mediumangledev_value < highangledev_value ? mediumangledev_value : highangledev_value))
+                                color(normal);
                         }
                     }
                 }
@@ -14725,25 +17705,33 @@ int checkss() {
                 printf("%s", newline);
             }
             else if (dcrtentry[i].matches == 0) {
-                color(red); printf("%sFailed to find a drive entry for Challenge ID %02X%s", sp8, dcrtentry[i].CID, newline); color(normal);
+                color(red);
+                printf("%sFailed to find a drive entry for Challenge ID %02X%s", sp8, dcrtentry[i].CID, newline);
+                color(normal);
             }
             else {
-                color(red); printf("%sFound multiple drive entries for Challenge ID %02X:%s", sp8, dcrtentry[i].CID, newline); color(normal);
+                color(red);
+                printf("%sFound multiple drive entries for Challenge ID %02X:%s", sp8, dcrtentry[i].CID, newline);
+                color(normal);
                 for (j=0;j<21;j++) {
                     if (dcrtentry[i].CID == driveentry[j].CID) {
-                        printf("%s%02X %02X%s %02X %s %02X%02X%02X %02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X%02X",
-                                sp8, driveentry[j].RT, driveentry[j].CID, sp1, driveentry[j].Mod, sp6,
-                                driveentry[j].Data[0], driveentry[j].Data[1], driveentry[j].Data[2], driveentry[j].Data[3], driveentry[j].Data[4], driveentry[j].Data[5],
+                        printf("%s%02X %02X %s %02X %s %02X%02X%02X %02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X%02X",
+                                sp8, driveentry[j].RT, driveentry[j].CID, sp4, driveentry[j].Mod, sp4,
+                                driveentry[j].Data[0], driveentry[j].Data[1], driveentry[j].Data[2],
+                                driveentry[j].Data[3], driveentry[j].Data[4], driveentry[j].Data[5],
                                 driveentry[j].CD[0], driveentry[j].CD[1], driveentry[j].CD[2], driveentry[j].CD[3],
-                                driveentry[j].Response[0], driveentry[j].Response[1], driveentry[j].Response[2], driveentry[j].Response[3], driveentry[j].Response[4]);
+                                driveentry[j].Response[0], driveentry[j].Response[1], driveentry[j].Response[2],
+                                driveentry[j].Response[3], driveentry[j].Response[4]);
                         if (driveentry[j].RT == 0x05 || driveentry[j].RT == 0x07) {
+                            if (driveentry[j].angle > 359) color(red);
                             printf(" %u", driveentry[j].angle);
-                            if (driveentry[j].angle < 10) printf("%s", sp4);
-                            else if (driveentry[j].angle < 100) printf("%s", sp3);
-                            else if (driveentry[j].angle < 1000) printf("%s", sp2);
+                            if      (driveentry[j].angle < 10)    printf("%s", sp4);
+                            else if (driveentry[j].angle < 100)   printf("%s", sp3);
+                            else if (driveentry[j].angle < 1000)  printf("%s", sp2);
                             else if (driveentry[j].angle < 10000) printf("%s", sp1);
                             if (driveentry[j].angle > 359) {
-                                color(red); printf(" INVALID ANGLE"); color(normal);
+                                printf(" INVAL. ANGLE");
+                                color(normal);
                             }
                         }
                         printf("%s", newline);
@@ -14752,22 +17740,22 @@ int checkss() {
             }
         }
         color(blue);
-        if (terminal) printf("%s컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴%s", sp5, newline);
-        else          printf("%s------------------------------------------------------------------------%s", sp5, newline);
+        if (terminal) printf("%s컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴%s", sp5, newline);
+        else          printf("%s--------------------------------------------------------------------------%s", sp5, newline);
         color(normal);
     }
     else if (verbose) {
         if (ssv2) {
             printf("%sSS Version: 2", sp5);
             if (trustssv2angles) printf(" (trusted)%s", newline);
-            else printf(" (not trusted)%s", newline);
+            else                 printf(" (not trusted)%s", newline);
         }
         else printf("%sSS Version: 1%s", sp5, newline);
     }
     if (extraverbose || debug || (verbose && badcpr_mai.count)) {
         printf("%sCPR_MAI: ", sp5);
         if (badcpr_mai.count) color(red);
-        for (i=0x2D0; i<0x2D4; i++) printf("%02X", ss[i]);
+        for (u = ss_replay_table_offset+0xD0; u < ss_replay_table_offset+0xD4; u++) printf("%02X", ss[u]);
         if (badcpr_mai.count) color(normal);
         printf("%s", newline);
     }
@@ -14786,9 +17774,9 @@ int checkss() {
             else {
                 for (i=0;i<21;i++) {
                     if (driveentry[i].RT == 0x07 || driveentry[i].RT == 0x05) {
-                        if (ss[0x200+i*9+4] == 0x67 && ss[0x200+i*9+5] == 0x01) {
-                            ss[0x200+i*9+4] = 0x0;
-                            ss[0x200+i*9+5] = 0x0;
+                        if (ss[ss_replay_table_offset+i*9+4] == 0x67 && ss[ss_replay_table_offset+i*9+5] == 0x01) {
+                            ss[ss_replay_table_offset+i*9+4] = 0x0;
+                            ss[ss_replay_table_offset+i*9+5] = 0x0;
                             fixedss = true;
                         }
                     }
@@ -14829,20 +17817,20 @@ int checkss() {
             if (fixDRT) {
                 if (badCD.count) {
                     for (i=0;i<badCD.count;i++) {
-                        memcpy(ss+0x200+badCD.d[i]*9, dcrtentry[badCD.c[i]].CD, 4);
+                        memcpy(ss+ss_replay_table_offset+badCD.d[i]*9, dcrtentry[badCD.c[i]].CD, 4);
                     }
                     fixedss = true;
                     printfixedshit(badCD);
                 }
                 if (badResponse.count) {
                     for (i=0;i<badResponse.count;i++) {
-                        memcpy(ss+0x200+badResponse.d[i]*9+4, dcrtentry[badResponse.c[i]].Response, 4);
+                        memcpy(ss+ss_replay_table_offset+badResponse.d[i]*9+4, dcrtentry[badResponse.c[i]].Response, 4);
                     }
                     fixedss = true;
                     printfixedshit(badResponse);
                 }
                 if (badcpr_mai.count) {
-                    memcpy(ss+0x2D0, dcrtentry[badcpr_mai.c[0]].CD, 4);
+                    memcpy(ss+ss_replay_table_offset+0xD0, dcrtentry[badcpr_mai.c[0]].CD, 4);
                     fixedss = true;
                     printfixedshit(badcpr_mai);
                 }
@@ -14850,14 +17838,14 @@ int checkss() {
                     int fixedbaddriveangle_count = 0;
                     for (i=0;i<baddriveangle.count;i++) {
                         if (fixangle359 && dcrtentry[baddriveangle.c[i]].angle == 359) {
-                            ss[0x200+baddriveangle.d[i]*9+4] = 0x0;
-                            ss[0x200+baddriveangle.d[i]*9+5] = 0x0;
+                            ss[ss_replay_table_offset+baddriveangle.d[i]*9+4] = 0x0;
+                            ss[ss_replay_table_offset+baddriveangle.d[i]*9+5] = 0x0;
                             fixedss = true;
                             fixedbaddriveangle_count++;
                         }
                         else if (dcrtentry[baddriveangle.c[i]].angle < 360) {
-                            ss[0x200+baddriveangle.d[i]*9+4] = dcrtentry[baddriveangle.c[i]].Response[3];
-                            ss[0x200+baddriveangle.d[i]*9+5] = dcrtentry[baddriveangle.c[i]].Response[2];
+                            ss[ss_replay_table_offset+baddriveangle.d[i]*9+4] = dcrtentry[baddriveangle.c[i]].Response[3];
+                            ss[ss_replay_table_offset+baddriveangle.d[i]*9+5] = dcrtentry[baddriveangle.c[i]].Response[2];
                             fixedss = true;
                             fixedbaddriveangle_count++;
                         }
@@ -14890,12 +17878,12 @@ int checkss() {
                             fixedhighangledev_count++;
                             fixedss = true;
                             if (fixangle359 && dcrtentry[highangledev.c[i]].angle == 359) {
-                                ss[0x200+highangledev.d[i]*9+4] = 0x0;
-                                ss[0x200+highangledev.d[i]*9+5] = 0x0;
+                                ss[ss_replay_table_offset+highangledev.d[i]*9+4] = 0x0;
+                                ss[ss_replay_table_offset+highangledev.d[i]*9+5] = 0x0;
                             }
                             else {
-                                ss[0x200+highangledev.d[i]*9+4] = dcrtentry[highangledev.c[i]].Response[3];
-                                ss[0x200+highangledev.d[i]*9+5] = dcrtentry[highangledev.c[i]].Response[2];
+                                ss[ss_replay_table_offset+highangledev.d[i]*9+4] = dcrtentry[highangledev.c[i]].Response[3];
+                                ss[ss_replay_table_offset+highangledev.d[i]*9+5] = dcrtentry[highangledev.c[i]].Response[2];
                             }
                         }
                         else {
@@ -14925,12 +17913,12 @@ int checkss() {
                             fixedmediumangledev_count++;
                             fixedss = true;
                             if (fixangle359 && dcrtentry[mediumangledev.c[i]].angle == 359) {
-                                ss[0x200+mediumangledev.d[i]*9+4] = 0x0;
-                                ss[0x200+mediumangledev.d[i]*9+5] = 0x0;
+                                ss[ss_replay_table_offset+mediumangledev.d[i]*9+4] = 0x0;
+                                ss[ss_replay_table_offset+mediumangledev.d[i]*9+5] = 0x0;
                             }
                             else {
-                                ss[0x200+mediumangledev.d[i]*9+4] = dcrtentry[mediumangledev.c[i]].Response[3];
-                                ss[0x200+mediumangledev.d[i]*9+5] = dcrtentry[mediumangledev.c[i]].Response[2];
+                                ss[ss_replay_table_offset+mediumangledev.d[i]*9+4] = dcrtentry[mediumangledev.c[i]].Response[3];
+                                ss[ss_replay_table_offset+mediumangledev.d[i]*9+5] = dcrtentry[mediumangledev.c[i]].Response[2];
                             }
                         }
                         else {
@@ -14957,12 +17945,12 @@ int checkss() {
                         //if (foundangle359_count && driveentry[userangledev.d[i]].angle == 359) foundangle359_count--;
                         fixedss = true;
                         if (fixangle359 && dcrtentry[userangledev.c[i]].angle == 359) {
-                            ss[0x200+userangledev.d[i]*9+4] = 0x0;
-                            ss[0x200+userangledev.d[i]*9+5] = 0x0;
+                            ss[ss_replay_table_offset+userangledev.d[i]*9+4] = 0x0;
+                            ss[ss_replay_table_offset+userangledev.d[i]*9+5] = 0x0;
                         }
                         else {
-                            ss[0x200+userangledev.d[i]*9+4] = dcrtentry[userangledev.c[i]].Response[3];
-                            ss[0x200+userangledev.d[i]*9+5] = dcrtentry[userangledev.c[i]].Response[2];
+                            ss[ss_replay_table_offset+userangledev.d[i]*9+4] = dcrtentry[userangledev.c[i]].Response[3];
+                            ss[ss_replay_table_offset+userangledev.d[i]*9+5] = dcrtentry[userangledev.c[i]].Response[2];
                         }
                     }
                     printfixedshit(userangledev);
@@ -14971,9 +17959,9 @@ int checkss() {
             if (foundangle359_count && fixangle359) {
                 for (i=0;i<21;i++) {
                     if (driveentry[i].RT == 0x07 || driveentry[i].RT == 0x05) {
-                        if (ss[0x200+i*9+4] == 0x67 && ss[0x200+i*9+5] == 0x01) {
-                            ss[0x200+i*9+4] = 0x0;
-                            ss[0x200+i*9+5] = 0x0;
+                        if (ss[ss_replay_table_offset+i*9+4] == 0x67 && ss[ss_replay_table_offset+i*9+5] == 0x01) {
+                            ss[ss_replay_table_offset+i*9+4] = 0x0;
+                            ss[ss_replay_table_offset+i*9+5] = 0x0;
                             fixedss = true;
                         }
                     }
@@ -15012,22 +18000,32 @@ int checkss() {
         if (verbose) printf("%s", newline);
     }
     
-    if (foundangle359_count && (!fixangle359 || !writefile)) {
-        color(yellow);
-        if (verbose && !triedtofix) printf("%s", newline);
-        printf("Caution: This SS contains a value (angle 359) that will cause older versions%s", newline);
-        printf("of iXtreme to return a detectable bad response! Make sure your drive is flashed%s", newline);
-        printf("with iXtreme version 1.4 or newer.");
-        if (!dvdarg)                      printf(" Alternatively, you may enable the option to%s"
-               "adjust angle 359 for compatibility with iXtreme %s v1.4%s%s", newline, lessthan, newline, newline);
-        else printf("%s%s", newline, newline);
-        color(normal);
-    }
-    
-    // calculate SS crc32 with 0x200 to 0x2FF set as 0xFF
     unsigned char ss_overwritten[2048];
     memcpy(ss_overwritten, ss, 2048);
-    memset(ss_overwritten+0x200, 0xFF, 0x100);
+    // ss_replay_table_length = 0xD4 including cpr_mai but we have always used 0x100 for XGD2
+    ss_replay_table_length = 0xD4;
+    if (memcmp(ss, "\xE1\x0F\x31\x10\x00\x04\xFB\x20\x00\xFB\x04\xDF\x00\x20\x33\x9F", 16) == 0) ss_replay_table_length = 0x100; // this is longer than the actual replay table but this is how the database has always done it for XGD2
+    // calculate static SS crc32 with all possible angles set to 0xFF (so we can make sure ss files ripped during extended c/r
+    // match the existing c/r [with the exception of changing angle deviation] by simply comparing with this 'static' crc)
+    if ( ss_num_angles == 4 && ss_num_targets == 4 &&
+        (ss_angleaddresses[0] >= ss_replay_table_offset && ss_angleaddresses[0] < ss_replay_table_offset + ss_replay_table_length - 5) &&
+        (ss_angleaddresses[1] >= ss_replay_table_offset && ss_angleaddresses[1] < ss_replay_table_offset + ss_replay_table_length - 5) &&
+        (ss_angleaddresses[2] >= ss_replay_table_offset && ss_angleaddresses[2] < ss_replay_table_offset + ss_replay_table_length - 5) &&
+        (ss_angleaddresses[3] >= ss_replay_table_offset && ss_angleaddresses[3] < ss_replay_table_offset + ss_replay_table_length - 5) ) {
+        memset(ss_overwritten+ss_angleaddresses[0],   0xFF, 2);  // v1
+        memset(ss_overwritten+ss_angleaddresses[0]+3, 0xFF, 2);  // v2
+        memset(ss_overwritten+ss_angleaddresses[1],   0xFF, 2);  // v1
+        memset(ss_overwritten+ss_angleaddresses[1]+3, 0xFF, 2);  // v2
+        memset(ss_overwritten+ss_angleaddresses[2],   0xFF, 2);  // v1
+        memset(ss_overwritten+ss_angleaddresses[2]+3, 0xFF, 2);  // v2
+        memset(ss_overwritten+ss_angleaddresses[3],   0xFF, 2);  // v1
+        memset(ss_overwritten+ss_angleaddresses[3]+3, 0xFF, 2);  // v2
+        ss_staticcrc32 = crc32(0, ss_overwritten, 2048);
+        if (debug) printf("Static SS CRC = %08lX%s", ss_staticcrc32, newline);
+    }
+    
+    // calculate SS crc32 with entire replay table set as 0xFF
+    memset(ss_overwritten+ss_replay_table_offset, 0xFF, ss_replay_table_length);
     ss_crc32 = crc32(0, ss_overwritten, 2048);
     if (verbose) printf("%sSS CRC = %08lX", sp5, ss_crc32);
 
@@ -15037,7 +18035,6 @@ int checkss() {
 
     // copy the media id from 0x460 and compare to the xex
     memcpy(ss_mediaid, ss+0x460, 16);
-    ss_foundmediaid = true;
     if (verbose) {
         printf("%sSS Media ID: ", sp5);
         printmediaid(ss_mediaid);
@@ -15068,14 +18065,1089 @@ int checkss() {
   return 0;
 }
 
+/*
+int doap25autoupload(char *argv[], unsigned char *median_ap25) {
+    int i;
+    char temp[4];
+    unsigned char mediaid[9] = {0};
+    uchar median_ap25_sha1[20] = {0};
+    unsigned char median_ap25_sha1_hex[41] = {0};
+    // calculate median_ap25 sha-1
+    sha1_starts(&ctx);
+    sha1_update(&ctx, median_ap25, 2048);
+    sha1_finish(&ctx, median_ap25_sha1);
+    sprintf(median_ap25_sha1_hex, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+            median_ap25_sha1[0], median_ap25_sha1[1], median_ap25_sha1[2], median_ap25_sha1[3], median_ap25_sha1[4],
+            median_ap25_sha1[5], median_ap25_sha1[6], median_ap25_sha1[7], median_ap25_sha1[8], median_ap25_sha1[9],
+            median_ap25_sha1[10], median_ap25_sha1[11], median_ap25_sha1[12], median_ap25_sha1[13], median_ap25_sha1[14],
+            median_ap25_sha1[15], median_ap25_sha1[16], median_ap25_sha1[17], median_ap25_sha1[18], median_ap25_sha1[19]);
+    if (debug) {
+        printf("median_ap25_sha1 = %s", sp4);
+        for (i=0; i<20; i++) printf("%02X", median_ap25_sha1[i]);
+        printf("%smedian_ap25_sha1_hex = %s%s", newline, median_ap25_sha1_hex, newline);
+    }
+    sprintf(mediaid, "%02X%02X%02X%02X", xex_mediaid[12], xex_mediaid[13], xex_mediaid[14], xex_mediaid[15]);
+    int userstealthpathlength = 0;
+    if (!homeless) userstealthpathlength = strlen(homedir) + strlen(abgxdir) + strlen(userstealthdir);
+    char autouploadap25filename[userstealthpathlength + 18];  // 17 + 1
+    memset(autouploadap25filename, 0, userstealthpathlength + 18);
+    if (!homeless) sprintf(autouploadap25filename, "%s%s%sAP25_%s.bin", homedir, abgxdir, userstealthdir, mediaid);
+    else sprintf(autouploadap25filename, "AP25_%s.bin", mediaid);
+    printf("%sSaving Median AP25 to %s%s%s%s", newline, quotation, autouploadap25filename, quotation, newline);
+    FILE *medianap25file = fopen(autouploadap25filename, "wb");
+   	if (medianap25file == NULL) {
+        color(red);
+        printf("ERROR: Failed to open %s%s%s for writing! (%s) Saving was aborted!%s", quotation, autouploadap25filename, quotation, strerror(errno), newline);
+        color(yellow);
+        printf("AutoUpload Aborted%s", newline);
+        color(normal);
+      return 1;
+    }
+    if (trytowritestealthfile(median_ap25, 1, 2048, medianap25file, autouploadap25filename, 0) != 0) {
+        color(yellow);
+        printf("AutoUpload Aborted%s", newline);
+        color(normal);
+        fclose(medianap25file);
+      return 1;
+    }
+    color(green);
+    printf("Saving was successful%s", newline);
+    color(normal);
+    fclose(medianap25file);
+    
+    // confirm intent to upload
+    memset(temp, 0, 4);
+    printstderr = true;
+    color(white);
+    fprintf(stderr, "\nYou are about to upload your Median AP25 with the following information:\n\n"
+                    "     Username: %s\n"
+                    "     Media ID: %s\n"
+                    "Ripping Drive: %s\n",
+                    argv[autouploaduserarg], mediaid, isofilename);
+    while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+        fprintf(stderr, "\nContinue with the upload? (y/n) ");
+        readstdin(temp, 4);
+    }
+    color(normal);
+    printstderr = false;
+    if (temp[0] == 'n' || temp[0] == 'N') {
+        return 2;
+    }
+    
+    // do autoupload
+    struct curl_httppost *formpost = NULL;
+    struct curl_httppost *lastptr = NULL;
+    
+    char curloutputfilename[strlen(homedir) + strlen(abgxdir) + 8 + 1];
+    memset(curloutputfilename, 0, strlen(homedir) + strlen(abgxdir) + 8 + 1);
+    if (!homeless) {
+        strcat(curloutputfilename, homedir);
+        strcat(curloutputfilename, abgxdir);
+    }
+    strcat(curloutputfilename, "curl.txt");
+    if (debug) printf("curloutputfilename = %s%s", curloutputfilename, newline);
+    
+    fprintf(stderr, "\nDoing AutoUpload...\n");
+    if (extraverbose) fprintf(stderr, "\n");
+    printstderr = true;
+    color(blue);
+    memset(curlerrorbuffer, 0, CURL_ERROR_SIZE+1);
+    curl_easy_reset(curl);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(curl, CURLOPT_URL, ap25autouploadwebaddress);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, (char*) "Uploading Median AP25");
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    if (extraverbose) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+    curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 0);
+    struct MyCurlFile curloutputfile = {curloutputfilename, NULL};
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_curl_write);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &curloutputfile);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "username",  CURLFORM_COPYCONTENTS, argv[autouploaduserarg], CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "password",  CURLFORM_COPYCONTENTS, argv[autouploadpassarg], CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "mediaid",   CURLFORM_COPYCONTENTS, mediaid,                 CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "sha1",      CURLFORM_COPYCONTENTS, median_ap25_sha1_hex,    CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "client",    CURLFORM_COPYCONTENTS, curluseragent,           CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "drivename", CURLFORM_COPYCONTENTS, isofilename,             CURLFORM_END);
+    curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "uploadedap25", CURLFORM_FILE, autouploadap25filename, CURLFORM_CONTENTTYPE, "application/octet-stream", CURLFORM_END);
+    curl_easy_setopt(curl, CURLOPT_HTTPPOST, formpost);
+    curlheaderprinted = false;
+    curlprogressstartmsecs = getmsecs();
+    res = curl_easy_perform(curl);
+    if (curlheaderprinted && !extraverbose) fprintf(stderr, "\n");
+    if (res != CURLE_OK && !extraverbose) {  // error occurred and hasn't already been displayed
+        color(yellow);
+        fprintf(stderr, "ERROR: %s", curlerrorbuffer);
+    }
+    if (curloutputfile.stream != NULL) fclose(curloutputfile.stream);
+    if (res != CURLE_OK && res != CURLE_HTTP_RETURNED_ERROR) {  // 404 is ok
+        stayoffline = true;
+    }
+    if (extraverbose) {
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);  // reset to avoid annoying "Closing Connection ..." atexit
+    }
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);  // reset in case any more files will be downloaded
+    curl_formfree(formpost);  // free data copied by formadd
+    fprintf(stderr, "\n");
+    color(normal);
+    printstderr = false;
+    
+    // parse output code
+    FILE *curloutput = fopen(curloutputfilename, "rb");
+    if (curloutput == NULL) {
+        color(yellow);
+        printf("ERROR: Failed to open cURL output file (%s), result of AutoUpload is unknown%s", strerror(errno), newline);
+        color(normal);
+      return 1;
+    }
+    else {
+        char replybuffer[1024] = {0};
+        dontcare = fread(replybuffer, sizeof(char), 1023, curloutput);
+        fclose(curloutput);
+        remove(curloutputfilename);
+        if (debug) printf("curloutput: %s%s", replybuffer, newline);
+        if (strlen(replybuffer) > 0) {
+            if (strlen(replybuffer) == 5 && memcmp(replybuffer, "ERROR", 5) == 0) {
+                color(yellow);
+                printf("Server replied: An unspecified error occurred!%s", newline);
+                color(normal);
+              return 1;
+            }
+            else if (strlen(replybuffer) > 7 && memcmp(replybuffer, "ERROR: ", 7) == 0) {
+                color(yellow);
+                printf("Server replied: %s%s", replybuffer, newline);
+                color(normal);
+              return 1;
+            }
+            else if (strlen(replybuffer) == 7 && memcmp(replybuffer, "SUCCESS", 7) == 0) {
+                color(green);
+                printf("Server replied: AP25 uploaded perfectly%s", newline);
+                color(normal);
+              return 0;
+            }
+            else {
+                color(yellow);
+                printf("ERROR: Server reply is invalid, result of AutoUpload is unknown%s", newline);
+                color(normal);
+                if (extraverbose) printf("Server reply: %s%s", replybuffer, newline);
+              return 1;
+            }
+        }
+        else {
+            color(yellow);
+            printf("ERROR: cURL output file was empty, result of AutoUpload is unknown%s", newline);
+            color(normal);
+          return 1;
+        }
+    }
+  return 1;
+}
+
+unsigned short searchdaetable(unsigned char* daefilebuffer, unsigned short dae_tablesize, int search_type, unsigned char *search_id) {
+    // search the dae table for our search_id and return the offset of a match if found, else return 0
+    if (debug) {
+        printf("Searching dae table, dae_tablesize=%u, search_type=", dae_tablesize);
+        switch (search_type) {
+            case DAE_SEARCH_MID: printf("DAE_SEARCH_MID"); break;
+            case DAE_SEARCH_DID: printf("DAE_SEARCH_DID"); break;
+            case DAE_SEARCH_TID: printf("DAE_SEARCH_TID"); break;
+            default:             printf("UNKNOWN");
+        }
+        printf("%ssearchid=", newline);
+        if (search_type == DAE_SEARCH_MID || search_type == DAE_SEARCH_DID) printmediaid(search_id);
+        else printf("%02X%02X%02X%02X", search_id[0], search_id[1], search_id[2], search_id[3]);
+        printf("%s", newline);
+    }
+    unsigned short dae_entries = getwordmsb(daefilebuffer+DAE_HEADER_SIZE+2);
+    if (debug) printf("dae_entries = %u%s", dae_entries, newline);
+    unsigned short u, w;
+    unsigned short dae_offset = DAE_HEADER_SIZE+16;
+    unsigned short dae_entry_size, dae_entry_count, dae_entry_type;
+    int dae_entry_tol;
+    for (u=0;u<dae_entries;u++) {
+        if (dae_offset + 32 > dae_tablesize) {
+            color(red);
+            printf("ERROR: Parsing dae table on entry number %u, dae_offset (%lu) + 32 > dae_tablesize (%u)%s",
+                   u+1, dae_offset, dae_tablesize, newline);
+            color(normal);
+          break;
+        }
+        dae_entry_size = getwordmsb(daefilebuffer+dae_offset);
+        dae_entry_count = getwordmsb(daefilebuffer+dae_offset+2);
+        dae_entry_type = getwordmsb(daefilebuffer+dae_offset+4);
+        dae_entry_tol = (int) daefilebuffer[dae_offset+14];
+        if (dae_entry_type == 0 || dae_entry_type == 1) {
+            // media id or disc profile id
+            if (debug) {
+                printf("%3u: %s=", u+1, dae_entry_type == 0 ? "MID" : "DID");
+                printmediaid(daefilebuffer+dae_offset+16);
+                printf(" Size=0x%04X, Count=%5u, Tol=%5u%s", dae_entry_size, dae_entry_count, dae_entry_tol, newline);
+            }
+            if (search_type == DAE_SEARCH_MID || search_type == DAE_SEARCH_DID) {
+                if (memcmp(search_id, daefilebuffer+dae_offset+16, 16) == 0) {
+                    // found a match
+                    if (debug) printf("%s", newline);
+                  return dae_offset;
+                }
+            }
+        }
+        else if (dae_entry_type == 2) {
+            // title id
+            if (debug) {
+                printf("%3u: TID=", u+1);
+                printmediaid(daefilebuffer+dae_offset+16);
+                printf(" Size=0x%04X, Count=%5u, Tol=%5u%s", dae_entry_size, dae_entry_count, dae_entry_tol, newline);
+            }
+            if (dae_offset + dae_entry_size > dae_tablesize) {
+                color(red);
+                printf("ERROR: Parsing dae table on entry number %u, dae_offset (%lu) + dae_entry_size (%u) > dae_tablesize (%u)%s",
+                       u+1, dae_offset, dae_entry_size, dae_tablesize, newline);
+                color(normal);
+              break;
+            }
+            if (dae_entry_size < 32 + dae_entry_count * 4) {
+                color(red);
+                printf("ERROR: Parsing dae table on entry number %u, this TID entry is invalid%s",
+                       u+1, newline);
+                color(normal);
+              break;
+            }
+            if (debug) for (w=0;w<dae_entry_count;w++) {
+                printf("%sTitle ID %3u: %02X%02X%02X%02X%s", sp5, w+1,
+                       daefilebuffer[dae_offset+32+w*4],   daefilebuffer[dae_offset+32+w*4+1],
+                       daefilebuffer[dae_offset+32+w*4+2], daefilebuffer[dae_offset+32+w*4+3], newline);
+            }
+            if (search_type == DAE_SEARCH_TID) {
+                for (w=0;w<dae_entry_count;w++) {
+                    if (memcmp(search_id, daefilebuffer+dae_offset+32+w*4, 4) == 0) {
+                        // found match - make it so that later iterations of the main loop will search for the MID specified
+                        // by this TID entry (hopefully the TID entry will always come before its associated MID entry)
+                        search_type = DAE_SEARCH_MID;
+                        search_id = daefilebuffer+dae_offset+16;
+                      break;
+                    }
+                }
+            }
+        }
+        else {
+            // unknown type
+            if (debug) {
+                color(yellow);
+                printf("parsing dae table, on entry number %u, unknown type of entry: 0x%04X%s", u+1, dae_entry_type, newline);
+                color(normal);
+            }
+        }
+        dae_offset += dae_entry_size;
+    }
+    if (debug) printf("%s", newline);
+  return 0; // no match found
+}
+
+void printextendedap25crfailedmessage() {
+    printstderr = true;
+    color(yellow);
+    printf("\nExtended C/R failed. If you still have the original disc, please insert it into\n"
+           "a ripping drive that supports AP25, exit this instance of abgx360 and launch it\n"
+           "again. You will need to close all other apps that have a read/write handle open\n"
+           "on the drive.\n");
+    color(normal);
+    printstderr = false;
+  return;
+}
+
+// todo: test on non-WIN32
+int doextendedap25cr(char *forced_cr_drive, unsigned char *median_ap25) {
+    unsigned short u;
+    unsigned long m;
+    int i, j, k;
+    // download an updated dae.bin if server file is newer than the local one
+    printf("Checking for updates to dae.bin...%s", newline);
+    char daepathbuffer[2048];
+    memset(daepathbuffer, 0, 2048);
+    memset(curlerrorbuffer, 0, CURL_ERROR_SIZE+1);
+    curl_easy_reset(curl);
+    curl_easy_setopt(curl, CURLOPT_ENCODING, "");  // If a zero-length string is set, then an Accept-Encoding: header containing
+                                                   // all supported encodings is sent.
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended or something and we don't
+                                                   // want to retrieve the error page as a file)
+    curl_easy_setopt(curl, CURLOPT_URL, webdae);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
+    curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, (char*) "Downloading dae.bin");
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+    if (extraverbose) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+    if (!homeless) {
+        strcat(daepathbuffer, homedir);
+        strcat(daepathbuffer, abgxdir);
+    }
+    strcat(daepathbuffer, "dae.bin");
+    struct MyCurlFile curlwebdae = {daepathbuffer, NULL};
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &curlwebdae);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_curl_write);
+    if (stat(daepathbuffer, &buf) == 0) {
+        curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 1);
+        curl_easy_setopt(curl, CURLOPT_TIMEVALUE, buf.st_mtime);
+        if (debug) printf("%s: buf.st_mtime = %ld%s", daepathbuffer, (long) buf.st_mtime, newline);
+    }
+    else {
+        curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 0);
+        if (debug) printf("stat failed for %s (%s) - no time condition used%s", daepathbuffer, strerror(errno), newline);
+    }
+    curlheaderprinted = false;
+    if (extraverbose) {
+        fprintf(stderr, "\n");
+    }
+    printstderr = true;
+    color(blue);
+    curlprogressstartmsecs = getmsecs();
+    res = curl_easy_perform(curl);
+    color(normal);
+    printstderr = false;
+    if (extraverbose || curlheaderprinted) fprintf(stderr, "\n");
+    if (res != CURLE_OK) {  // error occurred
+        color(yellow);
+        if (res == CURLE_HTTP_RETURNED_ERROR) {
+            if (strstr(curlerrorbuffer, "404") != NULL) {
+                printf("The server is online but dae.bin is missing (404)%s", newline);
+            }
+            else if (strstr(curlerrorbuffer, "403") != NULL) {
+                printf("The server is online but it's denying access to dae.bin (403)%s", newline);
+            }
+            else if (strstr(curlerrorbuffer, "401") != NULL) {
+                printf("The server is online but it's denying access to dae.bin (401)%s", newline);
+            }
+            else printf("ERROR: %s%s", curlerrorbuffer, newline);
+        }
+        else {
+            stayoffline = true;
+            printf("ERROR: %s%s", curlerrorbuffer, newline);
+            printf("There seems to be a problem with the db so online functions have been disabled%s"
+                   "Try again later...%s", newline, newline);
+        }
+        color(normal);
+    }
+    else {
+        color(normal);
+        printcurlinfo(curl, "dae.bin");
+    }
+    if (curlwebdae.stream != NULL) fclose(curlwebdae.stream);
+    if (extraverbose) {
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);  // reset to avoid annoying "Closing Connection ..." atexit
+    }
+    printf("%s", newline);
+    color(normal);
+    
+    // try to open dae.bin and read it into a buffer
+    FILE *daefile = fopen(daepathbuffer, "rb");
+    if (daefile == NULL) {
+        color(yellow);
+        printf("ERROR: Failed to find or open '%s' (%s)%s", daepathbuffer, strerror(errno), newline);
+        color(normal);
+      return 1;
+    }
+    long long lldaefilesize = getfilesize(daefile);
+    if (debug) printf("lldaefilesize = %"LL"d%s", lldaefilesize, newline);
+    if (lldaefilesize == -1) {
+        // seek error
+        fclose(daefile);
+      return 1;
+    }
+    if (lldaefilesize > WOW_THATS_A_LOT_OF_RAM || lldaefilesize < DAE_HEADER_SIZE + 48) {  // 16 (MCRT size) + 32 (MCRE size)
+        // should never be this big or small
+        color(red);
+        printf("ERROR: dae.bin filesize (%"LL"d) is either too big or too small! Deleting it%s", lldaefilesize, newline);
+        color(normal);
+        fclose(daefile);
+        remove(daepathbuffer);
+      return 1;
+    }
+    unsigned long daefilesize = (unsigned long) lldaefilesize;  // should easily fit
+    if (debug) printf("daefilesize = %lu%s", daefilesize, newline);
+    unsigned char daefilebuffer[daefilesize];
+    memset(daefilebuffer, 0, daefilesize);
+    initcheckread();
+    if (checkreadandprinterrors(daefilebuffer, 1, daefilesize, daefile, 0, 0, "dae.bin", "Checking dae.bin") != 0) {
+        fclose(daefile);
+      return 1;
+    }
+    donecheckread("dae.bin");
+    fclose(daefile);
+    // look for DAEP magic bytes
+    if (memcmp(daefilebuffer, "DAEP", 4) != 0) {
+        color(red);
+        printf("ERROR: %sDAEP%s magic was not found at the start of dae.bin! Deleting it%s", quotation, quotation, newline);
+        color(normal);
+        remove(daepathbuffer);
+      return 1;
+    }
+    // save version number for later
+    unsigned short dae_version = getwordmsb(daefilebuffer+DAE_HEADER_SIZE+6);
+    if (debug) printf("dae_version = %u%s", dae_version, newline);
+    // make sure we will be able to read the body
+    unsigned short dae_tablesize = getwordmsb(daefilebuffer+4);
+    if (debug) printf("dae_tablesize = %u%s", dae_tablesize, newline);
+    if (daefilesize < (unsigned long) dae_tablesize) {
+        color(red);
+        printf("ERROR: dae.bin filesize (%lu) is less than the dae table size (%lu), deleting it%s", daefilesize, (unsigned long) dae_tablesize, newline);
+        color(normal);
+        remove(daepathbuffer);
+      return 1;
+    }
+    // calculate sha-1 hash of the body (dae_tablesize - DAE_HEADER_SIZE bytes starting at offset DAE_HEADER_SIZE)
+    // and compare it to the embedded sha-1 hash in the header
+    uchar dae_embedded_sha1[20] = {0}, dae_binfile_sha1[20] = {0};
+    memcpy(dae_embedded_sha1, daefilebuffer+12, 20);
+    sha1_starts(&ctx);
+    sha1_update(&ctx, daefilebuffer+DAE_HEADER_SIZE, dae_tablesize - DAE_HEADER_SIZE);
+    sha1_finish(&ctx, dae_binfile_sha1);
+    if (memcmp(dae_binfile_sha1, dae_embedded_sha1, 20) != 0) {
+        color(red);
+        printf("ERROR: %s appears to be corrupt! Deleting it%s", daepathbuffer, newline);
+        color(normal);
+        remove(daepathbuffer);
+      return 1;
+    }
+    // make sure dae.bin isn't obsolete
+    if (verbose) printf("Using dae.bin version: %u%s", dae_version, newline);
+    int obsolescence = -1;
+    for (m=0;m<num_daeversions;m++) {
+        if (dae_version == mostrecentdaeversions[m].version) {
+            if (mostrecentdaeversions[m].flags & 0x01) obsolescence = 1;
+            else obsolescence = 0;
+          break;
+        }
+    }
+    if (obsolescence == -1) {
+        // couldn't find a match for this dae version number
+        color(yellow);
+        printf("Aborting extended AP25 C/R because the obsolescence of this dae.bin is unknown%s", newline);
+        color(normal);
+      return 1;
+    }
+    else if (obsolescence == 1) {
+        color(yellow);
+        printf("Aborting extended AP25 C/R because this dae.bin is considered obsolete!%s", newline);
+        color(normal);
+      return 1;
+    }
+    // search for a match for this game in dae.bin
+    unsigned short matchoffset = 0;
+    if (xex_foundmediaid)                       matchoffset = searchdaetable(daefilebuffer, dae_tablesize, DAE_SEARCH_MID, xex_mediaid);
+    if (!matchoffset && foundtitleid)           matchoffset = searchdaetable(daefilebuffer, dae_tablesize, DAE_SEARCH_TID, titleid);
+    if (!matchoffset && xex_founddiscprofileid) matchoffset = searchdaetable(daefilebuffer, dae_tablesize, DAE_SEARCH_DID, xex_discprofileid);
+    if (!matchoffset) {
+        color(yellow);
+        printf("Failed to find a match for this game in dae.bin!%s", newline);
+        color(normal);
+      return 1;
+    }
+    // parse challenges and angle responses
+    unsigned short num_challenges = getwordmsb(daefilebuffer+matchoffset+2);
+    if (verbose) printf("Found %u challenges for this game in dae.bin at offset 0x%X%s", num_challenges, matchoffset + 32, newline);
+    int tolerance = (int) daefilebuffer[matchoffset+14];
+    if (debug) printf("num_challenges = %u, tolerance = %d%s", num_challenges, tolerance, newline);
+    if (num_challenges == 0) {
+        color(yellow);
+        printf("Aborting extended AP25 C/R because there are no challenges for this game in dae.bin!%s", newline);
+        color(normal);
+      return 1;
+    }
+    if (num_challenges > 128) {
+        color(yellow);
+        printf("Aborting extended AP25 C/R because there are too many challenges (%u) for this game in dae.bin!%s", num_challenges, newline);
+        color(normal);
+      return 1;
+    }
+    if (matchoffset + 32 + num_challenges * 8 > dae_tablesize) {
+        color(red);
+        printf("ERROR: Found a match for this game in dae.bin but its entry is invalid!%s", newline);
+        color(normal);
+      return 1;
+    }
+    struct dae_challenge_and_target {unsigned char psn1[3], psn2[3]; unsigned short target;};
+    struct dae_challenge_and_target dae_challenges[num_challenges];
+    if (debug) printf(" %s PSN 1 %sPSN 2 %sTarget%s", sp3, sp1, sp1, newline);
+    for (u=0;u<num_challenges;u++) {
+        memcpy(dae_challenges[u].psn1, daefilebuffer+matchoffset+32+u*8, 3);
+        memcpy(dae_challenges[u].psn2, daefilebuffer+matchoffset+32+u*8+3, 3);
+        dae_challenges[u].target = getwordmsb(daefilebuffer+matchoffset+32+u*8+6);
+        if (debug) printf("%s%u %02X%02X%02X %02X%02X%02X %u%s", u > 98 ? sp1 : u > 8 ? sp2 : sp3,
+                          u+1, dae_challenges[u].psn1[0], dae_challenges[u].psn1[1], dae_challenges[u].psn1[2],
+                          dae_challenges[u].psn2[0], dae_challenges[u].psn2[1], dae_challenges[u].psn2[2],
+                          dae_challenges[u].target, newline);
+        // make sure target angles are valid
+        if (dae_challenges[u].target > 359) {
+            color(red);
+            printf("ERROR: One or more of the dae.bin challenges for this game has an invalid target angle!%s", newline);
+            color(normal);
+          return 1;
+        }
+    }
+    
+    // structs for angles and their deviations so that we can qsort by deviations and have angles sorted as well
+    struct angledev anglesanddevs[num_challenges][NUM_AP25_CR_SAMPLES];
+    unsigned int medianangle[num_challenges];
+    for (i=0;i<num_challenges;i++) medianangle[i] = 360;
+    
+    // scan for the game in all recognized ripping drives automatically if forced_cr_drive is NULL (and we're in windows),
+    // otherwise try to use the specified drive
+    #ifdef WIN32
+        if (forced_cr_drive != NULL) {
+            // forced_cr_drive should be a single letter A-Z (or a-z)
+            if (strlen(forced_cr_drive) != 1) {
+                color(red);
+                printf("ERROR: Enter only one character for the DVD drive letter! Example: --orig D%s", newline);
+                color(normal);
+              return 1;
+            }
+            if ( (forced_cr_drive[0] >= 0x0 && forced_cr_drive[0] < 'A') ||
+                 (forced_cr_drive[0] > 'Z' && forced_cr_drive[0] < 'a') ||
+                 (forced_cr_drive[0] > 'z') ) {
+                color(red);
+                printf("ERROR: DVD drive letter is invalid! Enter A-Z only! Example: --orig D%s", newline);
+                color(normal);
+              return 1;
+            }
+        }
+    #endif
+    
+    // is this necessary? (used in dvdarg routine)
+    writefile = false;
+    fp = NULL;
+    
+    unsigned char ssbuffer[2048];
+    char temp[4];
+    
+    if (forced_cr_drive == NULL) {
+        #ifdef WIN32
+            // search for the drive that has the game
+            startsearching:
+            printf("Automatically searching for the original disc...%s", newline);
+            char cDrive;
+            char driveletter[2];
+            char rootpath[4];
+            char pathforcreatefile[7];
+            unsigned int drivetype;
+            for (cDrive='A';cDrive<='Z';cDrive++) {
+                sprintf(rootpath, "%c:\\", cDrive);
+                sprintf(pathforcreatefile, "\\\\.\\%c:", cDrive);
+                // check the drive type
+                drivetype = GetDriveType(rootpath);
+                if (drivetype == DRIVE_CDROM) {
+                    sprintf(driveletter, "%c", cDrive);
+                    // open the handle for exclusive access (other apps ripping from the disc could screw up the angle measurements)
+                    // and get drive name and fw version
+                    if (opendeviceandgetname(driveletter, true, true)) {
+                        // an error message was probably just printed so reassure the user that
+                        // we're still searching for the disc (unless we just tried drive Z)
+                        if (cDrive != 'Z') printf("Trying next drive...%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    if (debug) printf("Checking drive: %s%s", isofilename, newline);
+                    // check that this is a recognized ripping drive that supports ap25
+                    if (!isanxbox360rippingdrive(isofilename, true)) {
+                        if (debug) printf("This is not a recognized Xbox 360 ripping drive that supports ap25%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    // get size of media in bytes
+                    fpfilesize = getdisccapacity(true, false);  // if the latter is false then it won't print errors unless --debug
+                    if (fpfilesize == -1LL) {
+                        closedeviceifopen();
+                      continue;
+                    }
+                    if (debug) printf("Media Size: %"LL"d Bytes%s", fpfilesize, newline);
+                    // try and read the ss without c/r data
+                    memset(ssbuffer, 0, 2048);
+                    memset(cdb, 0, 12);
+                    cdb[0]  = 0xAD;
+                    cdb[2]  = 0xFF;
+                    cdb[3]  = 0x02;
+                    cdb[4]  = 0xFD;
+                    cdb[5]  = 0xFF;
+                    cdb[6]  = 0xFE;
+                    cdb[8]  = 0x08;
+                    cdb[11] = 0xC0;
+                    if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+                        if (debug) printf("Error reading SS (%s)%s", cdberror(sense), newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    if (debug) {
+                        printf("xex_mediaid: %s", sp3);
+                        printmediaid(xex_mediaid);
+                        printf("%sssbuffer+0x460: ", newline);
+                        printmediaid(ssbuffer+0x460);
+                        printf("%s", newline);
+                    }
+                    // make sure this ripped ss matches the media id of our game
+                    if (memcmp(xex_mediaid, ssbuffer+0x460, 16) != 0) {
+                        if (debug) printf("SS from original disc does not match the media id of this game%s", newline);
+                        closedeviceifopen();
+                      continue;
+                    }
+                    // we found the disc (or at least a disc with the same media id as our game)
+                    goto foundoriginaldisc;
+                }
+            }
+            // if we got here then we couldn't find the original disc
+            printstderr = true;
+            color(cyan);
+            fprintf(stderr, "Failed to find the original disc!\n\n"
+                   
+                   "If you still have the original disc, please make sure that it is inserted into\n"
+                   "a ripping drive that supports AP25 and that the drive has been detected and\n"
+                   "assigned a drive letter by your computer.\n\n"
+                   
+                   "You must also close all other applications (such as XBC) that have a read/write\n"
+                   "handle open on the drive. In order to ensure accurate angle measurements,\n"
+                   "extended C/R must be able to open the drive for exclusive access.\n");
+            color(normal);
+            closedeviceifopen();
+            // ask the user if they want to try again
+            memset(temp, 0, 4);
+            color(white);
+            while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+                fprintf(stderr, "\nWould you like to try searching for the original disc again? (y/n) ");
+                readstdin(temp, 4);
+            }
+            color(normal);
+            printstderr = false;
+            if (temp[0] == 'y' || temp[0] == 'Y') {
+                goto startsearching;
+            }
+          return 1;
+            
+            foundoriginaldisc:
+            if (verbose) {
+                printf("%sUsing Drive: ", newline);
+                if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf("%s", newline);  // just looks nicer in a cli window this way
+                printf("%s%s", isofilename, newline);
+                printf("Media Size:");
+                if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf(" ");
+                else printf("%s ", sp1);  // just looks nicer this way
+                printf("%"LL"d Bytes%s%s", fpfilesize, newline, newline);
+            }
+        #else
+            // todo: support auto detection of drives on non-WIN32
+            color(yellow);
+            printf("ERROR: You did not supply the device name of the drive which contains the original disc! Example: --orig /dev/cdrom%s", newline);
+            color(normal);
+          return 1;
+        #endif
+    }
+    else {
+        // see if forced_cr_drive contains the game
+        // open the handle/fd for exclusive access (other apps ripping from the disc could screw up the angle measurements)
+        // and get drive name and fw version
+        startforced:
+        if (opendeviceandgetname(forced_cr_drive, true, true)) {
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        if (verbose) {
+            printf("%sUsing Drive: ", newline);
+            if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf("%s", newline);  // just looks nicer in a cli window this way
+            printf("%s%s", isofilename, newline);
+        }
+        // check that this is a recognized ripping drive that supports ap25
+        if (!isanxbox360rippingdrive(isofilename, true)) {
+            color(yellow);
+            printf("This is not a recognized Xbox 360 ripping drive that supports AP25! Extended C/R aborted!%s", newline);
+            color(normal);
+            closedeviceifopen();
+            // they must have entered the wrong drive letter/name, so no point in prompting to retry
+          return 1;
+        }
+        // get size of media in bytes
+        fpfilesize = getdisccapacity(true, true);
+        if (fpfilesize == -1LL) {
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        if (verbose) {
+            printf("Media Size:");
+            if (strlen(isofilename) > 66 && strlen(isofilename) < 80) printf(" ");
+            else printf("%s ", sp1);  // just looks nicer this way
+            printf("%"LL"d Bytes%s%s", fpfilesize, newline, newline);
+        }
+        // try and read the ss without c/r data
+        memset(ssbuffer, 0, 2048);
+        memset(cdb, 0, 12);
+        cdb[0]  = 0xAD;
+        cdb[2]  = 0xFF;
+        cdb[3]  = 0x02;
+        cdb[4]  = 0xFD;
+        cdb[5]  = 0xFF;
+        cdb[6]  = 0xFE;
+        cdb[8]  = 0x08;
+        cdb[11] = 0xC0;
+        if (sendcdb(DATA_IN, ssbuffer, 2048, cdb, 12, true)) {
+            color(yellow);
+            printf("Error reading SS (%s)%s", cdberror(sense), newline);
+            color(normal);
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        if (debug) {
+            printf("xex_mediaid: %s", sp3);
+            printmediaid(xex_mediaid);
+            printf("%sssbuffer+0x460: ", newline);
+            printmediaid(ssbuffer+0x460);
+            printf("%s", newline);
+        }
+        // make sure this ripped ss matches the media id of our game
+        if (memcmp(xex_mediaid, ssbuffer+0x460, 16) != 0) {
+            if (debug) printf("SS from original disc does not match the media id of this game%s", newline);
+            closedeviceifopen();
+            goto prompttoretryforced;
+        }
+        // we found the disc (or at least a disc with the same media id as our game)
+        goto setspeed;
+        
+        prompttoretryforced:
+        printstderr = true;
+        color(cyan);
+        fprintf(stderr, "Failed to find the original disc!\n\n"
+               
+               "If you still have the original disc, please make sure that it is inserted into\n"
+               "the drive you specified and that the drive has been detected by your computer.\n\n"
+               
+               "You must also close all other applications that have a read/write handle open\n"
+               "on the drive. In order to ensure accurate angle measurements, extended C/R must\n"
+               "be able to open the drive for exclusive access.\n");
+        color(normal);
+        closedeviceifopen();
+        // ask the user if they want to try again
+        memset(temp, 0, 4);
+        color(white);
+        while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+            fprintf(stderr, "\nWould you like to try using drive \"%s\" again? (y/n) ", forced_cr_drive);
+            readstdin(temp, 4);
+        }
+        color(normal);
+        printstderr = false;
+        if (temp[0] == 'y' || temp[0] == 'Y') {
+            goto startforced;
+        }
+      return 1;
+    }
+    
+    // set drive speed to 5x
+    setspeed:
+    setdvdspeed(5, false);
+    
+    // do c/r up to NUM_AP25_CR_SAMPLES*2 times and exit when NUM_AP25_CR_SAMPLES valid samples have been taken
+    printf("Doing %d iterations of AP25 C/R now. To help indicate progress, the absolute\n"
+           "value of each measurement's deviation from the dae.bin target angles will be\n"
+           "displayed (deviations of 0 will be displayed as dots). In order to maintain\n"
+           "consistency of a single character for each measurement, deviations greater than\n"
+           "%d will be displayed like this: \"", NUM_AP25_CR_SAMPLES, AP25_HIGH_ANGLE);
+    color(blackonred);
+    printf("X");
+    color(normal);
+    printf("\". Deviations from ");
+    color(blackonyellow);
+    printf("%d", AP25_MEDIUM_ANGLE + 1);
+    color(normal);
+    printf(" to ");
+    color(blackonyellow);
+    printf("%d", AP25_HIGH_ANGLE);
+    color(normal);
+    printf(" will be displayed\n"
+           "like that. A few outlying measurements (in red or yellow) should not affect the\n"
+           "median very much (if at all), but if you see a lot of them, you should probably\n"
+           "type 'n' when it asks you if you want to continue with the upload. If in doubt,\n"
+           "don't hesitate to ask Seacrest. This should take about %d or %d minutes (Liteon\n"
+           "or BenQ respectively) to do %d iterations of %d C/R measurements.%s%s",
+           (int) roundf(0.3188 * num_challenges * NUM_AP25_CR_SAMPLES / 60),  // liteon: 0.3188 seconds/challenge (varies a little depending on interface/system)
+           (int) roundf(0.3780 * num_challenges * NUM_AP25_CR_SAMPLES / 60),  // benq:   0.3780 seconds/challenge (varies a little depending on interface/system)
+           NUM_AP25_CR_SAMPLES, num_challenges, newline, newline);
+    bool error_doing_cr = false;
+    int progress_printed;
+    int sample_num = 0;
+    unsigned int existing_angle;
+    unsigned char challengebuffer[0x20] = {0};
+    unsigned char inqbuffer[0x60] = {0};
+    memcpy(challengebuffer+8, "\x39\x20\x11", 3);
+    memset(median_ap25, 0, 2048);
+    for (i=0;i<NUM_AP25_CR_SAMPLES*2;i++) {
+        // we should just give up if the number of good samples so far plus the number of iterations left is less than the number of valid samples required
+        if (sample_num + (NUM_AP25_CR_SAMPLES*2 - i) < NUM_AP25_CR_SAMPLES) break;
+        error_doing_cr = false;
+        // progress indication
+        if (i) printf("%s", newline);
+        if (sample_num + 1 < 10) printf("%s", sp1);
+        printf("%d/%d: ", sample_num + 1, NUM_AP25_CR_SAMPLES);
+        progress_printed = 0;
+        for (j=0;j<num_challenges;j++) {
+            // send the challenge
+            memset(cdb, 0, 12);
+            cdb[0]  = 0x55;  // MODE SELECT
+            cdb[8]  = 0x20;  // parameter list length LSB
+            memcpy(challengebuffer+13, dae_challenges[j].psn1, 3);
+            memcpy(challengebuffer+17, dae_challenges[j].psn2, 3);
+            if (sendcdb(DATA_OUT, challengebuffer, 0x20, cdb, 12, false)) {
+                for (k=0;k<readretries;k++) {
+                    if (sendcdb(DATA_OUT, challengebuffer, 0x20, cdb, 12, false) == 0) {
+                        // recovered error
+                        goto challengerecovered;
+                    }
+                }
+                // unrecovered error
+                color(yellow);
+                printf("%sUnrecovered error issuing challenge %s%d (%s)%s", newline, numbersign, j+1, cdberror(sense), newline);
+                color(normal);
+                error_doing_cr = true;
+                if (debug || testingdvd) {
+                    printf("challenge buffer:%s", newline);
+                    hexdump(challengebuffer, 0, 0x20);
+                }
+              break;
+            }
+            challengerecovered:
+            // read the result
+            memset(inqbuffer, 0, 0x60);
+            memset(cdb, 0, 12);
+            cdb[0] = 0x12;  // INQUIRY command
+            cdb[4] = 0x60;  // allocation length LSB (0x0060 = 96) - maximum number of bytes that may be returned by the drive
+            if (sendcdb(DATA_IN, inqbuffer, 0x60, cdb, 12, false)) {  // false means it won't check that number of bytes returned == 96
+                for (k=0;k<readretries;k++) {
+                    if (sendcdb(DATA_IN, inqbuffer, 0x60, cdb, 12, false) == 0) {
+                        // recovered error
+                        goto inquiryrecovered;
+                    }
+                }
+                // unrecovered error
+                color(yellow);
+                printf("%sUnrecovered error reading the result for challenge %s%d (%s)%s",
+                       newline, numbersign, j+1, cdberror(sense), newline);
+                color(normal);
+                error_doing_cr = true;
+                if (debug || testingdvd) {
+                    printf("inquiry buffer:%s", newline);
+                    hexdump(inqbuffer, 0, 0x60);
+                }
+              break;
+            }
+            inquiryrecovered:
+            // if still on the first (full) iteration, write PSNs and 4 bytes data to the median_ap25
+            // else, make sure the 4 bytes data match our first recorded replay data
+            if (sample_num == 0) {
+                memcpy(median_ap25+j*16+1, dae_challenges[j].psn1, 3);
+                memcpy(median_ap25+j*16+5, dae_challenges[j].psn2, 3);
+                memcpy(median_ap25+j*16+8, inqbuffer+0x50, 4);
+            }
+            else if (memcmp(median_ap25+j*16+8, inqbuffer+0x50, 4) != 0) {
+                color(yellow);
+                printf("%sData portion of response does not match the first recorded replay data for challenge %s%d!%s",
+                       newline, numbersign, j+1, newline);
+                color(normal);
+                error_doing_cr = true;
+                if (debug || testingdvd) {
+                    printf("inquiry buffer:%s", newline);
+                    hexdump(inqbuffer, 0, 0x60);
+                }
+              break;
+            }
+            // store the angle
+            anglesanddevs[j][sample_num].angle  = (unsigned int) inqbuffer[0x54] << 8;
+            anglesanddevs[j][sample_num].angle |= (unsigned int) inqbuffer[0x55];
+            if (debug) printf("anglesanddevs[%03d][%02d].angle = %03u (0x%04X)%s",
+                              j, sample_num, anglesanddevs[j][sample_num].angle, anglesanddevs[j][sample_num].angle, newline);
+            // make sure angle is valid
+            if (anglesanddevs[j][sample_num].angle > 359) {
+                color(yellow);
+                printf("%sAngle response (%u) is invalid for challenge %s%d!%s",
+                       newline, anglesanddevs[j][sample_num].angle, numbersign, j+1, newline);
+                color(normal);
+                error_doing_cr = true;
+                if (debug || testingdvd) {
+                    printf("inquiry buffer:%s", newline);
+                    hexdump(inqbuffer, 0, 0x60);
+                }
+              break;
+            }
+            // calculate and store deviation from the iso's existing ap25 angle
+            anglesanddevs[j][sample_num].dev = getangledeviation(anglesanddevs[j][sample_num].angle, (int) dae_challenges[j].target);
+            if (debug) printf("anglesanddevs[%03d][%02d].dev = %d%s",
+                              j, sample_num, anglesanddevs[j][sample_num].dev, newline);
+            else {
+                // print the absolute value of the deviation as a progress indication
+                if (!html && progress_printed == 64) printf("%s%s", newline, sp7); // looks nicer in a CLI window this way
+                if (anglesanddevs[j][sample_num].dev == 0) printf(".");
+                else if (abs(anglesanddevs[j][sample_num].dev) > 9) {
+                    // print a single char only for consistency
+                    color(blackonred);
+                    printf("X");
+                    color(normal);
+                }
+                else if (abs(anglesanddevs[j][sample_num].dev) > AP25_MEDIUM_ANGLE) {
+                    color(blackonyellow);
+                    printf("%d", abs(anglesanddevs[j][sample_num].dev));
+                    color(normal);
+                }
+                else printf("%d", abs(anglesanddevs[j][sample_num].dev));
+                progress_printed++;
+            }
+            // make sure deviation is within tolerance
+            if (abs(anglesanddevs[j][sample_num].dev) >= tolerance) {
+                color(yellow);
+                printf("%sAngle response (%u = %+d) is out of tolerance (%d) for challenge %s%d!%s",
+                       newline, anglesanddevs[j][sample_num].angle, anglesanddevs[j][sample_num].dev, tolerance, numbersign, j+1, newline);
+                color(normal);
+                error_doing_cr = true;
+              break;
+            }
+        }
+        if (error_doing_cr) continue;
+        sample_num++;
+        if (sample_num == NUM_AP25_CR_SAMPLES) break;
+    }
+    printf("%s", newline);
+    if (debug) printf("sample_num = %d%s", sample_num, newline);
+    if (sample_num != NUM_AP25_CR_SAMPLES) {
+        color(red);
+        printf("ERROR: Looks like there were too many errors to get a large enough sample size%s", newline);
+        color(normal);
+        closedeviceifopen();
+      return 1;
+    }
+    
+    // close exclusive access handle so other apps can access the drive now
+    closedeviceifopen();
+    
+    // sort angles by their deviations (it would be very difficult to sort just the angles [imagine sorting 0,1,358,359 for example])
+    for (i=0;i<num_challenges;i++) {
+        qsort(anglesanddevs[i], NUM_AP25_CR_SAMPLES, sizeof(struct angledev), cmpangledev);
+    }
+    
+    if (debug) {
+        for (i=0;i<num_challenges;i++) {
+            printf("%sanglesanddevs[%d]:%s", newline, i, newline);
+            for (j=0;j<NUM_AP25_CR_SAMPLES;j++) {
+                if (j == NUM_AP25_CR_SAMPLES/2) color(cyan);
+                printf("%2d: %3u %d%s", j+1, anglesanddevs[i][j].angle, anglesanddevs[i][j].dev, newline);
+                if (j == NUM_AP25_CR_SAMPLES/2) color(normal);
+            }
+        }
+    }
+    
+    // save the medians to the medianangle[] array
+    for (i=0;i<num_challenges;i++) {
+        medianangle[i] = anglesanddevs[i][NUM_AP25_CR_SAMPLES/2].angle;
+        if (debug) printf("medianangle[%03d] = %3u%s", i, medianangle[i], newline);
+        // check for invalid angles (initialized to 360 in case they don't get set)
+        if (medianangle[i] > 359) {
+            color(red);
+            printf("ERROR: One or more median angles are invalid or could not be found%s", newline);
+            color(normal);
+          return 1;
+        }
+    }
+    
+    // show bar graph with median angles and outliers highlighted
+    unsigned int lastprintedangle;
+    int angle_num = 0;
+    for (i=0;i<num_challenges;i++) {
+        angle_num++;
+        if (i) printf("%s", newline);
+        lastprintedangle = 360;
+        for (j=0;j<NUM_AP25_CR_SAMPLES;j++) {
+            if (lastprintedangle != anglesanddevs[i][j].angle) {
+                printf("%s", newline);
+                if      (abs(anglesanddevs[i][j].dev) > AP25_HIGH_ANGLE)   color(red);
+                else if (abs(anglesanddevs[i][j].dev) > AP25_MEDIUM_ANGLE) color(yellow);
+                if (anglesanddevs[i][j].angle == anglesanddevs[i][NUM_AP25_CR_SAMPLES/2].angle) {
+                    if  (abs(anglesanddevs[i][j].dev) <= AP25_MEDIUM_ANGLE) color(cyan);
+                    printf("Angle ");
+                    if      (angle_num < 10)  printf("%s", sp2);
+                    else if (angle_num < 100) printf("%s", sp1);
+                    printf("%d: ", angle_num);
+                }
+                else printf("%s", sp11);
+                if      (anglesanddevs[i][j].angle < 10)  printf("%s", sp2);
+                else if (anglesanddevs[i][j].angle < 100) printf("%s", sp1);
+                printf("%u ", anglesanddevs[i][j].angle);
+                if      (abs(anglesanddevs[i][j].dev) < 10)  printf("%s", sp2);
+                else if (abs(anglesanddevs[i][j].dev) < 100) printf("%s", sp1);
+                if (anglesanddevs[i][j].dev == 0) printf("%s0 %s", sp1, sp1);
+                else                              printf("%+d %s", anglesanddevs[i][j].dev, sp1);
+                color(normal);
+                lastprintedangle = anglesanddevs[i][j].angle;
+            }
+            if (j == NUM_AP25_CR_SAMPLES/2) {
+                if      (abs(anglesanddevs[i][j].dev) > AP25_HIGH_ANGLE)   color(red);
+                else if (abs(anglesanddevs[i][j].dev) > AP25_MEDIUM_ANGLE) color(yellow);
+                else                                                       color(cyan);
+                printf("M");
+                color(normal);
+            }
+            else printf("%s", numbersign);
+        }
+    }
+    printf("%s", newline);
+    
+    // write median angles to median_ap25
+    for (i=0;i<num_challenges;i++) {
+        median_ap25[i*16+12] = (unsigned char) ( (medianangle[i] & 0x0000FF00) >> 8);
+        median_ap25[i*16+13] = (unsigned char)   (medianangle[i] & 0x000000FF);
+    }
+    
+    // write version number to median_ap25
+    median_ap25[2046] = (unsigned char) ( (dae_version & 0xFF00) >> 8);
+    median_ap25[2047] = (unsigned char)   (dae_version & 0x00FF);
+    
+    if (debug) showap25data(median_ap25);
+    
+  return 0;
+}
+
+int checkap25psnsandangles(unsigned char *ap25bin) {
+    // check ap25 replay table entries for valid PSNs and angles 0-359
+    int i;
+    unsigned long psn1, psn2;
+    unsigned int angle;
+    for (i=0;i<128;i++) {
+        if (memcmp(ap25bin+i*16, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 14) != 0) {
+            psn1 = getuintmsb(ap25bin+i*16);
+            psn2 = getuintmsb(ap25bin+i*16+4);
+            angle = getwordmsb(ap25bin+i*16+12);
+            if (debug) printf("checking for valid PSNs and angles: %08Xh %08Xh %u%s", psn1, psn2, angle, newline);
+            if (psn1 > 0x00FFFFFF || psn2 > 0x00FFFFFF) {  // todo: see if this can be made more specific
+                color(red);
+                printf("One or more PSNs in this AP25 replay sector are invalid!%s", newline);
+                color(normal);
+              return 1;
+            }
+            if (angle > 359) {
+                color(red);
+                printf("One or more angles in this AP25 replay sector are invalid!%s", newline);
+                color(normal);
+              return 1;
+            }
+        }
+    }
+  return 0;
+}
+
 void showap25data(unsigned char *ap25bin) {
     int i;
     int num_challenges;
-    unsigned int angle;
+    unsigned short angle;
+    unsigned long m;
     if (verbose) {
         num_challenges = 0;
-        for (i=0; i<128; i++) {
-            if (memcmp(ap25bin+i*16, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) != 0) {
+        for (i=0;i<128;i++) {
+            if (memcmp(ap25bin+i*16, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 14) != 0) {
                 num_challenges++;
             }
         }
@@ -15095,9 +19167,8 @@ void showap25data(unsigned char *ap25bin) {
         else          printf("%s-------- -------- -------- ----- ----%s", sp5, newline);
         color(normal);
         for (i=0; i<128; i++) {
-            if (memcmp(ap25bin+i*16, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) != 0) {
-                angle  = (unsigned int) ap25bin[i*16+12] << 8;
-                angle |= (unsigned int) ap25bin[i*16+13];
+            if (memcmp(ap25bin+i*16, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 14) != 0) {
+                angle = getwordmsb(ap25bin+i*16+12);
                 // start psn, end psn, data, angle
                 printf("%s%02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X %u ",
                        sp5, ap25bin[i*16], ap25bin[i*16+1], ap25bin[i*16+2], ap25bin[i*16+3],
@@ -15111,24 +19182,43 @@ void showap25data(unsigned char *ap25bin) {
                 // pad
                 printf("%02X%02X%s", ap25bin[i*16+14], ap25bin[i*16+15], newline);
             }
-            // else break;  // todo: should we break when finding a blank line or will LT+ keep going?
         }
         color(blue);
         if (terminal) printf("%s컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴�%s", sp5, newline);
         else          printf("%s-------------------------------------%s", sp5, newline);
         color(normal);
     }
+    unsigned short ap25bin_daeversion = getwordmsb(ap25bin+2046);
+    bool displayed_version_note = false;
+    for (m=0;m<num_daeversions;m++) {
+        if (ap25bin_daeversion == mostrecentdaeversions[m].version) {
+            color(yellow);
+            printf("NOTE: This AP25 replay data is ONLY suitable for dashboard version%s%s", mostrecentdaeversions[m].description, newline);
+            color(normal);
+            displayed_version_note = true;
+            break;
+        }
+    }
+    if (!displayed_version_note) {
+        color(yellow);
+        printf("NOTE: It's up to you to make sure this AP25 replay data is correct for the dashboard version you are using%s", newline);
+        color(normal);
+    }
   return;
 }
 
-void checkap25() {
+void checkap25(char *argv[]) {
     fixedap25 = false;
     long long filesize;
     unsigned char ap25hashfilebuffer[24], ap25binfilebuffer[2048];
-    char ap25hashfilename[19], ap25binfilename[18];
+    char ap25hashfilename[19], ap25binfilename[18], temp[4];
     FILE *ap25hashfile = NULL, *ap25binfile = NULL;
     uchar ap25_sha1[20] = {0}, ap25_verified_sha1[20] = {0}, ap25_binfile_sha1[20] = {0};
     int i;
+    unsigned long m;
+    unsigned short our_ap25bin_daeversion, db_ap25bin_daeversion;
+    unsigned char median_ap25[2048];
+    bool have_median_ap25 = false, ourap25isinvalid = false;
     if (verbose && !minimal) printf("Checking AP25 replay sector%s", newline);
     if (getzeros(ap25, 0, 2047) == 2048) {
         color(red);
@@ -15234,6 +19324,11 @@ void checkap25() {
             fclose(ap25binfile);
             // show some data
             showap25data(ap25binfilebuffer);
+            // do some simple validation of ap25 replay table entries (prints a message in red if data is invalid)
+            if (checkap25psnsandangles(ap25binfilebuffer) == 1) {
+                deletestealthfile(ap25binfilename, stealthdir, false);
+              return;
+            }
             // make sure the file isn't corrupt by checking the sha-1 of the file against ap25_verified_sha1
             sha1_starts(&ctx);
             sha1_update(&ctx, ap25binfilebuffer, 2048);
@@ -15262,11 +19357,10 @@ void checkap25() {
         }
       return;
     }
-    // todo: do some simple validation of ap25 replay table entries (valid psn's, angles 0-359, ...) and do it when checking ap25.bin files for patching too
-    
-    
     // show some data
     showap25data(ap25);
+    // do some simple validation of ap25 replay table entries (prints a message in red if data is invalid)
+    if (checkap25psnsandangles(ap25) == 1) ourap25isinvalid = true;
     // calculate ap25 sha-1
     sha1_starts(&ctx);
     sha1_update(&ctx, ap25, 2048);
@@ -15301,6 +19395,86 @@ void checkap25() {
             color(yellow);
             printf("Unable to verify AP25 replay data for this Media ID%s", newline);
             color(normal);
+            if (!ourap25isinvalid && autoupload && !stayoffline && autouploaduserarg && autouploadpassarg) {
+                // we have ap25 data that apparently isn't in the db, if it isn't obsolete then do extended ap25 c/r and upload it
+                our_ap25bin_daeversion = getwordmsb(ap25+2046);
+                int obsolescence = -1;
+                for (m=0;m<num_daeversions;m++) {
+                    if (our_ap25bin_daeversion == mostrecentdaeversions[m].version) {
+                        if (mostrecentdaeversions[m].flags & 0x01) obsolescence = 1;
+                        else obsolescence = 0;
+                      break;
+                    }
+                }
+                if (obsolescence == -1) {
+                    // couldn't find a match for the dae version number used to create our ap25 data
+                    color(yellow);
+                    printf("Your AP25 replay data will not be uploaded because its obsolescence is unknown%s", newline);
+                    color(normal);
+                }
+                else if (obsolescence == 1) {
+                    color(yellow);
+                    printf("Your AP25 replay data will not be uploaded because it is obsolete!%s", newline);
+                    color(normal);
+                }
+                else {
+                    // there is no ap25 data in the db for this media id, so do extended ap25 c/r and upload our data
+                    memcpy(median_ap25, ap25, 2048);
+                    printf("%sStarting AutoUpload%s", newline, newline);
+                    #ifdef WIN32
+                        HANDLE real_hDevice =                 hDevice;
+                    #else
+                        int real_fd =                         fd;
+                        #if defined(__FreeBSD__)
+                            struct cam_device *real_cam_dev = cam_dev;
+                        #endif
+                    #endif
+                    char *real_isofilename =                  isofilename;
+                    bool real_writefile =                     writefile;
+                    FILE *real_fp =                           fp;
+                    long long real_fpfilesize =               fpfilesize;
+                    bool real_drive_speed_needs_to_be_reset = drive_speed_needs_to_be_reset;
+                    if (origarg) {  // origarg means the user supplied the drive letter (windows) or device name (other systems) of the drive they want to do c/r on
+                        if (doextendedap25cr(argv[origarg], median_ap25) == 0) have_median_ap25 = true;
+                        else printextendedap25crfailedmessage();
+                    }
+                    else if (doextendedap25cr(NULL, median_ap25) == 0) have_median_ap25 = true;  // the drive with the game will be automatically searched for
+                    else printextendedap25crfailedmessage();
+                    if (have_median_ap25) {
+                        while (doap25autoupload(argv, median_ap25) == 1) {
+                            // return value 0 = success
+                            // return value 1 = failed
+                            // return value 2 = user decided to abort the upload
+                            memset(temp, 0, 4);
+                            printstderr = true;
+                            color(white);
+                            while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+                                fprintf(stderr, "\nWould you like to retry the upload? (y/n) ");
+                                readstdin(temp, 4);
+                            }
+                            color(normal);
+                            printstderr = false;
+                            if (temp[0] == 'y' || temp[0] == 'Y') {
+                                continue;
+                            }
+                          break;
+                        }
+                    }
+                    #ifdef WIN32
+                        hDevice =                   real_hDevice;
+                    #else
+                        fd =                        real_fd;
+                        #if defined(__FreeBSD__)
+                            cam_dev =               real_cam_dev;
+                        #endif
+                    #endif
+                    isofilename =                   real_isofilename;
+                    writefile =                     real_writefile;
+                    fp =                            real_fp;
+                    fpfilesize =                    real_fpfilesize;
+                    drive_speed_needs_to_be_reset = real_drive_speed_needs_to_be_reset;
+                }
+            }
           return;
         }
         // ap25 hash file should be exactly 24 bytes
@@ -15337,14 +19511,168 @@ void checkap25() {
         // does it match the existing data?
         if (memcmp(ap25_sha1, ap25_verified_sha1, 20) == 0) {
             color(green);
-            printf("AP25 replay sector is currently verified%s", newline);
+            printf("AP25 replay sector is currently verified (But make sure it's suitable for the\n"
+                   "dashboard version of your console!)%s", newline);
             color(normal);
           return;
         }
         color(yellow);
-        printf("AP25 replay sector does not match the one in the database!\n"
-               "It could be corrupt or might be obsolete and missing new data%s", newline);
+        printf("Your AP25 replay sector does not match the one in the database!\n"
+               "Yours might be corrupt, or yours or the one in the database might be obsolete,\n"
+               "or both could be perfectly fine if there are only slight differences in angles\n"
+               "(No two AP25 rips will have the same angle measurements)%s", newline);
         color(normal);
+        if (!ourap25isinvalid && autoupload && !stayoffline && autouploaduserarg && autouploadpassarg) {
+            // if our ap25 data isn't obsolete and the ap25 data in the db is obsolete, do extended ap25 c/r and upload ours
+            our_ap25bin_daeversion = getwordmsb(ap25+2046);
+            int obsolescence = -1;
+            for (m=0;m<num_daeversions;m++) {
+                if (our_ap25bin_daeversion == mostrecentdaeversions[m].version) {
+                    if (mostrecentdaeversions[m].flags & 0x01) obsolescence = 1;
+                    else obsolescence = 0;
+                  break;
+                }
+            }
+            if (obsolescence == -1) {
+                // couldn't find a match for the dae version number used to create our ap25 data
+                color(yellow);
+                printf("Your AP25 replay data will not be uploaded because its obsolescence is unknown%s", newline);
+                color(normal);
+            }
+            else if (obsolescence == 1) {
+                color(yellow);
+                printf("Your AP25 replay data will not be uploaded because it is obsolete!%s", newline);
+                color(normal);
+            }
+            else {
+                // check to see if the ap25 data in the db is obsolete
+                // get the db ap25.bin, hash it and compare to ap25_verified_sha1
+                memset(ap25binfilename, 0, 18);
+                sprintf(ap25binfilename, "AP25_%02X%02X%02X%02X.bin",
+                        xex_mediaid[12], xex_mediaid[13], xex_mediaid[14], xex_mediaid[15]);
+                ap25binfile = openstealthfile(ap25binfilename, stealthdir, webstealthdir, AP25_BIN_FILE, "the online verified database");
+                if (ap25binfile == NULL) {
+                    // failed to find the file online or locally
+                    color(red);
+                    printf("Your AP25 replay data will not be uploaded because there was a problem getting the existing AP25.bin file from the db%s", newline);
+                    color(normal);
+                  return;
+                }
+                // ap25 bin file should be exactly 2048 bytes
+                filesize = getfilesize(ap25binfile);
+                if (filesize == -1) {  // seek error
+                    fclose(ap25binfile);
+                  return;
+                }
+                if (filesize != 2048) {
+                    color(red);
+                    printf("Your AP25 replay data will not be uploaded because %s (from the db) is %"LL"d bytes! (should have been exactly 2048 bytes -- deleting it)%s",
+                           ap25binfilename, filesize, newline);
+                    color(normal);
+                    fclose(ap25binfile);
+                    deletestealthfile(ap25binfilename, stealthdir, false);
+                  return;
+                }
+                // read bin file into the buffer
+                if (trytoreadstealthfile(ap25binfilebuffer, 1, 2048, ap25binfile, ap25binfilename, 0) != 0) {
+                    fclose(ap25binfile);
+                    deletestealthfile(ap25binfilename, stealthdir, false);  // should we be trying to delete a file we can't read?
+                  return;
+                }
+                fclose(ap25binfile);
+                // make sure the file isn't corrupt by checking the sha-1 of the file against ap25_verified_sha1
+                sha1_starts(&ctx);
+                sha1_update(&ctx, ap25binfilebuffer, 2048);
+                sha1_finish(&ctx, ap25_binfile_sha1);
+                if (debug) {
+                    printf("AP25 replay sector (from the db) SHA-1 = ");
+                    for (i=0; i<20; i++) printf("%02X", ap25_binfile_sha1[i]);
+                    printf("%s", newline);
+                }
+                if (memcmp(ap25_binfile_sha1, ap25_verified_sha1, 20) != 0) {
+                    color(red);
+                    printf("Your AP25 replay data will not be uploaded because %s (from the db) appears to be corrupt! (deleting it)%s", ap25binfilename, newline);
+                    color(normal);
+                    deletestealthfile(ap25binfilename, stealthdir, false);
+                  return;
+                }
+                db_ap25bin_daeversion = getwordmsb(ap25binfilebuffer+2046);
+                obsolescence = -1;
+                for (m=0;m<num_daeversions;m++) {
+                    if (db_ap25bin_daeversion == mostrecentdaeversions[m].version) {
+                        if (mostrecentdaeversions[m].flags & 0x01) obsolescence = 1;
+                        else obsolescence = 0;
+                      break;
+                    }
+                }
+                if (obsolescence == -1) {
+                    // couldn't find a match for the dae version number used to create the db ap25 data
+                    color(yellow);
+                    printf("Your AP25 replay data will not be uploaded because the obsolescence of the AP25 data in the db is unknown%s", newline);
+                    color(normal);
+                }
+                else if (obsolescence == 0) {
+                    printf("A current AP25 sector already exists in the db, no need to upload anything%s", newline);
+                }
+                else {
+                    // the ap25 data in the db is obsolete, so do extended ap25 c/r and upload our data
+                    memcpy(median_ap25, ap25, 2048);
+                    printf("%sStarting AutoUpload%s", newline, newline);
+                    #ifdef WIN32
+                        HANDLE real_hDevice =                 hDevice;
+                    #else
+                        int real_fd =                         fd;
+                        #if defined(__FreeBSD__)
+                            struct cam_device *real_cam_dev = cam_dev;
+                        #endif
+                    #endif
+                    char *real_isofilename =                  isofilename;
+                    bool real_writefile =                     writefile;
+                    FILE *real_fp =                           fp;
+                    long long real_fpfilesize =               fpfilesize;
+                    bool real_drive_speed_needs_to_be_reset = drive_speed_needs_to_be_reset;
+                    if (origarg) {  // origarg means the user supplied the drive letter (windows) or device name (other systems) of the drive they want to do c/r on
+                        if (doextendedap25cr(argv[origarg], median_ap25) == 0) have_median_ap25 = true;
+                        else printextendedap25crfailedmessage();
+                    }
+                    else if (doextendedap25cr(NULL, median_ap25) == 0) have_median_ap25 = true;  // the drive with the game will be automatically searched for
+                    else printextendedap25crfailedmessage();
+                    if (have_median_ap25) {
+                        while (doap25autoupload(argv, median_ap25) == 1) {
+                            // return value 0 = success
+                            // return value 1 = failed
+                            // return value 2 = user decided to abort the upload
+                            memset(temp, 0, 4);
+                            printstderr = true;
+                            color(white);
+                            while (temp[0] != 'y' && temp[0] != 'n' && temp[0] != 'Y' && temp[0] != 'N') {
+                                fprintf(stderr, "\nWould you like to retry the upload? (y/n) ");
+                                readstdin(temp, 4);
+                            }
+                            color(normal);
+                            printstderr = false;
+                            if (temp[0] == 'y' || temp[0] == 'Y') {
+                                continue;
+                            }
+                          break;
+                        }
+                    }
+                    #ifdef WIN32
+                        hDevice =                   real_hDevice;
+                    #else
+                        fd =                        real_fd;
+                        #if defined(__FreeBSD__)
+                            cam_dev =               real_cam_dev;
+                        #endif
+                    #endif
+                    isofilename =                   real_isofilename;
+                    writefile =                     real_writefile;
+                    fp =                            real_fp;
+                    fpfilesize =                    real_fpfilesize;
+                    drive_speed_needs_to_be_reset = real_drive_speed_needs_to_be_reset;
+                }
+            }
+        }
         if (autofix) {
             printf("Attempting to fix the AP25 replay sector%s", newline);
             if (!writefile) {
@@ -15353,7 +19681,7 @@ void checkap25() {
                 color(normal);
               return;
             }
-            // get ap25.bin, hash it and compare to ap25_verified_sha1
+            // get the db ap25.bin, hash it and compare to ap25_verified_sha1
             memset(ap25binfilename, 0, 18);
             sprintf(ap25binfilename, "AP25_%02X%02X%02X%02X.bin",
                     xex_mediaid[12], xex_mediaid[13], xex_mediaid[14], xex_mediaid[15]);
@@ -15389,6 +19717,11 @@ void checkap25() {
             fclose(ap25binfile);
             // show some data
             showap25data(ap25binfilebuffer);
+            // do some simple validation of ap25 replay table entries (prints a message in red if data is invalid)
+            if (checkap25psnsandangles(ap25binfilebuffer) == 1) {
+                deletestealthfile(ap25binfilename, stealthdir, false);
+              return;
+            }
             // make sure the file isn't corrupt by checking the sha-1 of the file against ap25_verified_sha1
             sha1_starts(&ctx);
             sha1_update(&ctx, ap25binfilebuffer, 2048);
@@ -15405,7 +19738,7 @@ void checkap25() {
                 deletestealthfile(ap25binfilename, stealthdir, false);
               return;
             }
-            // overwrite ap25 buffer with ap25.bin and set fixedap25 = true so it will try to get patched
+            // overwrite ap25 buffer with the db ap25.bin and set fixedap25 = true so it will try to get patched
             memcpy(ap25, ap25binfilebuffer, 2048);
             fixedap25 = true;
           return;
@@ -15421,6 +19754,346 @@ void checkap25() {
         // verify is disabled
         color(yellow);
         printf("AP25 replay data will not be verified because you have disabled the option to verify%s", newline);
+        color(normal);
+      return;
+    }
+  return;
+}
+*/
+
+void checktopology() {
+    fixedtopology = false;
+    topology_was_verified = false;
+    uchar top_sha1[20] = {0}, top_verified_sha1[20] = {0}, top_binfile_sha1[20] = {0};
+    int i;
+    if (verbose && !minimal) printf("Checking topology data%s", newline);
+    if (getzeros(topology, 0, TOPOLOGY_SIZE - 1) == TOPOLOGY_SIZE) {
+        color(red);
+        printf("Topology data is blank!%s", newline);
+        color(normal);
+    }
+    else if (TOPOLOGY_SIZE >= 4096 && TOPOLOGY_SIZE % 2048 == 0 && getzeros(topology, 0, TOPOLOGY_SIZE - 2049) == TOPOLOGY_SIZE - 2048) {
+        // all but the last sector is blank (the last sector is where we stored old AP25 replay data)
+        color(red);
+        printf("The first %d sectors of topology data are blank!%s", TOPOLOGY_SIZE / 2048 - 1, newline);
+        color(normal);
+    }
+    // calculate topology sha-1
+    sha1_starts(&ctx);
+    sha1_update(&ctx, topology, TOPOLOGY_SIZE);
+    sha1_finish(&ctx, top_sha1);
+    if (extraverbose) {
+        printf("%sTopology data SHA-1 = ", sp5);
+        for (i=0; i<20; i++) printf("%02X", top_sha1[i]);
+        printf("%s", newline);
+    }
+    if (verify) {
+        if (!xex_foundmediaid) {
+            color(red);
+            printf("Unable to verify topology data because the Xex Media ID could not be found%s", newline);
+            color(normal);
+          return;
+        }
+        if (!foundtitleid) {
+            color(red);
+            printf("Unable to verify topology data because the Title ID could not be found%s", newline);
+            color(normal);
+          return;
+        }
+        if (stayoffline) {
+            color(yellow);
+            printf("You need to enable online functions (assuming your connection works and the db\n"
+                   "is up) if you want to verify the topology data%s", newline);
+            color(normal);
+          return;
+        }
+        // query the db php to see what files we should get
+        printf("Querying the online database to find the appropriate verified data to use...%s", newline);
+        char localpathbuffer[2048] = {0}, webpathbuffer[2048] = {0}, id[34] = {0};
+        // create GET url
+        if (strlen(webtopology) > 1500) {
+            color(red);
+            printf("ERROR: The webtopology string is way too long%s", newline);
+            color(normal);
+          return;
+        }
+        strcat(webpathbuffer, webtopology);
+        strcat(webpathbuffer, "?m=");
+        sprintf(id, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X-%02X%02X%02X%02X",
+                xex_mediaid[0], xex_mediaid[1], xex_mediaid[2], xex_mediaid[3], xex_mediaid[4],
+                xex_mediaid[5], xex_mediaid[6], xex_mediaid[7], xex_mediaid[8], xex_mediaid[9],
+                xex_mediaid[10], xex_mediaid[11], xex_mediaid[12], xex_mediaid[13], xex_mediaid[14],
+                xex_mediaid[15]);
+        strcat(webpathbuffer, id);
+        strcat(webpathbuffer, "&t=");
+        sprintf(id, "%02X%02X%02X%02X", titleid[0], titleid[1], titleid[2], titleid[3]);
+        strcat(webpathbuffer, id);
+        if (xex_founddiscprofileid) {
+            strcat(webpathbuffer, "&d=");
+            sprintf(id, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X-%02X%02X%02X%02X",
+                    xex_discprofileid[0], xex_discprofileid[1], xex_discprofileid[2], xex_discprofileid[3], xex_discprofileid[4],
+                    xex_discprofileid[5], xex_discprofileid[6], xex_discprofileid[7], xex_discprofileid[8], xex_discprofileid[9],
+                    xex_discprofileid[10], xex_discprofileid[11], xex_discprofileid[12], xex_discprofileid[13], xex_discprofileid[14],
+                    xex_discprofileid[15]);
+            strcat(webpathbuffer, id);
+        }
+        memset(curlerrorbuffer, 0, CURL_ERROR_SIZE+1);
+        curl_easy_reset(curl);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, curluseragent);
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curlerrorbuffer);
+        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 0);  // refuse redirects (account is probably suspended or something and we don't
+                                                       // want to retrieve the error page as a file)
+        curl_easy_setopt(curl, CURLOPT_URL, webpathbuffer);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, connectiontimeout);
+        curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, (curl_progress_callback) curlprogress);
+        curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, (char*) "Querying the online database");
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0);
+        if (extraverbose) curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+        if (!homeless) {
+            strcat(localpathbuffer, homedir);
+            strcat(localpathbuffer, abgxdir);
+        }
+        strcat(localpathbuffer, "topology.txt");
+        struct MyCurlFile curlwebtopology = {localpathbuffer, NULL};
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &curlwebtopology);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_curl_write);
+        curl_easy_setopt(curl, CURLOPT_TIMECONDITION, 0);
+        curlheaderprinted = false;
+        if (extraverbose) fprintf(stderr, "\n");
+        printstderr = true;
+        color(blue);
+        curlprogressstartmsecs = getmsecs();
+        res = curl_easy_perform(curl);
+        color(normal);
+        printstderr = false;
+        if (extraverbose || curlheaderprinted) fprintf(stderr, "\n");
+        if (res != CURLE_OK) {  // error occurred
+            color(yellow);
+            if (res == CURLE_HTTP_RETURNED_ERROR) {
+                if (strstr(curlerrorbuffer, "404") != NULL) {
+                    printf("The server is online but topology.php is missing (404)%s", newline);
+                }
+                else if (strstr(curlerrorbuffer, "403") != NULL) {
+                    printf("The server is online but it's denying access to topology.php (403)%s", newline);
+                }
+                else if (strstr(curlerrorbuffer, "401") != NULL) {
+                    printf("The server is online but it's denying access to topology.php (401)%s", newline);
+                }
+                else printf("ERROR: %s%s", curlerrorbuffer, newline);
+            }
+            else {
+                stayoffline = true;
+                printf("ERROR: %s%s", curlerrorbuffer, newline);
+                printf("There seems to be a problem with the db so online functions have been disabled%s"
+                       "Try again later...%s", newline, newline);
+            }
+            color(normal);
+        }
+        else {
+            color(normal);
+            printcurlinfo(curl, "Topology information");
+        }
+        if (curlwebtopology.stream != NULL) fclose(curlwebtopology.stream);
+        if (extraverbose) {
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);  // reset to avoid annoying "Closing Connection ..." atexit
+        }
+        printf("%s", newline);
+        color(normal);
+        
+        // try to open topology.txt and read it into a buffer
+        FILE *topologyfile = fopen(localpathbuffer, "rb");
+        if (topologyfile == NULL) {
+            color(yellow);
+            printf("ERROR: Failed to find or open '%s' (%s)%s", localpathbuffer, strerror(errno), newline);
+            color(normal);
+          return;
+        }
+        char topologytxtbuffer[2048] = {0};
+        dontcare = fread(topologytxtbuffer, 1, 2047, topologyfile);
+        fclose(topologyfile);
+        remove(localpathbuffer);
+        // make sure data is long enough to contain the prefix, suffix and at least one character in between
+        if (strlen(topologytxtbuffer) < 12) {
+            color(red);
+            printf("ERROR: Server reply is not long enough to be valid!%s", newline);
+            color(normal);
+          return;
+        }
+        // check for the expected prefix and suffix
+        if (memcmp(topologytxtbuffer, "[TOP]", 5) != 0 ||
+            memcmp(topologytxtbuffer+strlen(topologytxtbuffer)-6, "[/TOP]", 6) != 0) {
+            color(red);
+            printf("ERROR: Server reply is invalid! (missing correct prefix/suffix)%s", newline);
+            color(normal);
+          return;
+        }
+        if (strlen(topologytxtbuffer) == 18 && memcmp(topologytxtbuffer, "[TOP]MISSING[/TOP]", 18) == 0) {
+            color(yellow);
+            printf("%sThere is no topology data for this game in the online database yet%s"
+                   "Unable to verify topology data for this game%s", sp5, newline, newline);
+            color(normal);
+          return;
+        }
+        if (strlen(topologytxtbuffer) == 18 && memcmp(topologytxtbuffer, "[TOP]INVALID[/TOP]", 18) == 0) {
+            color(yellow);
+            printf("%sThe database responded that our query was invalid!%s"
+                   "Unable to verify topology data for this game%s", sp5, newline, newline);
+            color(normal);
+          return;
+        }
+        if (strlen(topologytxtbuffer) == 19 && memcmp(topologytxtbuffer, "[TOP]NOTFOUND[/TOP]", 19) == 0) {
+            color(yellow);
+            printf("%sThe database isn't aware that this game needs topology data...%s"
+                   "Unable to verify topology data for this game%s", sp5, newline, newline);
+            color(normal);
+          return;
+        }
+        // pull the filename out
+        char *tophashfilename = NULL, *topbinfilename = NULL;
+        tophashfilename = calloc(strlen(topologytxtbuffer) - 5, sizeof(char)); // -5 (prefix) -6 (suffix) + 1 (terminating null) + 5 (.sha1) = -5
+        if (tophashfilename == NULL) {
+            color(red);
+            printf("ERROR: Memory allocation for tophashfilename failed! Game over man... Game over!%s", newline);
+            color(normal);
+          exit(1);
+        }
+        sprintf(tophashfilename, "%.*s.sha1", strlen(topologytxtbuffer) - 11, topologytxtbuffer+5);
+        topbinfilename = calloc(strlen(topologytxtbuffer) - 6, sizeof(char)); // -5 (prefix) -6 (suffix) + 1 (terminating null) + 4 (.bin) = -6
+        if (topbinfilename == NULL) {
+            color(red);
+            printf("ERROR: Memory allocation for topbinfilename failed! Game over man... Game over!%s", newline);
+            color(normal);
+          exit(1);
+        }
+        sprintf(topbinfilename, "%.*s.bin", strlen(topologytxtbuffer) - 11, topologytxtbuffer+5);
+        // get .sha1 file
+        FILE *tophashfile = NULL;
+        tophashfile = openstealthfile(tophashfilename, stealthdir, webstealthdir, TOP_HASH_FILE, "the online verified database");
+        if (tophashfile == NULL) {
+            // failed to find the file online or locally
+            color(yellow);
+            printf("Unable to verify topology data for this game%s", newline);
+            color(normal);
+          return;
+        }
+        // topology hash file should be exactly 24 bytes
+        long long filesize = getfilesize(tophashfile);
+        if (filesize == -1) {  // seek error
+            fclose(tophashfile);
+          return;
+        }
+        if (filesize != 24) {
+            color(red);
+            printf("ERROR: %s is %"LL"d bytes! (should have been exactly 24 bytes -- deleting it)%s",
+                   tophashfilename, filesize, newline);
+            color(normal);
+            fclose(tophashfile);
+            deletestealthfile(tophashfilename, stealthdir, false);
+          return;
+        }
+        // read hash file into a buffer
+        unsigned char tophashfilebuffer[24];
+        if (trytoreadstealthfile(tophashfilebuffer, 1, 24, tophashfile, tophashfilename, 0) != 0) {
+            fclose(tophashfile);
+            deletestealthfile(tophashfilename, stealthdir, false);  // should we be trying to delete a file we can't read?
+          return;
+        }
+        fclose(tophashfile);
+        // make sure the file isn't corrupt by checking the crc of the hash against the embedded crc at the end of the file
+        if (crc32(0, tophashfilebuffer, 20) != getuintmsb(tophashfilebuffer+20)) {
+            color(red);
+            printf("ERROR: %s appears to be corrupt! (deleting it)%s", tophashfilename, newline);
+            color(normal);
+            deletestealthfile(tophashfilename, stealthdir, false);
+          return;
+        }
+        memcpy(top_verified_sha1, tophashfilebuffer, 20);
+        // does it match the existing data?
+        if (memcmp(top_sha1, top_verified_sha1, 20) == 0) {
+            color(green);
+            printf("Topology data is currently verified%s", newline);
+            color(normal);
+            topology_was_verified = true;
+          return;
+        }
+        color(yellow);
+        printf("Your topology data doesn't match the file in the database!%s", newline);
+        color(normal);
+        if (autofix) {
+            printf("Attempting to fix the topology data%s", newline);
+            if (!writefile) {
+                color(yellow);
+                printf("Aborting fix because writing is disabled%s", newline);
+                color(normal);
+              return;
+            }
+            // get .bin file, hash it and compare to top_verified_sha1
+            FILE *topbinfile = NULL;
+            topbinfile = openstealthfile(topbinfilename, stealthdir, webstealthdir, TOP_BIN_FILE, "the online verified database");
+            if (topbinfile == NULL) {
+                // failed to find the file online or locally
+                color(red);
+                printf("Unable to fix topology data for this game%s", newline);
+                color(normal);
+              return;
+            }
+            // topology bin file should be exactly TOPOLOGY_SIZE bytes
+            filesize = getfilesize(topbinfile);
+            if (filesize == -1) {  // seek error
+                fclose(topbinfile);
+              return;
+            }
+            if (filesize != TOPOLOGY_SIZE) {
+                color(red);
+                printf("ERROR: %s is %"LL"d bytes! (should have been exactly %d bytes -- deleting it)%s",
+                       topbinfilename, filesize, TOPOLOGY_SIZE, newline);
+                color(normal);
+                fclose(topbinfile);
+                deletestealthfile(topbinfilename, stealthdir, false);
+              return;
+            }
+            // read bin file into a buffer
+            unsigned char topbinfilebuffer[TOPOLOGY_SIZE];
+            if (trytoreadstealthfile(topbinfilebuffer, 1, TOPOLOGY_SIZE, topbinfile, topbinfilename, 0) != 0) {
+                fclose(topbinfile);
+                deletestealthfile(topbinfilename, stealthdir, false);  // should we be trying to delete a file we can't read?
+              return;
+            }
+            fclose(topbinfile);
+            // make sure the file isn't corrupt by checking the sha-1 of the file against top_verified_sha1
+            sha1_starts(&ctx);
+            sha1_update(&ctx, topbinfilebuffer, TOPOLOGY_SIZE);
+            sha1_finish(&ctx, top_binfile_sha1);
+            if (extraverbose) {
+                printf("%sTopology data SHA-1 = ", sp5);
+                for (i=0; i<20; i++) printf("%02X", top_binfile_sha1[i]);
+                printf("%s", newline);
+            }
+            if (memcmp(top_binfile_sha1, top_verified_sha1, 20) != 0) {
+                color(red);
+                printf("ERROR: %s appears to be corrupt! (deleting it)%s", topbinfilename, newline);
+                color(normal);
+                deletestealthfile(topbinfilename, stealthdir, false);
+              return;
+            }
+            // overwrite topology buffer with downloaded bin file contents and set fixedtopology = true so it will try to get patched
+            memcpy(topology, topbinfilebuffer, TOPOLOGY_SIZE);
+            fixedtopology = true;
+          return;
+        }
+        else {
+            color(red);
+            printf("%sSet AutoFix Threshold to Level 1 or higher in order to fix the topology data%s", newline, newline);
+            color(normal);
+          return;
+        }
+    }
+    else {
+        // verify is disabled
+        color(yellow);
+        printf("Topology data won't be verified because you have disabled the option to verify%s", newline);
         color(normal);
       return;
     }
@@ -15446,7 +20119,7 @@ void checkdmi(unsigned char *dmi) {
       return;
     }
     // get the DMI timestamp
-    dmi_authored = getuint64(dmi+0x10);
+    unsigned long long dmi_authored = getuint64(dmi+0x10);
     if (verbose) {
         printf("%sTimestamp of Authoring: ", sp5);
         printwin32filetime(dmi_authored);
@@ -15472,7 +20145,7 @@ void checkdmi(unsigned char *dmi) {
         }
     }
     if (extraverbose) {
-        // show the catalog number, if that's what this is? (as long as it doesn't contain control characters)
+        // show the catalog number, if that's what this is called? (as long as it doesn't contain control characters)
         bool validdmicatalognumber = true;
         if (lookslikexbox1dmi(dmi)) {
             for (i=8;i<=15;i++) {
@@ -15492,7 +20165,8 @@ void checkdmi(unsigned char *dmi) {
                 }
             }
             if (validdmicatalognumber) printf("%sCatalog Number: %c%c-%c%c%c%c-%c%c-%c%c-%c%c%c%s",
-                                               sp5, dmi[64], dmi[65], dmi[66], dmi[67], dmi[68], dmi[69], dmi[70], dmi[71], dmi[72], dmi[73], dmi[74], dmi[75], dmi[76], newline);
+                                               sp5, dmi[64], dmi[65], dmi[66], dmi[67], dmi[68], dmi[69], dmi[70],
+                                               dmi[71], dmi[72], dmi[73], dmi[74], dmi[75], dmi[76], newline);
         }
     }
     
@@ -15511,7 +20185,6 @@ void checkdmi(unsigned char *dmi) {
     
     // get the DMI media id
     memcpy(dmi_mediaid, dmi+0x20, 16);
-    dmi_foundmediaid = true;
     if (verbose) {
         printf("%sDMI Media ID: ", sp5);
         printmediaid(dmi_mediaid);
@@ -15584,7 +20257,10 @@ void checkpfi(unsigned char *pfi) {
     unsigned long m;
     bool pfirecognized = false;
     pfi_crc32 = 0;
-    pfi_stealthfailed = false; pfi_stealthuncertain = false; pfi_foundsectorstotal = false; pfi_alreadydumped = false;
+    pfi_stealthfailed = false;
+    pfi_stealthuncertain = false;
+    pfi_foundsectorstotal = false;
+    pfi_alreadydumped = false;
     if (verbose && !minimal) printf("%sChecking PFI%s", newline, newline);
     if (getzeros(pfi, 0, 2047) == 2048) {
         pfi_stealthfailed = true;
@@ -15593,6 +20269,36 @@ void checkpfi(unsigned char *pfi) {
         color(normal);
       return;
     }
+    
+    // calculate PFI crc32
+    pfi_crc32 = crc32(0, pfi, 2048);
+    
+    if (layerbreak == -1) {
+        // we're probably checking just a pfi.bin so assume the layerbreak based on the existence
+        // of "XGD3" at the beginning of the friendly name (assuming this PFI crc is recognized)
+        for (m=0;m<num_pfientries;m++) {
+            if (pfi_crc32 == mostrecentpfientries[m].crc) {
+                if (strlen(mostrecentpfientries[m].description) >= 4 && memcmp(mostrecentpfientries[m].description, "XGD3", 4) == 0)
+                     layerbreak = 2133520;
+                else layerbreak = 1913760;
+                if (debug) printf("layerbreak (%ld) assumed based on PFI friendly name (%s)%s",
+                                  layerbreak, mostrecentpfientries[m].description, newline);
+                break;
+            }
+        }
+        // assume this is a new XGD3 wave if the PFI crc is not recognized (or use the Xbox 1 layerbreak if it matches xbox1pficrc)
+        if (layerbreak == -1) {
+            if (pfi_crc32 == xbox1pficrc) {
+                layerbreak = 1913776;
+                if (debug) printf("Xbox 1 layerbreak (%ld) assumed since PFI matches xbox1pficrc%s", layerbreak, newline);
+            }
+            else {
+                layerbreak = 2133520;
+                if (debug) printf("XGD3 layerbreak (%ld) assumed since the PFI CRC was not recognized%s", layerbreak, newline);
+            }
+        }
+    }
+    
     // get Starting PSN of Data Area
     unsigned char pfi_startpsnL0hex[4] = {pfi[7], pfi[6], pfi[5], 0x00};
     unsigned long pfi_startpsnL0 = getuint(pfi_startpsnL0hex);
@@ -15616,20 +20322,20 @@ void checkpfi(unsigned char *pfi) {
     unsigned long long pfi_offsetL0 = ((unsigned long long) pfi_startpsnL0 - 0x030000) * 2048;
     pfi_offsetL1 = ((unsigned long long) pfi_startpsnL1 - (unsigned long long) layerbreakpsn) * 2048 + ((unsigned long long) layerbreak * 2048);
     pfi_offsetL0end = (unsigned long long) (pfi_endpsnL0 - pfi_startpsnL0 + 1) * 2048 + pfi_offsetL0 - 1;
-    unsigned long long pfi_offsetend = (pfi_endpsnL1 - pfi_startpsnL1 + 1) * 2048 + pfi_offsetL1 - 1;
+    unsigned long long pfi_offsetend = (unsigned long long) (pfi_endpsnL1 - pfi_startpsnL1 + 1) * 2048 + pfi_offsetL1 - 1;
     pfi_sectorstotal = pfi_sectorsL0 + pfi_sectorsL1;
     pfi_foundsectorstotal = true;
 
     // print that shit
     if (extraverbose) printpfitable(pfi_startpsnL0, pfi_endpsnL0, pfi_startpsnL1, pfi_endpsnL1, pfi_sectorsL0, pfi_sectorsL1,
                                            pfi_offsetL0, pfi_offsetL0end, pfi_offsetL1, pfi_offsetend, pfi_sectorstotal);
-    
-    if (pfi_sectorstotal > total_sectors_available_for_video_data) {
-        // may or may not matter in LT (would depend on L0 data size) but causes a problem for the way abgx360 handles video crc and the splitvid check
+    // check that the L0 data area doesn't overlap stealth files or game data
+    if (pfi_sectorsL0 > (video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0))) {
         pfi_stealthuncertain = true;
         stealthuncertain = true;
         color(yellow);
-        printf("PFI Data Area is more than %lu sectors! This overlaps stealth files and/or game data in backups!%s", total_sectors_available_for_video_data, newline);
+        printf("PFI L0 Data Area is more than %"LL"u sectors! This overlaps stealth files and/or game data!%s",
+               video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0), newline);
         color(normal);
     }
     
@@ -15642,8 +20348,7 @@ void checkpfi(unsigned char *pfi) {
         color(normal);
     }
     
-    // calculate PFI crc32
-    pfi_crc32 = crc32(0, pfi, 2048);
+    // show PFI crc32
     if (verbose) printf("%sPFI CRC = %08lX%s", sp5, pfi_crc32, newline);
     if (debug) {
         // calculate PFI sha-1
@@ -15667,7 +20372,8 @@ void checkpfi(unsigned char *pfi) {
         color(yellow);
         if (pfi_crc32 == xbox1pficrc) printf("PFI matches known data (Xbox 1)%s", newline);
         else if (ss_foundtimestamp && ss_authored <= lastknownwave) printf("PFI does not match known data (almost certainly corrupt)%s", newline);
-        else printf("PFI does not match known data (probably corrupt but might be a\nbrand new wave if this is a new game and abgx360.dat hasn't been updated yet)%s", newline);
+        else printf("PFI does not match known data (probably corrupt but might be a brand new wave\n"
+                    "if this is a new game and abgx360.dat hasn't been updated yet)%s", newline);
         color(normal);
         if (!lookslikepfi(pfi)) {
             color(yellow);
@@ -15693,13 +20399,17 @@ bool lookslikepfi(unsigned char* pfi) {
 }
 
 void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkvideopadding) {
-    int i, b;
+    int i, j, b;
     unsigned long m;
+    unsigned long sectoroffset = 0;
     bool videorecognized = false;
     unsigned char spaces[128];
     memset(spaces, 0x20, 128);
-    video_crc32 = 0; videoL0_crc32 = 0; videoL1_crc32 = 0;
-    video_stealthfailed = false; video_stealthuncertain = false;
+    video_crc32 = 0;
+    videoL0_crc32 = 0;
+    videoL1_crc32 = 0;
+    video_stealthfailed = false;
+    video_stealthuncertain = false;
     // seek to sector 16 and look for a video partition
     if (fseeko(stream, 32768, SEEK_SET) != 0) {
         printseekerror(isofilename, "Checking Video");
@@ -15733,7 +20443,6 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
     if (extraverbose) {
         // print the volume identifier (omitting control codes and stopping at trailing space(s) or a null byte)
         printf("%sVolume ID: %s", sp5, quotation);
-        //memset(spaces, 0x20, 32);
         for (b=40; b<72; b++) {
             if (memcmp(buffer+b, spaces, 72-b) == 0) break;
             if (buffer[b] == 0) break;
@@ -15769,93 +20478,449 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
         */
     }
     if (checkvideopadding && !justavideoiso) {
-        if (pfi_foundsectorstotal) {
-            if (pfi_sectorstotal == total_sectors_available_for_video_data) {
-                if (verbose) printf("%s", sp5);
-                printf("Cannot check padding because there is none%s", newline);
-                goto skipvideopadding;
-            }
-            else if (pfi_sectorstotal > total_sectors_available_for_video_data) {
-                color(yellow);
-                printf("Cannot check padding because the PFI Data Area is too large%s", newline);
-                color(normal);
-                goto skipvideopadding;
-            }
-            // total_sectors_available_for_video_data - pfi_sectorstotal sectors should be blank starting at offset pfi_sectorstotal*2048
-            if (fseeko(stream, (unsigned long long) pfi_sectorstotal*2048, SEEK_SET) != 0) {
-                printseekerror(isofilename, "Checking Video padding");
-                goto skipvideopadding;
-            }
-            memset(bigbuffer, 0, BIGBUF_SIZE);
-            sizeoverbuffer = ((unsigned long) total_sectors_available_for_video_data*2048 - pfi_sectorstotal*2048) / BIGBUF_SIZE;
-            bufferremainder = ((unsigned long) total_sectors_available_for_video_data*2048 - pfi_sectorstotal*2048) % BIGBUF_SIZE;
-            initcheckread();
-            bool videoL0zeropadding = true;
-            long dataloop = 0;
+        long dataloop = 0;
+        bool openforwriting = false;
+        unsigned long long padding_offsetL1start = 0;
+        if (!pfi_foundsectorstotal) {
+            color(yellow);
+            printf("Cannot check Video padding because PFI is missing%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        // check L0 video padding
+        if (pfi_sectorsL0 == video/2048 - (number_of_stealth_sectors+(xgd3 ? 16 : 0))) {
+            // there is no L0 video padding
             if (verbose) printf("%s", sp5);
-            fprintf(stderr, "Checking Video padding... ");
-            charsprinted = 0;
-            for (m=0;m<sizeoverbuffer;m++) {
-                if (m && m % (sizeoverbuffer / 100) == 0 && m / (sizeoverbuffer / 100) <= 100) {
-                    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-                    charsprinted = fprintf(stderr, "%2lu%% ", m / (sizeoverbuffer / 100));
+            printf("Skipped checking L0 Video padding because there is none%s", newline);
+            goto skipL0videopadding;
+        }
+        if (pfi_sectorsL0 > video/2048 - (number_of_stealth_sectors+(xgd3 ? 16 : 0))) {
+            // there isn't even enough room for L0 video
+            color(red);
+            printf("Cannot check L0 Video padding because the PFI L0 Data Area is too large!%s", newline);
+            color(normal);
+            goto skipL0videopadding;
+        }
+        // (video/2048 - (number_of_stealth_sectors+(xgd3 ? 16 : 0)) - pfi_sectorsL0) sectors should be blank starting at offset pfi_sectorsL0*2048
+        if (fseeko(stream, (unsigned long long) pfi_sectorsL0*2048, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Checking L0 Video padding");
+            goto skipL0videopadding;
+        }
+        memset(bigbuffer, 0, BIGBUF_SIZE);
+        sizeoverbuffer =  (unsigned long) ( (video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - pfi_sectorsL0*2048) / BIGBUF_SIZE );
+        bufferremainder = (unsigned long) ( (video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - pfi_sectorsL0*2048) % BIGBUF_SIZE );
+        initcheckread();
+        bool videoL0zeropadding = true;
+        dataloop = 0;
+        if (verbose) printf("%s", sp5);
+        fprintf(stderr, "Checking L0 Video padding... ");
+        charsprinted = 0;
+        for (m=0;m<sizeoverbuffer;m++) {
+            if (m && sizeoverbuffer >= 100 && m % (sizeoverbuffer / 100) == 0 && roundf(((float) m / ((float) sizeoverbuffer / 100))) <= 100.0) {
+                resetstderr();
+                charsprinted = fprintf(stderr, "%2lu%% ", (unsigned long) roundf(((float) m / ((float) sizeoverbuffer / 100))));
+            }
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m,
+                                        (unsigned long long) pfi_sectorsL0*2048,
+                                        "L0 Video padding", "Checking zero padding") != 0) {
+                goto skipL0videopadding;
+            }
+            if (getzeros(bigbuffer, 0, BIGBUF_SIZE - 1) != BIGBUF_SIZE) {
+                videoL0zeropadding = false;
+                dataloop = m;
+                if (debug) {
+                    printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
+                            (unsigned long long) m*BIGBUF_SIZE + pfi_sectorsL0*2048,
+                            (unsigned long long) ftello(stream), dataloop, newline);
                 }
-                if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, pfi_sectorstotal*2048, "Video", "checking zero padding") != 0) goto skipvideopadding;
-                if (getzeros(bigbuffer, 0, BIGBUF_SIZE - 1) != BIGBUF_SIZE) {
-                    videoL0zeropadding = false;
-                    dataloop = m;
-                    if (debug) printf("data found at 0x%lX, current offset: 0x%"LL"X, dataloop = %ld%s",
-                                       m*BIGBUF_SIZE + pfi_sectorstotal*2048, (unsigned long long) ftello(stream), dataloop, newline);
-                    goto skipL0remainder;
+                goto skipL0remainder;
+            }
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                        video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder,
+                                        "L0 Video padding", "Checking zero padding") != 0) {
+                goto skipL0videopadding;
+            }
+            if (getzeros(bigbuffer, 0, bufferremainder - 1) != bufferremainder) {
+                videoL0zeropadding = false;
+                dataloop = -1;  // identify that data was found in the bufferremainder
+                if (debug) {
+                    printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
+                            video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder,
+                            (unsigned long long) ftello(stream), dataloop, newline);
+                }
+                goto skipL0remainder;
+            }
+        }
+        clearstderr();
+        skipL0remainder:
+        donecheckread("L0 Video padding");
+        if (videoL0zeropadding) {
+            color(green);
+            printf("L0 Video is zero padded%s", newline);
+            color(normal);
+            goto skipL0videopadding;
+        }
+        if (!xgd3 && !padL0) {
+            fprintf(stderr, "\n");
+            color(yellow);
+            printf("-------------------------------------------------------------------------------%s"
+                   "L0 Video padding contains data but this is normal for XGD2 (The old way of\n"
+                   "putting L1 video on L0). Add command line option --pL0 if you want to blank it\n"
+                   "out (the data hasn't actually been checked that it matches L1 video... it could\n"
+                   "be anything). Note that XGD2 ISOs without L1 video on L0 will appear to have\n"
+                   "bad video data when checked with older versions of abgx360. This version of\n"
+                   "abgx360 doesn't care about L1 video on L0... it will pad L0 video with zeroes\n"
+                   "whenever video is autofixed or manually patched. You can rest assured that only\n"
+                   "old and unsafe custom firmwares will read L1 video from L0; newer ones will\n"
+                   "read it properly from L1. If you're tired of seeing this message then just\n"
+                   "disable \"Check/Fix Video padding\", as it still makes no difference in terms\n"
+                   "of stealth... this option only exists as a way to make sure ISOs are \"clean\",\n"
+                   "with no extra data in areas that aren't CRC checked.%s"
+                   "-------------------------------------------------------------------------------%s", newline, newline, newline);
+            color(normal);
+            goto skipL0videopadding;
+        }
+        if (!writefile) {
+            color(yellow);
+            printf("L0 Video padding contains data but it won't be zeroed because writing is disabled%s", newline);
+            color(normal);
+            goto skipL0videopadding;
+        }
+        printf("L0 Video padding contains data, overwriting it with zeroes...%s", newline);
+        if (extraverbose) {
+            if (dataloop == -1) memset(bigbuffer+bufferremainder, 0, BIGBUF_SIZE - bufferremainder);
+            sectoroffset = 0;
+            for (i=0;i<(BIGBUF_SIZE/2048);i++) {
+                if (debug) printf("%d: %lu zeros%s", i,
+                                   getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047), newline);
+                if (getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047) != 2048) {
+                    sectoroffset = (unsigned long) i*2048;
+                  break;
+                }
+            }
+            printf("Showing first sector of padding data (at 0x%"LL"X) in hex and ascii:%s",
+                    dataloop == -1 ? (video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder + sectoroffset) :
+                                     ((unsigned long long) dataloop*BIGBUF_SIZE + pfi_sectorsL0*2048 + sectoroffset), newline);
+            hexdump(bigbuffer+sectoroffset, 0, 2048);
+            printf("%s", newline);
+        }
+        if (!openforwriting) {
+            stream = freopen(isofilename, "rb+", stream);
+            if (stream == NULL) {
+                color(red);
+                printf("ERROR: Failed to reopen %s for writing! (%s) Zero padding failed!%s",
+                        isofilename, strerror(errno), newline);
+                color(normal);
+                stream = fopen(isofilename, "rb");
+                if (stream == NULL) {
+                    color(red);
+                    printf("ERROR: Failed to reopen %s for reading! (%s) Game over man... Game over!%s",
+                            isofilename, strerror(errno), newline);
+                    color(normal);
+                  exit(1);
+                }
+              goto skipL0videopadding;
+            }
+            openforwriting = true;
+        }
+        if (dataloop == -1) {
+            if (fseeko(stream, video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder, SEEK_SET) != 0) {
+                printseekerror(isofilename, "Zero padding");
+              goto skipL0videopadding;
+            }
+        }
+        else if (fseeko(stream, (unsigned long long) dataloop*BIGBUF_SIZE + pfi_sectorsL0*2048, SEEK_SET) != 0 ) {
+            printseekerror(isofilename, "Zero padding");
+          goto skipL0videopadding;
+        }
+        if (debug) printf("Current offset: 0x%"LL"X%s", (unsigned long long) ftello(stream), newline);
+        initcheckwrite();
+        memset(bigbuffer, 0, BIGBUF_SIZE);
+        if (dataloop == -1) {
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                         video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder,
+                                         "L0 Video padding", "Zero padding") != 0) {
+                goto skipL0videopadding;
+            }
+        }
+        else {
+            for (m=0;m<sizeoverbuffer - dataloop;m++) {
+                if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m,
+                                             (unsigned long long) dataloop*BIGBUF_SIZE + pfi_sectorsL0*2048,
+                                             "L0 Video padding", "Zero padding") != 0) {
+                    goto skipL0videopadding;
                 }
             }
             if (bufferremainder) {
-                if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, (unsigned long) total_sectors_available_for_video_data*2048 - bufferremainder,
-                    "L0 Video padding", "checking zero padding") != 0) goto skipvideopadding;
-                if (getzeros(bigbuffer, 0, bufferremainder - 1) != bufferremainder) {
-                    videoL0zeropadding = false;
-                    dataloop = -1;  // identify that data was found in the bufferremainder
-                    if (debug) printf("data found at 0x%lX, current offset: 0x%"LL"X, dataloop = %ld%s",
-                                       (unsigned long) total_sectors_available_for_video_data*2048 - bufferremainder, (unsigned long long) ftello(stream), dataloop, newline);
-                    goto skipL0remainder;
+                if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                             video - (number_of_stealth_sectors+(xgd3 ? 16 : 0))*2048 - bufferremainder,
+                                             "L0 Video padding", "Zero padding") != 0) {
+                    goto skipL0videopadding;
                 }
             }
-            for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-            for (i=0;i<charsprinted;i++) fprintf(stderr, " ");
-            for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-            skipL0remainder:
-            donecheckread("L0 Video padding");
-            
-            if (videoL0zeropadding) {
-                color(green);
-                printf("Video is zero padded%s", newline);
-                color(normal);
+        }
+        donecheckwrite("L0 Video Padding");
+        color(green);
+        if (verbose) printf("%s", sp5);
+        printf("L0 Video padding zeroed successfully%s", newline);
+        color(normal);
+        
+        skipL0videopadding:
+        // check L1 video padding
+        padding_offsetL1start = assume_start_offset_of_L1_padding();
+        if (padding_offsetL1start == 0) {
+            color(yellow);
+            printf("Cannot check L1 Video padding because assume_start_offset_of_L1_padding() needs to be updated%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        if (pfi_offsetL1 == padding_offsetL1start) {
+            // there is no L1 video padding
+            if (verbose) printf("%s", sp5);
+            printf("Skipped checking L1 Video padding because there is none%s", newline);
+            goto skipvideopadding;
+        }
+        if (pfi_offsetL1 < padding_offsetL1start) {
+            // L1 video overlaps game data
+            if (verbose) printf("%s", sp5);
+            printf("Skipped checking L1 Video padding because there is none (PFI L1 Data Area overlaps the game partition)%s", newline);
+            goto skipvideopadding;
+        }
+        if (pfi_offsetL1 % 2048 || padding_offsetL1start % 2048) {
+            // this shouldn't happen
+            color(yellow);
+            printf("Cannot check L1 Video padding because there is something wrong with the offsets for L1 padding and/or video data%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        // filesize should be at least pfi_offsetL1
+        if ((unsigned long long) fpfilesize < pfi_offsetL1) {
+            color(yellow);
+            printf("Cannot check L1 Video padding because the ISO size is too small to contain it%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        // (pfi_offsetL1 - padding_offsetL1start) bytes should be blank starting at offset padding_offsetL1start
+        if (fseeko(stream, padding_offsetL1start, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Checking L1 Video padding");
+            goto skipvideopadding;
+        }
+        memset(bigbuffer, 0, BIGBUF_SIZE);
+        sizeoverbuffer =  (unsigned long) ( (pfi_offsetL1 - padding_offsetL1start) / BIGBUF_SIZE );
+        bufferremainder = (unsigned long) ( (pfi_offsetL1 - padding_offsetL1start) % BIGBUF_SIZE );
+        initcheckread();
+        bool videoL1zeropadding = true;
+        dataloop = 0;
+        if (verbose) printf("%s", sp5);
+        fprintf(stderr, "Checking L1 Video padding... ");
+        charsprinted = 0;
+        for (m=0;m<sizeoverbuffer;m++) {
+            if (m && sizeoverbuffer >= 100 && m % (sizeoverbuffer / 100) == 0 && roundf(((float) m / ((float) sizeoverbuffer / 100))) <= 100.0) {
+                resetstderr();
+                charsprinted = fprintf(stderr, "%2lu%% ", (unsigned long) roundf(((float) m / ((float) sizeoverbuffer / 100))));
             }
-            else {
-                if (!writefile) {
-                    color(yellow);
-                    printf("Video padding contains data but it won't be zeroed because writing is disabled%s", newline);
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m,
+                                        padding_offsetL1start,
+                                        "L1 Video padding", "Checking zero padding") != 0) {
+                goto skipvideopadding;
+            }
+            if (getzeros(bigbuffer, 0, BIGBUF_SIZE - 1) != BIGBUF_SIZE) {
+                videoL1zeropadding = false;
+                dataloop = m;
+                if (debug) {
+                    printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
+                            (unsigned long long) m*BIGBUF_SIZE + padding_offsetL1start,
+                            (unsigned long long) ftello(stream), dataloop, newline);
+                }
+                goto skipL1remainder;
+            }
+        }
+        if (bufferremainder) {
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                        pfi_offsetL1 - bufferremainder,
+                                        "L1 Video padding", "Checking zero padding") != 0) {
+                goto skipvideopadding;
+            }
+            if (getzeros(bigbuffer, 0, bufferremainder - 1) != bufferremainder) {
+                videoL1zeropadding = false;
+                dataloop = -1;  // identify that data was found in the bufferremainder
+                if (debug) {
+                    printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
+                            pfi_offsetL1 - bufferremainder,
+                            (unsigned long long) ftello(stream), dataloop, newline);
+                }
+                goto skipL1remainder;
+            }
+        }
+        clearstderr();
+        skipL1remainder:
+        donecheckread("L1 Video padding");
+        if (videoL1zeropadding) {
+            color(green);
+            printf("L1 Video is zero padded%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        if (!writefile) {
+            color(yellow);
+            printf("L1 Video padding contains data but it won't be zeroed because writing is disabled%s", newline);
+            color(normal);
+            goto skipvideopadding;
+        }
+        printf("L1 Video padding contains data, overwriting it with zeroes...%s", newline);
+        if (extraverbose) {
+            if (dataloop == -1) memset(bigbuffer+bufferremainder, 0, BIGBUF_SIZE - bufferremainder);
+            sectoroffset = 0;
+            for (i=0;i<(BIGBUF_SIZE/2048);i++) {
+                if (debug) printf("%d: %lu zeros%s", i,
+                                   getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047), newline);
+                if (getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047) != 2048) {
+                    sectoroffset = (unsigned long) i*2048;
+                  break;
+                }
+            }
+            printf("Showing first sector of padding data (at 0x%"LL"X) in hex and ascii:%s",
+                    dataloop == -1 ? (pfi_offsetL1 - bufferremainder + sectoroffset) :
+                                     ((unsigned long long) dataloop*BIGBUF_SIZE + padding_offsetL1start + sectoroffset), newline);
+            hexdump(bigbuffer+sectoroffset, 0, 2048);
+            printf("%s", newline);
+        }
+        if (!openforwriting) {
+            stream = freopen(isofilename, "rb+", stream);
+            if (stream == NULL) {
+                color(red);
+                printf("ERROR: Failed to reopen %s for writing! (%s) Zero padding failed!%s",
+                        isofilename, strerror(errno), newline);
+                color(normal);
+                stream = fopen(isofilename, "rb");
+                if (stream == NULL) {
+                    color(red);
+                    printf("ERROR: Failed to reopen %s for reading! (%s) Game over man... Game over!%s",
+                            isofilename, strerror(errno), newline);
                     color(normal);
+                  exit(1);
+                }
+              goto skipvideopadding;
+            }
+            openforwriting = true;
+        }
+        if (dataloop == -1) {
+            if (fseeko(stream, pfi_offsetL1 - bufferremainder, SEEK_SET) != 0) {
+                printseekerror(isofilename, "Zero padding");
+              goto skipvideopadding;
+            }
+        }
+        else if (fseeko(stream, (unsigned long long) dataloop*BIGBUF_SIZE + padding_offsetL1start, SEEK_SET) != 0 ) {
+            printseekerror(isofilename, "Zero padding");
+          goto skipvideopadding;
+        }
+        if (debug) printf("Current offset: 0x%"LL"X%s", (unsigned long long) ftello(stream), newline);
+        initcheckwrite();
+        memset(bigbuffer, 0, BIGBUF_SIZE);
+        if (dataloop == -1) {
+            if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                         pfi_offsetL1 - bufferremainder,
+                                         "L1 Video padding", "Zero padding") != 0) {
+                goto skipvideopadding;
+            }
+        }
+        else {
+            for (m=0;m<sizeoverbuffer - dataloop;m++) {
+                if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m,
+                                             (unsigned long long) dataloop*BIGBUF_SIZE + padding_offsetL1start,
+                                             "L1 Video padding", "Zero padding") != 0) {
                     goto skipvideopadding;
                 }
-                printf("Video padding contains data, overwriting it with zeroes...%s", newline);
-                if (extraverbose) {
-                    if (dataloop == -1) memset(bigbuffer+bufferremainder, 0, BIGBUF_SIZE - bufferremainder);
-                    unsigned long sectoroffset = 0;
-                    for (i=0;i<(BIGBUF_SIZE/2048);i++) {
-                        if (debug) printf("%d: %lu zeros%s", i,
-                                           getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047), newline);
-                        if (getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047) != 2048) {
-                            sectoroffset = (unsigned long) i*2048;
-                          break;
-                        }
-                    }
-                    printf("Showing first sector of padding data (0x%lX) in hex and ascii:%s",
-                            dataloop == -1 ? ((unsigned long) total_sectors_available_for_video_data*2048 - bufferremainder + sectoroffset) :
-                                             (dataloop*BIGBUF_SIZE + pfi_sectorstotal*2048 + sectoroffset), newline);
-                    hexdump(bigbuffer+sectoroffset, 0, 2048);
-                    printf("%s", newline);
+            }
+            if (bufferremainder) {
+                if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                             pfi_offsetL1 - bufferremainder,
+                                             "L1 Video padding", "Zero padding") != 0) {
+                    goto skipvideopadding;
                 }
+            }
+        }
+        donecheckwrite("L1 Video Padding");
+        color(green);
+        if (verbose) printf("%s", sp5);
+        printf("L1 Video padding zeroed successfully%s", newline);
+        color(normal);
+        
+        skipvideopadding:
+        if (xgd3) {
+            // check xgd3 stealth padding based on xgd3_stealth_padding_bitfield
+            if (debug) printf("xgd3_stealth_padding_bitfield = 0x%04X%s", xgd3_stealth_padding_bitfield, newline);
+            if (xgd3_stealth_padding_bitfield == 0) {
+                // there is no xgd3 stealth padding
+                if (verbose) printf("%s", sp5);
+                printf("Skipped checking XGD3 Stealth padding because there is none%s", newline);
+                goto skippadding;
+            }
+            if (BIGBUF_SIZE < 32768) {
+                color(yellow);
+                printf("Cannot check XGD3 Stealth padding because bigbuffer isn't as big as i thought it would be%s", newline);
+                color(normal);
+                goto skippadding;
+            }
+            if (fseeko(stream, video - 32768, SEEK_SET) != 0) {
+                printseekerror(isofilename, "Checking XGD3 Stealth padding");
+                goto skippadding;
+            }
+            memset(bigbuffer, 0, BIGBUF_SIZE);
+            initcheckread();
+            bool xgd3stealthzeropadding = true;
+            unsigned short bit;
+            dataloop = 0;
+            if (verbose) printf("%s", sp5);
+            fprintf(stderr, "Checking XGD3 Stealth padding... ");
+            if (debug) fprintf(stderr, "\n");
+            // make sure bigbuffer isn't written to between now and the time the padding sectors are blanked out if they contain data
+            if (checkreadandprinterrors(bigbuffer, 1, 32768, stream, 0,
+                                        video - 32768,
+                                        "XGD3 Stealth padding", "Checking zero padding") != 0) {
+                goto skippadding;
+            }
+            for (i=0;i<16;i++) {
+                // check the sectors for blank data if the corresponding bit in xgd3_stealth_padding_bitfield is set
+                j = abs(i - 15); // example i,j -- 0,15 1,14 2,13 ... 13,2 14,1 15,0
+                bit = (unsigned short) pow(2.0, (double) j);
+                if (xgd3_stealth_padding_bitfield & bit) {
+                    if (debug) printf("checking for data in XGD3 Stealth padding: i=%2d, j=%2d, bit=0x%04X%s", i, j, bit, newline);
+                    if (getzeros(bigbuffer, (unsigned long) i*2048, (unsigned long) i*2048+2047) != 2048) {
+                        xgd3stealthzeropadding = false;
+                        dataloop = (long) i;
+                        if (debug) {
+                            printf("data found at 0x%"LL"X, current offset: 0x%"LL"X, dataloop = %ld%s",
+                                    video - 32768 + i*2048,
+                                    (unsigned long long) ftello(stream), dataloop, newline);
+                        }
+                        break;
+                    }
+                }
+            }
+            donecheckread("XGD3 Stealth padding");
+            if (xgd3stealthzeropadding) {
+                color(green);
+                printf("XGD3 Stealth is zero padded%s", newline);
+                color(normal);
+                goto skippadding;
+            }
+            if (!writefile) {
+                color(yellow);
+                printf("XGD3 Stealth padding contains data but it won't be zeroed because writing is disabled%s", newline);
+                color(normal);
+                goto skippadding;
+            }
+            printf("XGD3 Stealth padding contains data, overwriting it with zeroes...%s", newline);
+            if (extraverbose) {
+                printf("Showing first sector of padding data (at 0x%"LL"X) in hex and ascii:%s",
+                        video - 32768 + dataloop*2048, newline);
+                hexdump(bigbuffer+(dataloop*2048), 0, 2048);
+                printf("%s", newline);
+            }
+            if (!openforwriting) {
                 stream = freopen(isofilename, "rb+", stream);
                 if (stream == NULL) {
                     color(red);
@@ -15870,75 +20935,73 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
                         color(normal);
                       exit(1);
                     }
-                  goto skipvideopadding;
+                  goto skippadding;
                 }
-                if (dataloop == -1) {
-                    if (fseeko(stream, (unsigned long long) total_sectors_available_for_video_data*2048 - (unsigned long long) bufferremainder, SEEK_SET) != 0) {
-                        printseekerror(isofilename, "Zero padding");
-                      goto skipvideopadding;
-                    }
-                }
-                else if ( fseeko(stream, (unsigned long long) pfi_sectorstotal*2048 +
-                                         (unsigned long long) dataloop*BIGBUF_SIZE, SEEK_SET) != 0 ) {
-                    printseekerror(isofilename, "Zero padding");
-                  goto skipvideopadding;
-                }
-                if (debug) printf("Current offset: 0x%"LL"X%s", (unsigned long long) ftello(stream), newline);
-                initcheckwrite();
-                memset(bigbuffer, 0, BIGBUF_SIZE);
-                if (dataloop == -1) {
-                    if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, (unsigned long) total_sectors_available_for_video_data*2048 - bufferremainder,
-                        "L0 Video padding", "zero padding") != 0) goto skipvideopadding;
-                }
-                else {
-                    for (m=0;m<sizeoverbuffer - dataloop;m++) {
-                        if (checkwriteandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, (unsigned long long) pfi_sectorstotal*2048 + (unsigned long long) dataloop*BIGBUF_SIZE,
-                            "L0 Video padding", "zero padding") != 0) goto skipvideopadding;
-                    }
-                    if (bufferremainder) {
-                        if (checkwriteandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, (unsigned long) total_sectors_available_for_video_data*2048 - bufferremainder,
-                            "L0 Video padding", "zero padding") != 0) goto skipvideopadding;
-                    }
-                }
-                donecheckwrite("L0 Video Padding");
-                color(green);
-                if (verbose) printf("%s", sp5);
-                printf("Video padding zeroed successfully%s", newline);
-                color(normal);
+                openforwriting = true;
             }
-        }
-        else {
-            color(yellow);
-            printf("Cannot check padding because PFI is missing%s", newline);
+            if (fseeko(stream, video - 32768, SEEK_SET) != 0 ) {
+                printseekerror(isofilename, "Zero padding");
+              goto skippadding;
+            }
+            if (debug) printf("Current offset: 0x%"LL"X%s", (unsigned long long) ftello(stream), newline);
+            // make sure bigbuffer isn't written to between the time the 16 sectors are read and now
+            for (i=0;i<16;i++) {
+                // blank out all of the sectors for which the corresponding bit in xgd3_stealth_padding_bitfield is set
+                j = abs(i - 15); // example i,j -- 0,15 1,14 2,13 ... 13,2 14,1 15,0
+                bit = (unsigned short) pow(2.0, (double) j);
+                if (xgd3_stealth_padding_bitfield & bit) {
+                    memset(bigbuffer+(i*2048), 0, 2048);
+                }
+            }
+            // write the 16 sectors we read earlier (with all padding sectors blanked out) back to the file
+            initcheckwrite();
+            if (checkwriteandprinterrors(bigbuffer, 1, 32768, stream, 0,
+                                         video - 32768,
+                                         "XGD3 Stealth padding", "Zero padding") != 0) {
+                goto skippadding;
+            }
+            donecheckwrite("XGD3 Stealth Padding");
+            color(green);
+            if (verbose) printf("%s", sp5);
+            printf("XGD3 Stealth padding zeroed successfully%s", newline);
             color(normal);
         }
     }
-    skipvideopadding:
     
+    skippadding:
     // check video crc32
-    if (fseeko(stream, 0, SEEK_SET) != 0) {
-        printseekerror(isofilename, "Checking Video CRC");
-        video_stealthuncertain = true;
-      return;
-    }
-    initcheckread();
     if (pfi_foundsectorstotal) {
-        if (pfi_sectorstotal > total_sectors_available_for_video_data) {
-            video_crc32 = 0;
+        // check that the L0 data area doesn't overlap stealth files or game data
+        if (pfi_sectorsL0 > (video/2048 - number_of_stealth_sectors - (xgd3 ? 16 : 0))) {
             stealthuncertain = true;
             video_stealthuncertain = true;
             color(yellow);
-            printf("PFI Data Area is too large! (%lu sectors) Video CRC check was aborted%s", pfi_sectorstotal, newline);
+            printf("PFI L0 Data Area is too large! (%lu sectors) Video CRC check was aborted%s", pfi_sectorsL0, newline);
             color(normal);
           goto endofvideocrc;
         }
+        // iso size should be at least [pfi_offsetL1 + pfi_sectorsL1 * 2048] for a normal iso and [pfi_sectorstotal * 2048] for justavideoiso
+        if ((unsigned long long) fpfilesize < (justavideoiso ? (unsigned long long) pfi_sectorstotal * 2048 : pfi_offsetL1 + pfi_sectorsL1 * 2048)) {
+            video_stealthfailed = true;
+            color(red);
+            printf("ISO size is too small to contain the L1 Video! Video CRC check was aborted%s", newline);
+            color(normal);
+          goto endofvideocrc;
+        }
+        // seek to L0 Video
+        if (fseeko(stream, 0, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Checking Video CRC");
+            video_stealthuncertain = true;
+          return;
+        }
+        initcheckread();
         unsigned long totalsizeoverbuffer = pfi_sectorstotal * 2048 / BIGBUF_SIZE;
         sizeoverbuffer = pfi_sectorsL0 * 2048 / BIGBUF_SIZE;
         unsigned long firstsizeoverbuffer = sizeoverbuffer;
         bufferremainder = pfi_sectorsL0 * 2048 % BIGBUF_SIZE;
         for (m=0; m<sizeoverbuffer; m++) {
             if (totalsizeoverbuffer >= 100 && m && (m % (totalsizeoverbuffer / 100) == 0) && (m / (totalsizeoverbuffer / 100) <= 100)) {
-                for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
+                resetstderr();
                 charsprinted = fprintf(stderr, "Checking Video CRC... %2lu%% ", m / (totalsizeoverbuffer / 100));
             }
             if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, 0, "Video", "CRC check") != 0) {
@@ -15948,8 +21011,9 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
             video_crc32 = crc32(video_crc32, bigbuffer, BIGBUF_SIZE);
         }
         if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, pfi_sectorsL0 * 2048 - bufferremainder, "Video", "CRC check") != 0) {
-                video_crc32 = 0;
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, pfi_sectorsL0 * 2048 - bufferremainder,
+                                        "Video", "CRC check") != 0) {
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
                 goto endofvideocrc;
             }
             video_crc32 = crc32(video_crc32, bigbuffer, bufferremainder);
@@ -15957,63 +21021,87 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
         videoL0_crc32 = video_crc32;
         sizeoverbuffer = pfi_sectorsL1 * 2048 / BIGBUF_SIZE;
         bufferremainder = pfi_sectorsL1 * 2048 % BIGBUF_SIZE;
+        if (!justavideoiso) {
+            // seek to L1 Video
+            if (fseeko(stream, pfi_offsetL1, SEEK_SET) != 0) {
+                printseekerror(isofilename, "Checking Video CRC");
+                video_stealthuncertain = true;
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
+              return;
+            }
+        }
         for (m=0; m<sizeoverbuffer; m++) {
-            if (totalsizeoverbuffer >= 100 && m && ((m + firstsizeoverbuffer) % (totalsizeoverbuffer / 100) == 0) && ((m + firstsizeoverbuffer) / (totalsizeoverbuffer / 100) <= 100)) {
-                for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
+            if (totalsizeoverbuffer >= 100 && m && ((m + firstsizeoverbuffer) % (totalsizeoverbuffer / 100) == 0) &&
+                ((m + firstsizeoverbuffer) / (totalsizeoverbuffer / 100) <= 100)) {
+                resetstderr();
                 charsprinted = fprintf(stderr, "Checking Video CRC... %2lu%% ", (m + firstsizeoverbuffer) / (totalsizeoverbuffer / 100));
             }
-            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, pfi_sectorsL0 * 2048, "Video", "CRC check") != 0) {
-                video_crc32 = 0;
+            if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m,
+                                        (justavideoiso ? (unsigned long long) pfi_sectorsL0 * 2048 : pfi_offsetL1),
+                                        "Video", "CRC check") != 0) {
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
+                videoL1_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
                 goto endofvideocrc;
             }
             video_crc32 = crc32(video_crc32, bigbuffer, BIGBUF_SIZE);
             videoL1_crc32 = crc32(videoL1_crc32, bigbuffer, BIGBUF_SIZE);
         }
         if (bufferremainder) {
-            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, pfi_sectorstotal * 2048 - bufferremainder, "Video", "CRC check") != 0) {
-                video_crc32 = 0;
+            if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0,
+                                        (justavideoiso ? (unsigned long long) pfi_sectorstotal * 2048 - bufferremainder :
+                                         pfi_offsetL1 + pfi_sectorsL1 * 2048 - bufferremainder),
+                                        "Video", "CRC check") != 0) {
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
+                videoL1_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
                 goto endofvideocrc;
             }
             video_crc32 = crc32(video_crc32, bigbuffer, bufferremainder);
             videoL1_crc32 = crc32(videoL1_crc32, bigbuffer, bufferremainder);
         }
+        clearstderr();
+        donecheckread("Video");
     }
-    else {
-        if (videosize > total_sectors_available_for_video_data) {
-            video_crc32 = 0;
-            stealthuncertain = true;
+    else if (justavideoiso) {
+        // seek to L0 Video
+        if (fseeko(stream, 0, SEEK_SET) != 0) {
+            printseekerror(isofilename, "Checking Video CRC");
             video_stealthuncertain = true;
-            color(yellow);
-            printf("Video volume space size is too large! (%lu sectors) CRC check was aborted%s", videosize, newline);
-            color(normal);
-          goto endofvideocrc;
+          return;
         }
+        initcheckread();
         sizeoverbuffer = videosize * 2048 / BIGBUF_SIZE;
         bufferremainder = videosize * 2048 % BIGBUF_SIZE;
         for (m=0; m<sizeoverbuffer; m++) {
             if (sizeoverbuffer >= 100 && m && (m % (sizeoverbuffer / 100) == 0) && (m / (sizeoverbuffer / 100) <= 100)) {
-                for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
+                resetstderr();
                 charsprinted = fprintf(stderr, "Checking Video CRC... %2lu%% ", m / (sizeoverbuffer / 100));
             }
             if (checkreadandprinterrors(bigbuffer, 1, BIGBUF_SIZE, stream, m, 0, "Video", "CRC check") != 0) {
-                video_crc32 = 0;
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
                 goto endofvideocrc;
             }
             video_crc32 = crc32(video_crc32, bigbuffer, BIGBUF_SIZE);
         }
         if (bufferremainder) {
             if (checkreadandprinterrors(bigbuffer, 1, bufferremainder, stream, 0, videosize * 2048 - bufferremainder, "Video", "CRC check") != 0) {
-                video_crc32 = 0;
+                video_crc32 = 0;  // reset to 0 so we don't try to autofix or verify a bad crc
                 goto endofvideocrc;
             }
             video_crc32 = crc32(video_crc32, bigbuffer, bufferremainder);
         }
+        clearstderr();
+        donecheckread("Video");
     }
-    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-    for (i=0;i<charsprinted;i++) fprintf(stderr, " ");
-    for (i=0;i<charsprinted;i++) fprintf(stderr, "\b");
-    donecheckread("Video");
-
+    else {
+        // not justavideoiso and no pfi to describe the size of L0 and L1 data areas
+        video_stealthuncertain = true;
+        color(yellow);
+        printf("Unable to check the Video CRC because there is no PFI to describe the L0 and L1\n"
+               "Video data areas. CRC check was aborted.%s", newline);
+        color(normal);
+      goto endofvideocrc;
+    }
+    
     if (verbose) {
         printf("%sVideo CRC = %08lX", sp5, video_crc32);
         if (pfi_foundsectorstotal) {
@@ -16022,15 +21110,9 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
         else if (justavideoiso) {
             printf("%s%sCRC might not be correct - PFI is needed to know the full Data Area size%s", newline, sp5, newline);
         }
-        else {
-            color(yellow);
-            printf(" (V0 %s V1 skipped due to missing PFI)%s", ampersand, newline);
-            color(normal);
-        }
     }
     
     endofvideocrc:
-    
     for (m=0;m<num_videoentries;m++) {
         if (video_crc32 == mostrecentvideoentries[m].crc) {
             printf("Video partition matches known data (%s)%s", mostrecentvideoentries[m].description, newline);
@@ -16039,16 +21121,28 @@ void checkvideo(char *isofilename, FILE *stream, bool justavideoiso, bool checkv
         }
     }
     if (!videorecognized) {
-        video_stealthuncertain = true;
-        if (video_crc32 == 0) return;
-        color(yellow);
-        if (video_crc32 == xbox1videocrc) printf("Video partition matches known data (Xbox 1)%s", newline);
-        else if (pfi_foundsectorstotal) {
-            if (ss_foundtimestamp && ss_authored <= lastknownwave) printf("Video partition does not match known data (almost certainly corrupt)%s", newline);
-            else printf("Video partition does not match known data (probably corrupt but might be a\nbrand new wave if this is a new game and abgx360.dat hasn't been updated yet)%s", newline);
+        if (video_crc32 == 0) {
+            video_stealthuncertain = true;
+          return;
         }
-        else printf("Video partition does not match known data but that's probably because there is\nno PFI to tell us what its real size is%s", newline);
-        color(normal);
+        if (xgd3) {
+            // XGD3 games all have unique video data
+          return;
+        }
+        else {
+            video_stealthuncertain = true;
+            color(yellow);
+            if (video_crc32 == xbox1videocrc) printf("Video partition matches known data (Xbox 1)%s", newline);
+            else if (pfi_foundsectorstotal) {
+                if (ss_foundtimestamp && ss_authored <= lastknownwave)
+                     printf("Video partition does not match known data (almost certainly corrupt)%s", newline);
+                else printf("Video partition does not match known data (probably corrupt but might be a\n"
+                            "brand new wave if this is a new game and abgx360.dat hasn't been updated yet)%s", newline);
+            }
+            else printf("Video partition does not match known data but that's probably because there is\n"
+                        "no PFI to tell us what its real size is%s", newline);
+            color(normal);
+        }
     }
     
   return;

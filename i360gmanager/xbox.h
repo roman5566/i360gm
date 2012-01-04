@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <string>
 #include <map>
+#include <time.h>
+
+#include "Helpers/MurmurHash3.h"
 
 using std::map;
 using std::string;
@@ -23,6 +26,7 @@ using std::string;
 #define XEX_MAGIC_BYTE 0x32584558 //XEX2
 #define XEX_FILE "default.xex"
 #define XEX_FILE_SIZE 11
+#define MURMUR_SEED 42
 #ifndef MAX_PATH
 	#define MAX_PATH 255
 #endif
@@ -152,16 +156,26 @@ public:
 	uint64 getAddress(uint sector);
 	uint64 getRootAddress();
 	DiscType getDiscType();
+	uint getHash();
+	HANDLE getHandle();
 
 	//XboxFileInfo functions
 	bool isXex(XboxFileInfo *file);
 
+	
+	uint hashTime;
 private:
 	//Disc data
+	HANDLE _realHandle;
 	int _handle;
+
+	uint _hash;
+
 	DiscType _type;
 	MediaInfo _mediaInfo;
 	map<uint, SectorData*> _sectors;
+
+	
 
 	//Private helper functions
 	bool readMagicMedia(DiscType type);

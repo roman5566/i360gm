@@ -213,8 +213,15 @@
     <addaction name="actionFileExplorer"/>
     <addaction name="actionLogWindow"/>
    </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionCheckHashCollision"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
+   <addaction name="menuTools"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <widget class="QDockWidget" name="DockProgress">
@@ -315,6 +322,11 @@
   <action name="actionSetGamePath">
    <property name="text">
     <string>Set game path</string>
+   </property>
+  </action>
+  <action name="actionCheckHashCollision">
+   <property name="text">
+    <string>Check hash collision</string>
    </property>
   </action>
  </widget>

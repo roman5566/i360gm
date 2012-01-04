@@ -30,6 +30,7 @@ public:
 		void saveDot();
 		void extractIso();
 		void setGamePath();
+		void checkHashCollision();
 
 		//Extraction
 		void fileExtracted(QString name, uint size);
