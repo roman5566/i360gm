@@ -1,0 +1,42 @@
+xexcompression/encryption
+// get compression/encryption info line 15645 of ABGX
+
+//#define MAXNR 14
+//u32 rk[4*(MAXNR + 1)];
+//const u8 xex_retailkey[16] = {0x20,0xB1,0x85,0xA5,0x9D,0x28,0xFD,0xC3,0x40,0x58,0x3F,0xBB,0x08,0x96,0xBF,0x91};
+//const u8 xex_manufacturemodekey[16] = {0xA2,0x6C,0x10,0xF7,0x1F,0xD9,0x35,0xE9,0x8B,0x99,0x92,0x2C,0xE9,0x32,0x15,0x72};
+	
+//Security Info Offset  (short sio)
+//offset is from xexbase+compressioninfo_address
+Info							Offset		size				//Info
+compressedInfoSize				0			4			
+xexIsEncrypted					5			1					&0x01 for bool
+xexIsCompressed					7			1					(1 compressed basic, 2 compressed, 3 comrpessedDelta, unknown compression)
+	
+if xexIsCompressed												//Compression info should be 0x24 if not we have a problem!!!!
+	compressionwindow			8			4					table to convert it to bits (32768 -> 15, 65536 -> 16, 131072 -> 17, 262144 -> 18, 524288 -> 19, 1048576 -> 20, 2097152 -> 21)
+	compressedblockSize			12			4			
+	compressedblockHash			16			20					//bytes
+
+if xexIsComrpessedBasic											//Compression info size should be multiple of 8 (size%8) and should be bigger then 8
+	basicCompEntries											compressedInfoSize - 8 / 8	
+	entryInfoAddress			8+(i*8) 	4
+	entryInfoPadding			12+(i*8)	4
+	//Get address to title id resouce							//TODO
+
+xexMediaId						sio+0x140	16					//bytes	
+xexFileKey						sio+0x150	16					//bytes
+sessionKey						-			16					//We can get this from reailtkey or devkitkey with rijndaelDecrypt(rk, Nr, xex_filekey, xex_sessionkey);
+
+if xexIsEncrypted												//(defaultxexsize - codeoffset) % 16) size of code not 16 bytes but who cares what ever remains let it be!
+	Nr = rijndaelKeySetupDec(rk, xex_sessionkey, 128);			//ivec starts 0 (16 bytes)
+	n = (defaultxexsize - codeoffset) / 16;						//Number of blocks
+	for all blocks
+		memcpy(ct, &xex[16*b], 16)
+		decrypt(rk, nr, ct, pt)
+		for 16 do: pt[i] ^= ivec[i];
+		ivec = ct
+		//pt contains decrypted buffer
+		
+if xexIsCompressed
+	//TODO Thats quit some shit to do!!!

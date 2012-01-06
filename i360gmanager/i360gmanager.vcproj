@@ -420,6 +420,10 @@
 			Name="Helpers"
 			>
 			<File
+				RelativePath=".\common.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\Helpers\MurmurHash3.cpp"
 				>
 			</File>
@@ -429,11 +433,23 @@
 			</File>
 		</Filter>
 		<File
+			RelativePath=".\common.h"
+			>
+		</File>
+		<File
 			RelativePath=".\xbox.cpp"
 			>
 		</File>
 		<File
 			RelativePath=".\xbox.h"
+			>
+		</File>
+		<File
+			RelativePath=".\xex.cpp"
+			>
+		</File>
+		<File
+			RelativePath=".\xex.h"
 			>
 		</File>
 	</Files>

@@ -14,6 +14,7 @@
 #include <QSettings>
 
 #include "xbox.h"
+#include "xex.h"
 #include "FileNode.h"
 
 #include <time.h>
@@ -26,6 +27,7 @@ using std::vector;
 
 //Mutex
 extern QMutex mTreeWidget;
+extern map<string, string> fileNameDb;
 
 class Iso  : public QObject
 {
@@ -74,6 +76,7 @@ private:
 
 	//Iso data
 	XboxDisc *_disc;
+	Xex *defaultXex;
 	XboxFileInfo *_defaultXex;
 	char _isValidXex;
 

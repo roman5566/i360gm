@@ -137,7 +137,10 @@ void Iso::makeTree(SectorData *sector, uint offset, FileNode *&node)
 
 	if(_defaultXex == NULL)                                        //While we at it, find default.xex
 		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
+		{
 			_defaultXex = fileInfo;
+			defaultXex = new Xex(_disc, _defaultXex);
+		}
 
 	if(fileInfo->isDir() && !fileInfo->isEmpty())                  //This is a directory, read the sector and begin
 	{
@@ -206,6 +209,10 @@ QVariant Iso::getField(int column)
 		return getIso();
 	case 4:
 		return isDefaultXex();
+	case 5:
+		return QString::fromStdString(defaultXex->getTitleId());
+	case 6:
+		return QString::fromStdString(fileNameDb[defaultXex->getFullId()]);
 	default:
 		return QVariant();
 	}

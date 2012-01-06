@@ -5,6 +5,8 @@
 QMutex mTreeWidget;
 QSettings *settings;
 
+map<string, string> fileNameDb;
+
 Main::Main(QWidget *parent, Qt::WFlags flags)
 	: QMainWindow(parent, flags)
 {
@@ -24,8 +26,8 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	//Directories
 	_lastDotPath = settings->value("paths/dot", QDir::currentPath()).toString();
 	_lastIsoPath = settings->value("paths/iso", QDir::currentPath()).toString();
-	_gamePath = settings->value("paths/file", QDir::currentPath()).toString();
-	_filePath = settings->value("paths/game", QDir::currentPath()).toString();
+	_gamePath = settings->value("paths/game", QDir::currentPath()).toString();
+	_filePath = settings->value("paths/file", QDir::currentPath()).toString();
 
 	//Create connections
 	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
@@ -51,9 +53,29 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	getUi()->progressBar->setStyle(new QPlastiqueStyle);
 	getUi()->progressBar->reset();
 
+	//Read the game name db
+	readNameDb();
+
 	//If we have a gamePath use it
 	if(_gamePath.length() > 0)
 		refreshDir(_gamePath);
+}
+
+void Main::readNameDb()
+{
+	QFile db("GameNameLookup.csv");
+	if(!db.open(QIODevice::ReadOnly | QIODevice::Text))
+		return;
+
+	QString line;
+	QTextStream in(&db);
+	while (!in.atEnd()) {
+		line = in.readLine();
+		QStringList splits = line.split(',');
+		for(int i = 1; i < splits.size(); i++)
+			fileNameDb[splits.at(i).toStdString()] = splits[0].toStdString();
+	}
+	db.close();
 }
 
 Main::~Main()
@@ -280,11 +302,11 @@ void Main::refreshDir(QString directory)
 	for (int i = 0; i < list.size(); ++i)
 	{
 		Iso *iso = new Iso();
-		iso->setPath(dir.filePath(list.at(i)));
 
 		//Set up the connections
 		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
 		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
+		QMetaObject::invokeMethod(iso, "setPath", Q_ARG(QString, dir.filePath(list.at(i))));
 
 		_model->addIso(iso);
 	}

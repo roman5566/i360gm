@@ -84,6 +84,7 @@ int64 XboxDisc::saveFile(string &path, XboxFileInfo *file)
 	{
 		if(CreateDirectoryA(path.c_str(), NULL))
 			return 0;
+		return -1;
 	}
 	else
 	{
@@ -238,6 +239,12 @@ SectorData *XboxDisc::getSector(uint sector, uint size)
 	//Push it in the cach
 	_sectors[sector] = sectorData;
 	return sectorData;
+}
+
+int XboxDisc::readData(uint64 address, uint size, void *buffer)
+{
+	_lseeki64(_handle, address, SEEK_SET);
+	return _read(_handle, (char*)buffer, size);
 }
 
 /**

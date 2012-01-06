@@ -52,6 +52,7 @@ public:
 		void isoExtracted(Iso *iso);
 
 private:
+	void readNameDb();
 	void walkDot(QString &trace, FileNode *&node);
 	void addLog(QString log);
 	uint64 addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node);
