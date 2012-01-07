@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "Iso.h"
+#include "XGDF/Iso.h"
 
 using std::vector;
 

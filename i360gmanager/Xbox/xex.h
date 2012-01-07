@@ -2,7 +2,6 @@
 #define XEX_H
 
 #include "common.h"
-#include "xbox.h"
 
 #pragma pack(1) //Byte alignment
 typedef struct 
@@ -38,6 +37,7 @@ typedef struct
 
 enum XexHeaderId
 {
+	HEADER = 0xFFFE,
 	OPTIONAL_HEADER = 0xFFFF,
 	RESOURCE_INFO = 0x2FF,
 	BASE_FILE_FORMAT = 0x3FF,
@@ -117,7 +117,7 @@ typedef struct
 class Xex
 {
 public:
-	Xex(XboxDisc *disc, XboxFileInfo *xex);
+	Xex(XboxFileInfo *xex, void *buffer, uint offset);
 	~Xex();
 
 	ExecutionId *executionId;
@@ -127,16 +127,17 @@ public:
 	string getFullId();
 private:
 	//Classes
-	XboxDisc *_disc;
 	XboxFileInfo *_xex;
+	void *_xexBuffer;
+	void *_buffer;
 
 	//Data
-	XexHeader _header;
+	XexHeader *_header;
 	map<XexHeaderId, XexOptionalHeader*> _optionalHeaders;
 	map<XexHeaderId, uchar*> _allocs;
 
 	//Functions
 	void parseHeaders();
-	uchar *readArea(XexHeaderId type, uint size, uint64 address);
+	uchar *readArea(XexHeaderId type, uint size, uint address);
 };
 #endif

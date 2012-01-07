@@ -166,14 +166,6 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\FileNode.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\main.cpp"
-				>
-			</File>
-			<File
 				RelativePath=".\uiMain.cpp"
 				>
 			</File>
@@ -183,10 +175,6 @@
 			Filter="h"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath=".\FileNode.h"
-				>
-			</File>
 			<File
 				RelativePath=".\uiMain.h"
 				>
@@ -378,11 +366,43 @@
 			Name="Models"
 			>
 			<File
-				RelativePath=".\Iso.cpp"
+				RelativePath=".\IsoList.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\Iso.h"
+				RelativePath=".\IsoList.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="Helpers"
+			>
+			<File
+				RelativePath=".\common.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\common.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Helpers\MurmurHash3.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Helpers\MurmurHash3.h"
+				>
+			</File>
+		</Filter>
+		<Filter
+			Name="XGDF"
+			>
+			<File
+				RelativePath=".\XGDF\Iso.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\XGDF\Iso.h"
 				>
 				<FileConfiguration
 					Name="Release|Win32"
@@ -401,55 +421,43 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Moc&apos;ing Iso.h..."
-						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DUNICODE -DWIN32 -DQT_LARGEFILE_SUPPORT -DQT_CORE_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_SQL_LIB -DQT_DLL -D_DEBUG  &quot;-I.\GeneratedFiles&quot; &quot;-I$(QTDIR)\include&quot; &quot;-I.\GeneratedFiles\$(ConfigurationName)\.&quot; &quot;-I$(QTDIR)\include\QtCore&quot; &quot;-I$(QTDIR)\include\QtGui&quot; &quot;-I$(QTDIR)\include\QtXml&quot; &quot;-I$(QTDIR)\include\QtSql&quot; &quot;-I.&quot; &quot;$(InputPath)&quot; -o &quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;  &quot;$(InputPath)&quot; -o &quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;  -DUNICODE -DWIN32 -DQT_LARGEFILE_SUPPORT -DQT_CORE_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_SQL_LIB -DQT_DLL -D_DEBUG &quot;-I.\GeneratedFiles&quot; &quot;-I$(QTDIR)\include&quot; &quot;-I.\GeneratedFiles\$(ConfigurationName)\.&quot; &quot;-I$(QTDIR)\include\QtCore&quot; &quot;-I$(QTDIR)\include\QtGui&quot; &quot;-I$(QTDIR)\include\QtXml&quot; &quot;-I$(QTDIR)\include\QtSql&quot; &quot;-I.&quot;&#x0D;&#x0A;"
 						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
 						Outputs="&quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;"
 					/>
 				</FileConfiguration>
 			</File>
 			<File
-				RelativePath=".\IsoList.cpp"
+				RelativePath=".\XGDF\IsoFields.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\IsoList.h"
+				RelativePath=".\XGDF\IsoFiles.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\XGDF\IsoGUI.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\XGDF\IsoIO.cpp"
 				>
 			</File>
 		</Filter>
 		<Filter
-			Name="Helpers"
+			Name="Xbox"
 			>
 			<File
-				RelativePath=".\common.cpp"
+				RelativePath=".\Xbox\xex.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\Helpers\MurmurHash3.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\Helpers\MurmurHash3.h"
+				RelativePath=".\Xbox\xex.h"
 				>
 			</File>
 		</Filter>
 		<File
-			RelativePath=".\common.h"
-			>
-		</File>
-		<File
-			RelativePath=".\xbox.cpp"
-			>
-		</File>
-		<File
-			RelativePath=".\xbox.h"
-			>
-		</File>
-		<File
-			RelativePath=".\xex.cpp"
-			>
-		</File>
-		<File
-			RelativePath=".\xex.h"
+			RelativePath=".\main.cpp"
 			>
 		</File>
 	</Files>

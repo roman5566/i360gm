@@ -2,13 +2,12 @@
 
 IsoList::IsoList() : QAbstractTableModel()
 {
-	_header.push_back(QString("Bin (ms)"));          //0
-	_header.push_back(QString("Hash (ms)"));         //1
-	_header.push_back(QString("Hash"));       //2
-	_header.push_back(QString("Iso"));           //3
-	_header.push_back(QString("Defaul.xex"));    //4
-	_header.push_back(QString("Title ID"));		//5
-	_header.push_back(QString("Full ID"));		//5
+	_header.push_back(QString("Bin"));          //0
+	_header.push_back(QString("Hash"));         //1
+	_header.push_back(QString("Hash"));         //2
+	_header.push_back(QString("Title ID"));		//3
+	_header.push_back(QString("Full Name"));	//4
+	_header.push_back(QString("Iso"));          //5
 }
 
 void IsoList::clearIsos()

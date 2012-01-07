@@ -5,24 +5,8 @@
 #include <QDir>
 
 #include "ui_uiMain.h"
-#include "Iso.h"
 #include "IsoList.h"
-
-using std::vector;
-
-template <class T> class VPtr
-{
-public:
-	static T* asPtr(QVariant v)
-	{
-		return  (T *) v.value<void *>();
-	}
-
-	static QVariant asQVariant(T* ptr)
-	{
-		return qVariantFromValue((void *) ptr);
-	}
-};
+#include "XGDF/Iso.h"
 
 class Main : public QMainWindow
 {
@@ -34,7 +18,7 @@ public:
 
 
 	Ui::MainClass *getUi(){return &ui;}
-	void refreshDir(QString directory);
+	void refreshDir(QString directory, bool keep = false);
 
 	//Data
 	signals:
@@ -46,8 +30,13 @@ public:
 		void setGamePath();
 		void checkHashCollision();
 		void extractFile();
+		void calculateMemory();
+		void reportIntline9();
 
 		//Extraction
+		void fileExtractedSuccess(QString name);
+		void bytesWritten(uint bytes);
+		void setTree(QTreeWidgetItem *item);
 		void fileExtracted(QString name, uint size);
 		void isoExtracted(Iso *iso);
 
@@ -55,10 +44,8 @@ private:
 	void readNameDb();
 	void walkDot(QString &trace, FileNode *&node);
 	void addLog(QString log);
-	uint64 addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node);
 
 	//Helper functions
-	QString getHumenSize(uint64 size);
 
 	//Helper data
 	IsoList *_model;

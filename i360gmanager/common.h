@@ -9,6 +9,7 @@
 #include <map>
 #include <time.h>
 #include <vector>
+#include <QString>
 
 #include "Helpers/MurmurHash3.h"
 
@@ -67,6 +68,7 @@ using std::string;
 
 //General functions
 string toHex(char *bytes, uint size);
+QString getHumenSize(uint64 size);
 
 enum DiscType
 {
@@ -76,89 +78,101 @@ enum DiscType
 	XGD3 = 0x2080000,
 };
 
-
 #pragma pack(1) //Byte alignment
-	typedef struct
+typedef struct
+{
+	uchar magic[MEDIA_MAGIC_BYTE_SIZE];
+	uint rootSector;
+	uint rootSize;
+	uint64 creationTime;
+} MediaInfo;
+
+typedef struct XboxFileInfoStruct
+{
+	ushort ltable;               //Left file offset from beginning of sector *4 to get address
+	ushort rtable;				//Same but then right file
+	uint sector;
+	uint size;
+	uchar type;
+	uchar length;
+	uchar name[MAX_PATH];		//This is nasty! But there is no other way i can think of...
+
+	bool isDir()
 	{
-		uchar magic[MEDIA_MAGIC_BYTE_SIZE];
-		uint rootSector;
-		uint rootSize;
-		uint64 creationTime;
-	} MediaInfo;
+		return ((type & 16) != 0);
+	}
 
-	typedef struct XboxFileInfoStruct
+	bool isEmpty()
 	{
-		ushort ltable;               //Left file offset from beginning of sector *4 to get address
-		ushort rtable;				//Same but then right file
-		uint sector;
-		uint size;
-		uchar type;
-		uchar length;
-		uchar name[MAX_PATH];		//This is nasty! But there is no other way i can think of...
+		return (size == 0);
+	}
 
-		bool isDir()
-		{
-			return ((type & 16) != 0);
-		}
-
-		bool isEmpty()
-		{
-			return (size == 0);
-		}
-
-		uint getLOffset()
-		{
-			return (uint)ltable*TABLE_TO_ADDRESS;
-		}
-
-		uint getROffset()
-		{
-			return (uint)rtable*TABLE_TO_ADDRESS;
-		}
-
-		friend bool operator==(const XboxFileInfoStruct &left, const XboxFileInfoStruct &right)
-		{
-			if(left.length == right.length)
-				return (_strnicmp((char*)left.name, (char*)right.name, left.length) == 0);
-			return false;
-		}
-
-		bool isEqual(char* _name, int _length)
-		{
-			if(length == _length)   //Speed up
-				return (_strnicmp((char*)name, _name, _length) == 0);
-			return false;
-		}
-
-	} XboxFileInfo;
-
-	typedef struct SectorDataStruct
+	uint getLOffset()
 	{
-		void *data;
-		uint size;
-		SectorDataStruct()                 ///!< SectorData constructor (setting data pointer to NULL)
+		return (uint)ltable*TABLE_TO_ADDRESS;
+	}
+
+	uint getROffset()
+	{
+		return (uint)rtable*TABLE_TO_ADDRESS;
+	}
+
+	friend bool operator==(const XboxFileInfoStruct &left, const XboxFileInfoStruct &right)
+	{
+		if(left.length == right.length)
+			return (_strnicmp((char*)left.name, (char*)right.name, left.length) == 0);
+		return false;
+	}
+
+	bool isEqual(char* _name, int _length)
+	{
+		if(length == _length)   //Speed up
+			return (_strnicmp((char*)name, _name, _length) == 0);
+		return false;
+	}
+
+} XboxFileInfo;
+
+typedef struct SectorDataStruct
+{
+	void *data;
+	uint size;
+	SectorDataStruct()                 ///!< SectorData constructor (setting data pointer to NULL)
+	{
+		data = NULL;
+	}
+	~SectorDataStruct()                ///!< ~SectorData destructor freeing allocated memory
+	{
+		if(isInit())
 		{
-			data = NULL;
+			delete [] data;
+			this->data = NULL;
 		}
-		~SectorDataStruct()                ///!< ~SectorData destructor freeing allocated memory
-		{
-			if(isInit())
-			{
-				delete [] data;
-				this->data = NULL;
-			}
-		}
-		bool init(uint size)               ///!< init initializes this sector allocation memory and stuff
-		{
-			this->size = size;
-			this->data = new char[size];
-			return isInit();
-		}
-		bool isInit()                      ///!< isInit returns if this sector data has allocated memory
-		{
-			return (data != NULL);
-		}
-	} SectorData;
+	}
+	bool init(uint size)               ///!< init initializes this sector allocation memory and stuff
+	{
+		this->size = size;
+		this->data = new char[size];
+		return isInit();
+	}
+	bool isInit()                      ///!< isInit returns if this sector data has allocated memory
+	{
+		return (data != NULL);
+	}
+} SectorData;
+
+typedef struct FileNodeStruct  
+{
+	XboxFileInfo *file;
+	FileNodeStruct *left;
+	FileNodeStruct *right;
+	FileNodeStruct *dir;
+
+	FileNodeStruct(XboxFileInfo *file){this->file = file; dir = left = right = NULL;}
+	bool isDir(){return (dir != NULL);}
+	bool hasLeft(){return (left != NULL);}
+	bool hasRight(){return (right != NULL);}
+} FileNode;
 #pragma pack()
 
 #endif

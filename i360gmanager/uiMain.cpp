@@ -3,6 +3,7 @@
 
 //Mutex
 QMutex mTreeWidget;
+bool stopTreeWidget;
 QSettings *settings;
 
 map<string, string> fileNameDb;
@@ -19,9 +20,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	ui.tableView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
 	//Fancy the file explorer
-	ui.treeWidget->header()->resizeSection(0, 400);
-	ui.treeWidget->header()->resizeSection(1, 50);
-	ui.treeWidget->header()->resizeSection(2, 70);
+	ui.treeWidget->header()->resizeSection(0, 250);
+	ui.treeWidget->header()->resizeSection(1, 30);
+	ui.treeWidget->header()->resizeSection(2, 55);
+	ui.treeWidget->header()->resizeSection(3, 45);
 
 	//Directories
 	_lastDotPath = settings->value("paths/dot", QDir::currentPath()).toString();
@@ -38,6 +40,8 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	connect(ui.actionSetGamePath, SIGNAL(triggered()), this, SLOT(setGamePath()));
 	connect(ui.actionExtractFile, SIGNAL(triggered()), this, SLOT(extractFile()));
 	connect(ui.actionCheckHashCollision, SIGNAL(triggered()), this, SLOT(checkHashCollision()));
+	connect(ui.actionCalculateMemory, SIGNAL(triggered()), this, SLOT(calculateMemory()));
+	connect(ui.actionReport, SIGNAL(triggered()), this, SLOT(reportIntline9()));
 
 	//Show events for docks
 	connect(ui.actionFileExplorer, SIGNAL(triggered()), getUi()->DockFileExplorer, SLOT(show()));
@@ -61,6 +65,21 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 		refreshDir(_gamePath);
 }
 
+Main::~Main()
+{
+	//Save settings
+	if(QDir::currentPath() != _lastDotPath)
+		settings->setValue("paths/dot", _lastDotPath);
+	if(QDir::currentPath() != _lastIsoPath)
+		settings->setValue("paths/iso", _lastIsoPath);
+	if(QDir::currentPath() != _gamePath)
+		settings->setValue("paths/game", _gamePath);
+	if(QDir::currentPath() != _filePath)
+		settings->setValue("paths/file", _filePath);
+	delete settings;
+}
+
+
 void Main::readNameDb()
 {
 	QFile db("GameNameLookup.csv");
@@ -78,18 +97,27 @@ void Main::readNameDb()
 	db.close();
 }
 
-Main::~Main()
+void Main::reportIntline9()
 {
-	//Save settings
-	if(QDir::currentPath() != _lastDotPath)
-		settings->setValue("paths/dot", _lastDotPath);
-	if(QDir::currentPath() != _lastIsoPath)
-		settings->setValue("paths/iso", _lastIsoPath);
-	if(QDir::currentPath() != _gamePath)
-		settings->setValue("paths/game", _gamePath);
-	if(QDir::currentPath() != _filePath)
-		settings->setValue("paths/file", _filePath);
-	delete settings;
+	checkHashCollision();
+	calculateMemory();
+
+	double avgHash = 0, avgBin = 0;
+	vector<Iso*> *isos = _model->getIsos();
+	for(int i = 0; i < isos->size(); i++)
+	{
+		Iso *iso = isos->at(i);
+
+		avgHash += iso->_hashTime;
+		avgBin += iso->_binTree;
+	}
+
+	addLog(QString("Hash, average: ")+QString::number(avgHash/isos->size())+QString(", total: ")+QString::number(avgHash));
+	addLog(QString("BinTree, average: ")+QString::number(avgBin/isos->size())+QString(", total: ")+QString::number(avgBin));
+	addLog(QString("Total isos:")+QString::number(isos->size()));
+
+	QClipboard *clipboard = QApplication::clipboard();
+	clipboard->setText(tr("[code]")+getUi()->textLog->toPlainText()+tr("[/code]"));
 }
 
 void Main::checkHashCollision()
@@ -99,15 +127,40 @@ void Main::checkHashCollision()
 	for(int i = 0; i < isos->size(); i++)
 	{
 		Iso *iso = isos->at(i);
-		hashes[iso->getDisc()->getHash()]++;
+		hashes[iso->getHash()]++;
 
-		if(hashes[iso->getDisc()->getHash()] > 1)
+		if(hashes[iso->getHash()] > 1)
 		{
 			addLog("Found a collision!!!!!!!!");
 			return;
 		}
 	}
 	addLog("No collision found!");
+}
+
+void Main::calculateMemory()
+{
+	map<uint,SectorData*>::iterator it;
+	uint64 total = 0, fileNodeKb = 0, sectorsKb = 0;
+	vector<Iso*> *isos = _model->getIsos();
+	for(int i = 0; i < isos->size(); i++)
+	{
+		Iso *iso = isos->at(i);
+
+		fileNodeKb += (iso->getFileNo() * sizeof(FileNode))+4;
+
+		//Get sector data
+		map<uint, SectorData*> *sectors = iso->getSectors();
+		for(it = sectors->begin(); it != sectors->end(); it++)
+		{
+			SectorData *data = it->second;
+			sectorsKb += sizeof(SectorData) + data->size + ((4+4+4)*sectors->size()); //sizeof map i think
+		}
+	}
+	total += fileNodeKb + sectorsKb;
+	addLog(QString("    Sectors:               ")+getHumenSize(sectorsKb));
+	addLog(QString("    FileNode structs:  ")+getHumenSize(fileNodeKb));
+	addLog(QString("Total memory footprint: ")+getHumenSize(total));
 }
 
 void Main::setGamePath()
@@ -124,20 +177,6 @@ void Main::setGamePath()
 	getUi()->tableView->showRow(1);
 }
 
-QString Main::getHumenSize(uint64 size)
-{
-	QString str;
-	double kb = size/1000;
-	if(kb < 1000)
-		str = str.sprintf("%.0f kB", kb); //Yes we using kilobyte and not kibibyte so divided by 1000
-	else if(kb < 1000*1000)
-		str = str.sprintf("%.2f MB", kb/1000);
-	else
-		str = str.sprintf("%.2f GB", kb/(1000*1000));
-
-	return str;
-}
-
 void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previous)
 {	
 	//Only update the list if the dock is visible, if it is not visible then dont update!
@@ -147,46 +186,20 @@ void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previo
 		if(iso == NULL)
 			return;
 
-		getUi()->treeWidget->clear();
-
-		QTreeWidgetItem *parent = new QTreeWidgetItem(getUi()->treeWidget);
-		parent->setText(0, iso->getShortIso());
-		uint64 totalSize = addTreeToWidget(parent, iso->getRootNode());
-		parent->setText(2, getHumenSize(totalSize));
-
-		getUi()->treeWidget->addTopLevelItem(parent);
+		QMetaObject::invokeMethod(iso, "exploreIso");
 	}
 }
 
-uint64 Main::addTreeToWidget(QTreeWidgetItem *&parent, FileNode *node)
+void Main::setTree(QTreeWidgetItem *item)
 {
-	QString str;
-	QTreeWidgetItem *item = new QTreeWidgetItem(parent);
-	item->setText(0, QString::fromAscii((const char*)node->file->name, node->file->length));
-	item->setText(1, str.sprintf("%02X", node->file->type));
-	item->setText(3, str.sprintf("%04X", node->file->sector));
-	item->setData(999, Qt::DisplayRole, VPtr<XboxFileInfo>::asQVariant(node->file));             //Give this item a pointer to its own node
-
-	uint64 totalSize = node->file->size;
-	item->setText(2, getHumenSize(node->file->size));
-
-	if(node->isDir())
-		totalSize += addTreeToWidget(item, node->dir);
-	if(node->hasLeft())
-		totalSize += addTreeToWidget(parent, node->left);
-	if(node->hasRight())
-		totalSize += addTreeToWidget(parent, node->right);
-
-	return totalSize;
+	getUi()->treeWidget->clear();
+	getUi()->treeWidget->addTopLevelItem(item);
 }
 
 void Main::isoExtracted(Iso *iso)
 {
 	addLog(QString("Finished extracting iso "+iso->getIso()));
 	getUi()->actionExtractIso->setDisabled(false);
-
-	//Reset the QProgressBar in 5 secs
-	QTimer::singleShot(5000, getUi()->progressBar, SLOT(reset()));
 }
 
 void Main::fileExtracted(QString name, uint size)
@@ -200,22 +213,40 @@ void Main::addLog(QString log)
 	getUi()->textLog->setPlainText(log.append("\n"+getUi()->textLog->toPlainText()));
 
 }
+void Main::fileExtractedSuccess(QString name)
+{
+	addLog(QString("Finished extracting file ")+name);
+	getUi()->actionExtractFile->setDisabled(false);
+}
+
+void Main::bytesWritten(uint bytes)
+{
+	getUi()->progressBar->setValue(getUi()->progressBar->value()+1);
+}
 
 void Main::extractFile()
 {
 	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
 	if(iso == NULL)
 		return;
-	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->treeWidget->currentItem()->data(999, Qt::DisplayRole));
+	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->treeWidget->currentItem()->data(DATA_POINTER_TREE, Qt::DisplayRole));
+	if(file->isDir())
+	{
+		addLog("Can not save recursive dir yet!");
+		return;
+	}
+
 
 	QString dir = QFileDialog::getExistingDirectory(this, NULL, _filePath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
 	if(dir.length() <= 0)
 		return;
 	_filePath = dir;
 
-	string path = _filePath.toStdString();
-	iso->getDisc()->saveFile(path, file);
-	addLog(QString::fromStdString(string("File saved ") + path));
+	//Save a single file, start thread and do some GUI stuff
+	getUi()->actionExtractFile->setDisabled(true);
+	getUi()->progressBar->setValue(0);
+	getUi()->progressBar->setMaximum(100);
+	QMetaObject::invokeMethod(iso, "saveFile", Q_ARG(QString, dir), Q_ARG(uint, VPtr<XboxFileInfo>::toPtr(file)));
 }
 
 void Main::extractIso()
@@ -291,23 +322,33 @@ void Main::walkDot(QString &trace, FileNode *&node)
 	trace.append(sp.sprintf("\t %i [label=\"%s (%i)\"];\n", (uint)node, QString::fromAscii((const char*)node->file->name, node->file->length).toStdString().c_str(), node->file->length));
 }
 
-void Main::refreshDir(QString directory)
+void Main::refreshDir(QString directory, bool keep)
 {
-	_model->clearIsos();                          //Clear the list
+	if(!keep)
+		_model->clearIsos();                      //Clear the list
 
 	QDir dir(directory);
-	QStringList filter; filter << "*.iso";        //Filter the dir list
-	QStringList list = dir.entryList(filter);
+	QStringList filter; filter << "*.iso" << "*.360" << "*.000";        //Filter the dir list
+	dir.setNameFilters(filter);
+	dir.setFilter(QDir::Files | QDir::AllDirs | QDir::NoDotAndDotDot);
+	QFileInfoList list = dir.entryInfoList();
 
 	for (int i = 0; i < list.size(); ++i)
 	{
-		Iso *iso = new Iso();
-
-		//Set up the connections
+		const QFileInfo *fileInfo = &list.at(i);
+		if(fileInfo->isDir())
+		{
+			refreshDir(fileInfo->absoluteFilePath(), true);
+			continue;
+		}
+		Iso *iso = new Iso(fileInfo->absoluteFilePath());
+		//Set up the connections for feedback and threading
 		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
+		connect(iso, SIGNAL(doBytesWritten(uint)), this, SLOT(bytesWritten(uint)));
 		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
-		QMetaObject::invokeMethod(iso, "setPath", Q_ARG(QString, dir.filePath(list.at(i))));
-
+		connect(iso, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
+		connect(iso, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
+		QMetaObject::invokeMethod(iso, "Initialize");
 		_model->addIso(iso);
 	}
 }

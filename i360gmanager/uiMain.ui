@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>946</width>
+    <width>1200</width>
     <height>796</height>
    </rect>
   </property>
@@ -67,6 +67,15 @@
    </layout>
   </widget>
   <widget class="QDockWidget" name="DockFileExplorer">
+   <property name="minimumSize">
+    <size>
+     <width>400</width>
+     <height>93</height>
+    </size>
+   </property>
+   <property name="allowedAreas">
+    <set>Qt::LeftDockWidgetArea|Qt::RightDockWidgetArea|Qt::TopDockWidgetArea</set>
+   </property>
    <property name="windowTitle">
     <string>File explore</string>
    </property>
@@ -117,7 +126,7 @@
        </column>
        <column>
         <property name="text">
-         <string>Attrib</string>
+         <string>Attr</string>
         </property>
         <property name="textAlignment">
          <set>AlignHCenter|AlignVCenter|AlignCenter</set>
@@ -156,6 +165,9 @@
    </property>
    <property name="styleSheet">
     <string notr="true"/>
+   </property>
+   <property name="allowedAreas">
+    <set>Qt::LeftDockWidgetArea|Qt::RightDockWidgetArea|Qt::TopDockWidgetArea</set>
    </property>
    <property name="windowTitle">
     <string>Log window</string>
@@ -196,7 +208,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>946</width>
+     <width>1200</width>
      <height>21</height>
     </rect>
    </property>
@@ -223,6 +235,8 @@
      <string>Tools</string>
     </property>
     <addaction name="actionCheckHashCollision"/>
+    <addaction name="actionCalculateMemory"/>
+    <addaction name="actionReport"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuView"/>
@@ -337,6 +351,16 @@
   <action name="actionExtractFile">
    <property name="text">
     <string>Extract file</string>
+   </property>
+  </action>
+  <action name="actionCalculateMemory">
+   <property name="text">
+    <string>Calculate memory footprint</string>
+   </property>
+  </action>
+  <action name="actionReport">
+   <property name="text">
+    <string>Make report for Intline9</string>
    </property>
   </action>
  </widget>
