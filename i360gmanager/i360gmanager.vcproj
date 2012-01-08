@@ -166,6 +166,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\Loader.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\uiMain.cpp"
 				>
 			</File>
@@ -175,6 +179,32 @@
 			Filter="h"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath=".\Loader.h"
+				>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing Loader.h..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;  &quot;$(InputPath)&quot; -o &quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;  -DUNICODE -DWIN32 -DQT_LARGEFILE_SUPPORT -DQT_NO_DEBUG -DNDEBUG -DQT_CORE_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_SQL_LIB -DQT_DLL &quot;-I.\GeneratedFiles&quot; &quot;-I$(QTDIR)\include&quot; &quot;-I.\GeneratedFiles\$(ConfigurationName)\.&quot; &quot;-I$(QTDIR)\include\QtCore&quot; &quot;-I$(QTDIR)\include\QtGui&quot; &quot;-I$(QTDIR)\include\QtXml&quot; &quot;-I$(QTDIR)\include\QtSql&quot; &quot;-I.&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing Loader.h..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;  &quot;$(InputPath)&quot; -o &quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;  -DUNICODE -DWIN32 -DQT_LARGEFILE_SUPPORT -DQT_CORE_LIB -DQT_GUI_LIB -DQT_XML_LIB -DQT_SQL_LIB -DQT_DLL -D_DEBUG &quot;-I.\GeneratedFiles&quot; &quot;-I$(QTDIR)\include&quot; &quot;-I.\GeneratedFiles\$(ConfigurationName)\.&quot; &quot;-I$(QTDIR)\include\QtCore&quot; &quot;-I$(QTDIR)\include\QtGui&quot; &quot;-I$(QTDIR)\include\QtXml&quot; &quot;-I$(QTDIR)\include\QtSql&quot; &quot;-I.&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;.\GeneratedFiles\$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+			</File>
 			<File
 				RelativePath=".\uiMain.h"
 				>
@@ -319,6 +349,18 @@
 					</FileConfiguration>
 				</File>
 				<File
+					RelativePath=".\GeneratedFiles\Release\moc_Loader.cpp"
+					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+				</File>
+				<File
 					RelativePath=".\GeneratedFiles\Release\moc_uiMain.cpp"
 					>
 					<FileConfiguration
@@ -338,6 +380,18 @@
 				>
 				<File
 					RelativePath=".\GeneratedFiles\Debug\moc_Iso.cpp"
+					>
+					<FileConfiguration
+						Name="Release|Win32"
+						ExcludedFromBuild="true"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
+				</File>
+				<File
+					RelativePath=".\GeneratedFiles\Debug\moc_Loader.cpp"
 					>
 					<FileConfiguration
 						Name="Release|Win32"

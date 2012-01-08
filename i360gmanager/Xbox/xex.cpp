@@ -34,7 +34,7 @@ string Xex::getTitleId()
 
 string Xex::getFullId()
 {
-	return toHex((char*)mediaId, 16);//.append(getTitleId());
+	return toHex((char*)mediaId, 16);
 }
 
 void Xex::parseHeaders()

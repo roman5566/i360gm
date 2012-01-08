@@ -6,6 +6,7 @@
 
 #include "ui_uiMain.h"
 #include "IsoList.h"
+#include "Loader.h"
 #include "XGDF/Iso.h"
 
 class Main : public QMainWindow
@@ -33,6 +34,11 @@ public:
 		void calculateMemory();
 		void reportIntline9();
 
+		//Loader
+		void progressTotalIsos(uint isos);
+		void progressIso(QString iso);
+		void doneIsoDir(vector<Iso*> *isos);
+
 		//Extraction
 		void fileExtractedSuccess(QString name);
 		void bytesWritten(uint bytes);
@@ -50,6 +56,7 @@ private:
 	//Helper data
 	IsoList *_model;
 	Ui::MainClass ui;
+	Loader *_loader;
 
 	QString _lastDotPath;
 	QString _lastIsoPath;

@@ -4,11 +4,12 @@
 Iso::Iso(QString path)
 {
 	//Make this a threaded object
-	QThread *_thread = new QThread;
+	_thread = new QThread;
 	moveToThread(_thread);
 	_thread->start();
 
 	//Default values
+	_xex = NULL;
 	_defaultXex = NULL;
 	_rootFile = NULL;
 	_hash = 0;
@@ -29,14 +30,20 @@ Iso::Iso(QString path)
 /**
  * Please call this in a thread as it will take a few ms per iso and will cause slight GUI lag. We all know that users are spoiled!
  */
-void Iso::Initialize()
+bool Iso::Initialize()
 {
-	isValidMedia();   //Check if this disc is a good disc
-	getRootNode();    //Create the full disc file structure
+	if(!isValidMedia()) //Check if this disc is a good disc
+		return false;
+	getRootNode();      //Create the full disc file structure
+	return true;
 }
 
 Iso::~Iso()
 {
+	//Delete the xex
+	if(_xex != NULL)
+		delete _xex;
+
 	//We should dealloc the bin tree
 	deleteTree();
 
@@ -48,6 +55,11 @@ Iso::~Iso()
 	//Close handles
 	CloseHandle(_mapHandle);
 	_close(_handle);  //Close the handle to the iso, (this will also close the get_osfhandle)
+
+	//Thread
+	_thread->quit();
+	_thread->wait();
+	delete _thread;
 }
 
 /**

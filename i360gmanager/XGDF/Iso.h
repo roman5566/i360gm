@@ -104,7 +104,7 @@ public:
 	public slots:
 		void extractIso(QString output);
 		void saveFile(QString path, uint ptr);
-		void Initialize();
+		bool Initialize();
 
 		//GUI
 		void exploreIso();

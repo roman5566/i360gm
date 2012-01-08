@@ -90,6 +90,8 @@ void Iso::deleteTree()
 
 void Iso::deleteTree(FileNode *file)
 {
+	if(file == NULL)
+		return;
 	if(file->hasLeft())
 		deleteTree(file->left);
 	if(file->hasRight())

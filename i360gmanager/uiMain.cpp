@@ -14,6 +14,13 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	ui.setupUi(this);
 	settings = new QSettings("./config.ini", QSettings::IniFormat, this);
 
+	//Create the loader thread
+	_loader = new Loader();
+	
+	_loader->connect(_loader, SIGNAL(doProgressTotalIsos(uint)), this, SLOT(progressTotalIsos(uint)));
+	_loader->connect(_loader, SIGNAL(doProgressIso(QString)), this, SLOT(progressIso(QString)));
+	_loader->connect(_loader, SIGNAL(doDoneIsoDir(vector<Iso*>*)), this, SLOT(doneIsoDir(vector<Iso*>*)));
+
 	//Set model for iso list
 	_model = new IsoList();
 	ui.tableView->setModel(_model);
@@ -77,8 +84,41 @@ Main::~Main()
 	if(QDir::currentPath() != _filePath)
 		settings->setValue("paths/file", _filePath);
 	delete settings;
+	delete _loader;
 }
 
+void Main::progressTotalIsos(uint isos)
+{
+	getUi()->progressBar->setMaximum(isos);
+	getUi()->progressBar->setValue(0);
+}
+
+void Main::progressIso(QString iso)
+{
+	if(iso != NULL)
+		addLog(tr("Was not able to load: ")+iso);
+	getUi()->progressBar->setValue(getUi()->progressBar->value()+1);
+}
+
+void Main::doneIsoDir(vector<Iso*> *isos)
+{
+	_model->clearIsos();                      //Clear the list
+
+	for (int i = 0; i < isos->size(); ++i)
+	{
+		Iso *iso = isos->at(i);
+		//Set up the connections for feedback and threading
+		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
+		connect(iso, SIGNAL(doBytesWritten(uint)), this, SLOT(bytesWritten(uint)));
+		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
+		connect(iso, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
+		connect(iso, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
+		_model->addIso(iso);
+	}
+	delete isos; //Delete that nasty vector!!!
+	getUi()->progressBar->setMaximum(100);
+	getUi()->progressBar->reset();
+}
 
 void Main::readNameDb()
 {
@@ -99,6 +139,7 @@ void Main::readNameDb()
 
 void Main::reportIntline9()
 {
+	getUi()->textLog->clear();
 	checkHashCollision();
 	calculateMemory();
 
@@ -118,6 +159,8 @@ void Main::reportIntline9()
 
 	QClipboard *clipboard = QApplication::clipboard();
 	clipboard->setText(tr("[code]")+getUi()->textLog->toPlainText()+tr("[/code]"));
+
+	QMessageBox::information(this, tr("Thanks for the report!"), tr("I've copied the report to your clipboard, so please make a post in the forum and paste this report. Thanks a lot in advance"));
 }
 
 void Main::checkHashCollision()
@@ -324,31 +367,6 @@ void Main::walkDot(QString &trace, FileNode *&node)
 
 void Main::refreshDir(QString directory, bool keep)
 {
-	if(!keep)
-		_model->clearIsos();                      //Clear the list
-
-	QDir dir(directory);
-	QStringList filter; filter << "*.iso" << "*.360" << "*.000";        //Filter the dir list
-	dir.setNameFilters(filter);
-	dir.setFilter(QDir::Files | QDir::AllDirs | QDir::NoDotAndDotDot);
-	QFileInfoList list = dir.entryInfoList();
-
-	for (int i = 0; i < list.size(); ++i)
-	{
-		const QFileInfo *fileInfo = &list.at(i);
-		if(fileInfo->isDir())
-		{
-			refreshDir(fileInfo->absoluteFilePath(), true);
-			continue;
-		}
-		Iso *iso = new Iso(fileInfo->absoluteFilePath());
-		//Set up the connections for feedback and threading
-		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
-		connect(iso, SIGNAL(doBytesWritten(uint)), this, SLOT(bytesWritten(uint)));
-		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
-		connect(iso, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
-		connect(iso, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
-		QMetaObject::invokeMethod(iso, "Initialize");
-		_model->addIso(iso);
-	}
+	getUi()->treeWidget->clear();
+	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory));
 }
