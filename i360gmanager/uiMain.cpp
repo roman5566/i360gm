@@ -38,6 +38,11 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	_gamePath = settings->value("paths/game", QDir::currentPath()).toString();
 	_filePath = settings->value("paths/file", QDir::currentPath()).toString();
 
+	//Set up extra forms
+	about = new QDialog();
+	uiAbout.setupUi(about);
+	connect(ui.actionAbout, SIGNAL(triggered()), about, SLOT(show()));
+	
 	//Create connections
 	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
 	
@@ -85,6 +90,9 @@ Main::~Main()
 		settings->setValue("paths/file", _filePath);
 	delete settings;
 	delete _loader;
+
+	//Delete extra forms
+	delete about;
 }
 
 void Main::progressTotalIsos(uint isos)
@@ -270,14 +278,13 @@ void Main::bytesWritten(uint bytes)
 void Main::extractFile()
 {
 	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
-	if(iso == NULL)
-		return;
+	if(iso == NULL || getUi()->treeWidget->currentIndex().row() < 0)
+		return addLog("No file selected!");
+
 	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->treeWidget->currentItem()->data(DATA_POINTER_TREE, Qt::DisplayRole));
 	if(file->isDir())
-	{
-		addLog("Can not save recursive dir yet!");
-		return;
-	}
+		return addLog("Can not save recursive dir yet!");
+		
 
 
 	QString dir = QFileDialog::getExistingDirectory(this, NULL, _filePath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
@@ -297,7 +304,7 @@ void Main::extractIso()
 	//Get the iso
 	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
 	if(iso == NULL)
-		return;
+		return addLog("No iso selected!");
 
 	//Get directory from user
 	QString dir = QFileDialog::getExistingDirectory(this, NULL, _lastIsoPath, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
@@ -320,7 +327,7 @@ void Main::saveDot()
 	//Get info
 	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
 	if(iso == NULL)
-		return;
+		return addLog("No iso selected!");
 	FileNode *root = iso->getRootNode();
 
 	//Ask user for save
@@ -368,5 +375,6 @@ void Main::walkDot(QString &trace, FileNode *&node)
 void Main::refreshDir(QString directory, bool keep)
 {
 	getUi()->treeWidget->clear();
+	getUi()->tableView->reset();
 	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory));
 }

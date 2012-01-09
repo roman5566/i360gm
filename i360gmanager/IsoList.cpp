@@ -43,7 +43,14 @@ vector<Iso*> *IsoList::getIsos()
 
 Iso* IsoList::getIso(int index)
 {
-	return _isos.at(index);
+	try
+	{
+		return _isos.at(index);
+	}
+	catch(...)
+	{
+		return NULL;
+	}
 }
 
 QVariant IsoList::data(const QModelIndex& index, int role) const

@@ -17,6 +17,7 @@
 
 #include "common.h"
 #include "Xbox/xex.h"
+#include "Xbox/xbe.h"
 
 #define DATA_POINTER_TREE 4
 
@@ -77,6 +78,8 @@ public:
 	uint getFileNo();
 	FileNode* getRootNode();
 	QVariant getField(int column);
+	QString getTitleId();
+	QString getName();
 
 	//IsoIO
 	uint getHash();
@@ -88,6 +91,7 @@ public:
 	void deleteTree(FileNode *file);
 	bool isDefaultXex();
 	bool isXex(XboxFileInfo *file);
+	bool isXbe(XboxFileInfo *file);
 	int readData(uint64 address, uint size, void *buffer);
 	XboxFileInfo* getFile(char* name, int length);
 	int64 saveFile(QString &path, XboxFileInfo *file, bool blocks = false);
@@ -125,6 +129,8 @@ private:
 	void extractFile(QString output, FileNode *node);                       //IsoIO
 
 	//Disc info
+	QString _titleId;
+	QString _name;
 	QString _path;
 	long _fileNo;
 	DiscType _type;
@@ -134,6 +140,8 @@ private:
 	FileNode *_rootFile;
 	Xex *_xex;
 	XboxFileInfo *_defaultXex;
+	Xbe *_xbe;
+	XboxFileInfo *_defaultXbe;
 
 	//Disc data IO
 	HANDLE _realHandle;
@@ -151,6 +159,5 @@ private:
 	//Helper data
 	QThread *_thread;
 };
-
 extern QSettings *settings;
 #endif

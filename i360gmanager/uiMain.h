@@ -5,6 +5,8 @@
 #include <QDir>
 
 #include "ui_uiMain.h"
+#include "ui_uiAbout.h"
+
 #include "IsoList.h"
 #include "Loader.h"
 #include "XGDF/Iso.h"
@@ -46,21 +48,27 @@ public:
 		void fileExtracted(QString name, uint size);
 		void isoExtracted(Iso *iso);
 
+	//Log
+	void addLog(QString log);
+
 private:
 	void readNameDb();
 	void walkDot(QString &trace, FileNode *&node);
-	void addLog(QString log);
 
 	//Helper functions
 
 	//Helper data
 	IsoList *_model;
-	Ui::MainClass ui;
 	Loader *_loader;
 
 	QString _lastDotPath;
 	QString _lastIsoPath;
 	QString _gamePath;
 	QString _filePath;
+
+	//Forms
+	Ui::MainClass ui;
+	Ui::About uiAbout;
+	QDialog *about;
 };
 #endif // UIMAIN_H

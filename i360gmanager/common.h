@@ -16,6 +16,7 @@
 using std::vector;
 using std::map;
 using std::string;
+using std::wstring;
 
 #define SECTOR_SIZE 2048
 #define MAX_SECTOR 10240000
@@ -29,6 +30,9 @@ using std::string;
 #define XEX_MAGIC_BYTE 0x32584558 //XEX2
 #define XEX_FILE "default.xex"
 #define XEX_FILE_SIZE 11
+#define XBE_MAGIC_BYTE 0x48454258 //XBEH
+#define XBE_FILE "default.xbe"
+#define XBE_FILE_SIZE 11
 #define MURMUR_SEED 42
 
 #ifndef MAX_PATH

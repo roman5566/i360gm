@@ -172,6 +172,19 @@ bool Iso::isXex(XboxFileInfo *file)
 }
 
 /**
+ * isXbe checks if a XboxFile is indeed a xbe file
+ * @param file a pointer to a XboxFileInfo struct
+ * @return True if that is a Xbe file, else flase
+ */
+bool Iso::isXbe(XboxFileInfo *file)
+{
+	uint magic;
+	_lseeki64(_handle, getAddress(file->sector), SEEK_SET);
+	_read(_handle, (void*)&magic, sizeof(uint));
+
+	return (magic == XBE_MAGIC_BYTE);
+}
+/**
  * getFileInfo gets a XboxFileInfo struct from a file in a sector
  * @param sector a pointer to SectorData from where to read
  * @param offset The offset from where to read the data from that sector

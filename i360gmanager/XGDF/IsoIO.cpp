@@ -46,16 +46,22 @@ uint Iso::getHash()
 	//We read from the video offset -64 sectors to +64 sectors, why? Because currently (04-01-12) abgx uses 16 stealth sectors and we allow it to increase a lot more and
 	//the game sector starts at video offset + 32 sectors so we read also 32 sectors of the game partition. So as far as i know i have covered my bases. And jeez my grammar sucks so much!
 	uint size = 128*SECTOR_SIZE;
-	uint address = (_type - (size/2));
+	uint address = _type;
+	if(address > (size/2))
+		address -= (size/2);
 	uint offset;
 	//Get data pointer
 	void *data = getMapOfFile(address, size, &offset);
 
-	//Calculate hash
 	_hash = 42;
-	long clk = clock();
-	MurmurHash3_x86_32(data, (size+offset), 42, &_hash);
-	_hashTime = clock()-clk;
+	if(data != NULL)
+	{
+		//Calculate hash	
+		long clk = clock();
+		MurmurHash3_x86_32(data, (size+offset), 42, &_hash);
+		_hashTime = clock()-clk;
+	}else
+		int i = 0;
 
 	//Cleanup
 	UnmapViewOfFile(data);

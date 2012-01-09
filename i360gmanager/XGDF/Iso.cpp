@@ -10,7 +10,8 @@ Iso::Iso(QString path)
 
 	//Default values
 	_xex = NULL;
-	_defaultXex = NULL;
+	_xbe = NULL;
+	_defaultXex = _defaultXbe = NULL;
 	_rootFile = NULL;
 	_hash = 0;
 	_realHandle = NULL;
@@ -34,7 +35,15 @@ bool Iso::Initialize()
 {
 	if(!isValidMedia()) //Check if this disc is a good disc
 		return false;
-	getRootNode();      //Create the full disc file structure
+	try
+	{
+		getRootNode();      //Create the full disc file structure
+		getHash();
+	}
+	catch(...)
+	{
+		return false; //Something was wrong with this iso, fuck you iso... fuck you!
+	}
 	return true;
 }
 
@@ -79,13 +88,21 @@ void Iso::makeTree(SectorData *sector, uint offset, FileNode *&node)
 	uint rOffset = fileInfo->getROffset();
 	_fileNo++;
 
-	if(_defaultXex == NULL)                                        //While we at it, find default.xex
+	if(_defaultXex == NULL && _type != XSF)                                        //While we at it, find default.xex
 		if(fileInfo->isEqual(XEX_FILE, XEX_FILE_SIZE))
 		{
 			_defaultXex = fileInfo;
 			uint offset = 0;
 			void *buffer = getMapOfFile(getAddress(_defaultXex->sector), _defaultXex->size, &offset);
 			_xex = new Xex(_defaultXex, buffer, offset);
+		}
+	if(_defaultXbe == NULL && _type == XSF)
+		if(fileInfo->isEqual(XBE_FILE, XBE_FILE_SIZE))
+		{
+			_defaultXbe = fileInfo;
+			uint offset = 0;
+			void *buffer = getMapOfFile(getAddress(_defaultXbe->sector), _defaultXbe->size, &offset);
+			_xbe = new Xbe(_defaultXbe, buffer, offset);
 		}
 
 	if(fileInfo->isDir() && !fileInfo->isEmpty())                  //This is a directory, read the sector and begin

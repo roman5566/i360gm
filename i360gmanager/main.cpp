@@ -19,11 +19,12 @@
  *
  */
 
+Main *mainGui;
 int main(int argc, char *argv[])
 {
 	QApplication a(argc, argv);
 	a.setStyle(new QCleanlooksStyle);
-    Main m;
-	m.show();
+    mainGui = new Main;
+	mainGui->show();
 	return a.exec();
 }
