@@ -1,0 +1,25 @@
+string marketPlaceUrl = (string)"http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?" +
+                (string)"methodName=FindGames" +
+                (string)"&Names=Locale&Values=" + locale +
+                (string)"&Names=LegalLocale&Values=" + locale +
+                (string)"&Names=Store&Values=1&Names=PageSize&Values=100&Names=PageNum&Values=1" +
+                (string)"&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=1" +
+                (string)"&Names=MediaIds&Values=66acd000-77fe-1000-9115-d802" + sprintfa("%08x", titleId) +
+                (string)"&Names=UserTypes&Values=2&Names=MediaTypes&Values=1" +
+                (string)"&Names=MediaTypes&Values=21&Names=MediaTypes&Values=23" +
+                (string)"&Names=MediaTypes&Values=37&Names=MediaTypes&Values=46";
+				
+				
+http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?methodName=FindGames&Names=Locale&Values=en-US&Names=LegalLocale&Values=en-US&Names=Store&Values=1&Names=PageSize&Values=100&Names=PageNum&Values=1&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=1&Names=MediaIds&Values=66acd000-77fe-1000-9115-d802########&Names=UserTypes&Values=2&Names=MediaTypes&Values=1&Names=MediaTypes&Values=21&Names=MediaTypes&Values=23&Names=MediaTypes&Values=37&Names=MediaTypes&Values=46
+
+http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?methodName=FindGames&Names=Locale&Values=en-US&Names=LegalLocale&Values=en-US&Names=Store&Values=1&Names=PageSize&Values=300&Names=PageNum&Values=2&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=1&Names=UserTypes&Values=2&Names=MediaTypes&Values=1&Names=MediaTypes&Values=21&Names=MediaTypes&Values=23&Names=MediaTypes&Values=37&Names=MediaTypes&Values=46
+
+http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?methodName=FindGames&Names=Locale&Values=en-US&Names=LegalLocale&Values=en-US&Names=Store&Values=1&Names=PageSize&Values=100&Names=PageNum&Values=1&Names=AvatarBodyTypes&Values=3&Names=AvatarBodyTypes&Values=1&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=2&Names=UserTypes&Values=2&Names=MediaTypes&Values=23&Names=CategoryIds&Values=3027&Names=OfferTargetMediaTypes&Values=1&Names=OfferTargetMediaTypes&Values=5&Names=OfferTargetMediaTypes&Values=18&Names=OfferTargetMediaTypes&Values=19&Names=OfferTargetMediaTypes&Values=20&Names=OfferTargetMediaTypes&Values=21&Names=OfferTargetMediaTypes&Values=22&Names=OfferTargetMediaTypes&Values=23&Names=OfferTargetMediaTypes&Values=30&Names=OfferTargetMediaTypes&Values=34&Names=OfferTargetMediaTypes&Values=37&Names=OfferTargetMediaTypes&Values=47&Names=ImageFormats&Values=4&Names=ImageFormats&Values=5&Names=ImageSizes&Values=15&Names=ImageSizes&Values=23&Names=OrderBy&Values=1&Names=OrderDirection&Values=1
+
+
+http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?methodName=FindGames&Names=Locale&Values=en-US&Names=LegalLocale&Values=en-US&Names=Store&Values=1&Names=PageSize&Values=100&Names=PageNum&Values=1&Names=AvatarBodyTypes&Values=3&Names=AvatarBodyTypes&Values=1&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=1&Names=MediaIds&Values=66acd000-77fe-1000-9115-d802584109d1&Names=UserTypes&Values=2&Names=MediaTypes&Values=1&Names=MediaTypes&Values=21&Names=MediaTypes&Values=23&Names=MediaTypes&Values=37&Names=MediaTypes&Values=46
+
+
+
+Get data from title:
+http://catalog.xboxlive.com/Catalog/Catalog.asmx/Query?methodName=FindGames&Names=Locale&Values=en-US&Names=LegalLocale&Values=en-US&Names=Store&Values=1&Names=PageSize&Values=100&Names=PageNum&Values=1&Names=DetailView&Values=5&Names=OfferFilterLevel&Values=1&Names=MediaIds&Values=66acd000-77fe-1000-9115-d802########&Names=UserTypes&Values=2&Names=MediaTypes&Values=1&Names=MediaTypes&Values=21&Names=MediaTypes&Values=23&Names=MediaTypes&Values=37&Names=MediaTypes&Values=46
