@@ -7,6 +7,7 @@ bool stopTreeWidget;
 QSettings *settings;
 
 map<string, string> fileNameDb;
+map<QString, QString> xbox1Name;
 
 Main::Main(QWidget *parent, Qt::WFlags flags)
 	: QMainWindow(parent, flags)
@@ -130,19 +131,41 @@ void Main::doneIsoDir(vector<Iso*> *isos)
 
 void Main::readNameDb()
 {
-	QFile db("GameNameLookup.csv");
-	if(!db.open(QIODevice::ReadOnly | QIODevice::Text))
-		return;
+	try
+	{
+		QFile db("GameNameLookup.csv");
+		if(!db.open(QIODevice::ReadOnly | QIODevice::Text))
+			return;
 
-	QString line;
-	QTextStream in(&db);
-	while (!in.atEnd()) {
-		line = in.readLine();
-		QStringList splits = line.split(',');
-		for(int i = 1; i < splits.size(); i++)
-			fileNameDb[splits.at(i).toStdString()] = splits[0].toStdString();
+		QString line;
+		QTextStream in(&db);
+		while (!in.atEnd()) {
+			line = in.readLine();
+			QStringList splits = line.split(',');
+			for(int i = 1; i < splits.size(); i++)
+				fileNameDb[splits.at(i).toStdString()] = splits[0].toStdString();
+		}
+		db.close();
+
+		//Read xbox1 stuff
+		QFile dbXbox1("Xbox1NameLookup.csv");
+		if(!dbXbox1.open(QIODevice::ReadOnly | QIODevice::Text))
+			return;
+
+		QTextStream in1(&dbXbox1);
+		while (!in1.atEnd()) {
+			line = in1.readLine();
+			if(line.isEmpty()) continue;
+			QStringList splits = line.split(',');
+			
+			xbox1Name[splits[0]] = splits[1];
+		}
+		dbXbox1.close();
 	}
-	db.close();
+	catch(...)
+	{
+		//To bad
+	}
 }
 
 void Main::reportIntline9()

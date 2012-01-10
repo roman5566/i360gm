@@ -53,7 +53,14 @@ QString Iso::getName()
 		if(_xex != NULL)
 			_name = QString::fromStdString(fileNameDb[_xex->getFullId()]);
 		else if(_xbe != NULL)
-			_name = QString::fromStdWString(_xbe->getName());
+		{
+			_name = xbox1Name[getTitleId()];
+			if(_name.isEmpty())
+			{
+				mainGui->addLog(tr("This xbox 1 game entry to net yet in DB! Update!")+getShortIso());
+				_name = QString::fromStdWString(_xbe->getName());
+			}
+		}
 		if(_name.isEmpty())
 		{
 			mainGui->addLog(tr("Was not able to resolve name of: ")+getShortIso());

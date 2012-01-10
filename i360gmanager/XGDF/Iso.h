@@ -25,7 +25,7 @@
 extern QMutex mTreeWidget;
 extern bool stopTreeWidget;
 extern map<string, string> fileNameDb;
-
+extern map<QString, QString> xbox1Name;
 template <class T> class VPtr
 {
 public:
