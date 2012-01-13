@@ -24,14 +24,14 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 
 	//Set model for iso list
 	_model = new IsoList();
-	ui.tableView->setModel(_model);
-	ui.tableView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
+	ui.sourceView->setModel(_model);
+	ui.sourceView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
 	//Fancy the file explorer
-	ui.treeWidget->header()->resizeSection(0, 250);
-	ui.treeWidget->header()->resizeSection(1, 30);
-	ui.treeWidget->header()->resizeSection(2, 55);
-	ui.treeWidget->header()->resizeSection(3, 45);
+	ui.fileTree->header()->resizeSection(0, 250);
+	ui.fileTree->header()->resizeSection(1, 30);
+	ui.fileTree->header()->resizeSection(2, 55);
+	ui.fileTree->header()->resizeSection(3, 45);
 
 	//Directories
 	_lastDotPath = settings->value("paths/dot", QDir::currentPath()).toString();
@@ -39,13 +39,16 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	_gamePath = settings->value("paths/game", QDir::currentPath()).toString();
 	_filePath = settings->value("paths/file", QDir::currentPath()).toString();
 
+	//Gui from settings
+	ui.sourcePath->setText(_gamePath);
+
 	//Set up extra forms
 	about = new QDialog();
 	uiAbout.setupUi(about);
 	connect(ui.actionAbout, SIGNAL(triggered()), about, SLOT(show()));
 	
 	//Create connections
-	connect(ui.tableView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
+	connect(ui.sourceView->selectionModel(), SIGNAL(currentRowChanged(const QModelIndex &, const QModelIndex &)), this, SLOT(slotOnClickList(const QModelIndex &, const QModelIndex &)) );
 	
 	//Menu bar connections
 	connect(ui.actionSaveDot, SIGNAL(triggered()), this, SLOT(saveDot()));
@@ -61,10 +64,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	connect(ui.actionLogWindow, SIGNAL(triggered()), getUi()->DockLog, SLOT(show()));
 
 	//Set come custom menu's
-	getUi()->tableView->addAction(getUi()->actionExtractIso);
-	getUi()->tableView->addAction(getUi()->actionSaveDot);
+	getUi()->sourceView->addAction(getUi()->actionExtractIso);
+	getUi()->sourceView->addAction(getUi()->actionSaveDot);
 
-	getUi()->treeWidget->addAction(getUi()->actionExtractFile);
+	getUi()->fileTree->addAction(getUi()->actionExtractFile);
 
 	//Some fancy style setting
 	getUi()->progressBar->setStyle(new QPlastiqueStyle);
@@ -248,7 +251,7 @@ void Main::setGamePath()
 	if(_gamePath.length() > 0)
 		refreshDir(_gamePath);
 
-	getUi()->tableView->showRow(1);
+	getUi()->sourceView->showRow(1);
 }
 
 void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previous)
@@ -266,8 +269,8 @@ void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previo
 
 void Main::setTree(QTreeWidgetItem *item)
 {
-	getUi()->treeWidget->clear();
-	getUi()->treeWidget->addTopLevelItem(item);
+	getUi()->fileTree->clear();
+	getUi()->fileTree->addTopLevelItem(item);
 }
 
 void Main::isoExtracted(Iso *iso)
@@ -300,11 +303,11 @@ void Main::bytesWritten(uint bytes)
 
 void Main::extractFile()
 {
-	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
-	if(iso == NULL || getUi()->treeWidget->currentIndex().row() < 0)
+	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
+	if(iso == NULL || getUi()->fileTree->currentIndex().row() < 0)
 		return addLog("No file selected!");
 
-	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->treeWidget->currentItem()->data(DATA_POINTER_TREE, Qt::DisplayRole));
+	XboxFileInfo *file = VPtr<XboxFileInfo>::asPtr(getUi()->fileTree->currentItem()->data(DATA_POINTER_TREE, Qt::DisplayRole));
 	if(file->isDir())
 		return addLog("Can not save recursive dir yet!");
 		
@@ -325,7 +328,7 @@ void Main::extractFile()
 void Main::extractIso()
 {
 	//Get the iso
-	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
+	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
 	if(iso == NULL)
 		return addLog("No iso selected!");
 
@@ -348,7 +351,7 @@ void Main::extractIso()
 void Main::saveDot()
 {
 	//Get info
-	Iso *iso = _model->getIso(ui.tableView->currentIndex().row());
+	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
 	if(iso == NULL)
 		return addLog("No iso selected!");
 	FileNode *root = iso->getRootNode();
@@ -397,7 +400,7 @@ void Main::walkDot(QString &trace, FileNode *&node)
 
 void Main::refreshDir(QString directory, bool keep)
 {
-	getUi()->treeWidget->clear();
-	getUi()->tableView->reset();
+	getUi()->fileTree->clear();
+	getUi()->sourceView->reset();
 	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory));
 }
