@@ -26,6 +26,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	_model = new IsoList();
 	ui.sourceView->setModel(_model);
 	ui.sourceView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
+	
+	_external = new IsoList();
+	ui.externView->setModel(_external);
+	ui.externView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
 	//Fancy the file explorer
 	ui.fileTree->header()->resizeSection(0, 250);
@@ -38,8 +42,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	_lastIsoPath = settings->value("paths/iso", QDir::currentPath()).toString();
 	_gamePath = settings->value("paths/game", QDir::currentPath()).toString();
 	_filePath = settings->value("paths/file", QDir::currentPath()).toString();
+	sExternalPath = settings->value("paths/external", QDir::currentPath()).toString();
 
 	//Gui from settings
+	ui.externPath->setText(sExternalPath);
 	ui.sourcePath->setText(_gamePath);
 
 	//Set up extra forms
@@ -92,6 +98,9 @@ Main::~Main()
 		settings->setValue("paths/game", _gamePath);
 	if(QDir::currentPath() != _filePath)
 		settings->setValue("paths/file", _filePath);
+	if(QDir::currentPath() != sExternalPath)
+		settings->setValue("paths/external", sExternalPath);
+	
 	delete settings;
 	delete _loader;
 
@@ -114,7 +123,7 @@ void Main::progressIso(QString iso)
 
 void Main::doneIsoDir(vector<Iso*> *isos)
 {
-	_model->clearIsos();                      //Clear the list
+	_model->clearGames();                      //Clear the list
 
 	for (int i = 0; i < isos->size(); ++i)
 	{
@@ -125,7 +134,7 @@ void Main::doneIsoDir(vector<Iso*> *isos)
 		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
 		connect(iso, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
 		connect(iso, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
-		_model->addIso(iso);
+		_model->addGame(iso);
 	}
 	delete isos; //Delete that nasty vector!!!
 	getUi()->progressBar->setMaximum(100);
@@ -178,10 +187,10 @@ void Main::reportIntline9()
 	calculateMemory();
 
 	double avgHash = 0, avgBin = 0;
-	vector<Iso*> *isos = _model->getIsos();
+	vector<Game*> *isos = _model->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
-		Iso *iso = isos->at(i);
+		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
 
 		avgHash += iso->_hashTime;
 		avgBin += iso->_binTree;
@@ -200,10 +209,10 @@ void Main::reportIntline9()
 void Main::checkHashCollision()
 {
 	map<uint, uint> hashes;
-	vector<Iso*> *isos = _model->getIsos();
+	vector<Game*> *isos = _model->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
-		Iso *iso = isos->at(i);
+		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
 		hashes[iso->getHash()]++;
 
 		if(hashes[iso->getHash()] > 1)
@@ -219,10 +228,10 @@ void Main::calculateMemory()
 {
 	map<uint,SectorData*>::iterator it;
 	uint64 total = 0, fileNodeKb = 0, sectorsKb = 0;
-	vector<Iso*> *isos = _model->getIsos();
+	vector<Game*> *isos = _model->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
-		Iso *iso = isos->at(i);
+		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
 
 		fileNodeKb += (iso->getFileNo() * sizeof(FileNode))+4;
 
@@ -259,7 +268,7 @@ void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previo
 	//Only update the list if the dock is visible, if it is not visible then dont update!
 	if(getUi()->DockFileExplorer->isVisible())
 	{
-		Iso *iso = _model->getIso(current.row());
+		Iso *iso = dynamic_cast<Iso*>(_model->getGame(current.row()));
 		if(iso == NULL)
 			return;
 
@@ -303,7 +312,7 @@ void Main::bytesWritten(uint bytes)
 
 void Main::extractFile()
 {
-	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
+	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL || getUi()->fileTree->currentIndex().row() < 0)
 		return addLog("No file selected!");
 
@@ -328,7 +337,7 @@ void Main::extractFile()
 void Main::extractIso()
 {
 	//Get the iso
-	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
+	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL)
 		return addLog("No iso selected!");
 
@@ -351,7 +360,7 @@ void Main::extractIso()
 void Main::saveDot()
 {
 	//Get info
-	Iso *iso = _model->getIso(getUi()->sourceView->currentIndex().row());
+	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL)
 		return addLog("No iso selected!");
 	FileNode *root = iso->getRootNode();
@@ -397,10 +406,39 @@ void Main::walkDot(QString &trace, FileNode *&node)
 	//Add myself to label list
 	trace.append(sp.sprintf("\t %i [label=\"%s (%i)\"];\n", (uint)node, QString::fromAscii((const char*)node->file->name, node->file->length).toStdString().c_str(), node->file->length));
 }
-
 void Main::refreshDir(QString directory, bool keep)
 {
 	getUi()->fileTree->clear();
 	getUi()->sourceView->reset();
 	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory));
+
+	//Start loading external
+	//_external->a
+	getUi()->externView->reset();
+
+	QDir dir(sExternalPath);
+	//QStringList filter; filter << "*.iso" << "*.360" << "*.000";        //Filter the dir list
+	//dir.setNameFilters(filter);
+	dir.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot);
+	QFileInfoList list = dir.entryInfoList();
+
+	for (int i = 0; i < list.size(); ++i)
+	{
+		const QFileInfo *fileInfo = &list.at(i);
+		if(fileInfo->isDir())
+		{
+			if(Raw::isRaw(fileInfo->absoluteFilePath()))
+			{
+				Raw *raw = new Raw(fileInfo->absoluteFilePath());
+				raw->Initialize();
+				_external->addGame(raw);
+
+			}
+			//readIsoDirR(fileInfo->absoluteFilePath(), isos);
+			continue;
+		}
+		//Iso *iso = new Iso(fileInfo->absoluteFilePath());
+		//isos->push_back(iso);
+	}
+	
 }

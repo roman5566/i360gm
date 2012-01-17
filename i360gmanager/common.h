@@ -9,7 +9,9 @@
 #include <map>
 #include <time.h>
 #include <vector>
+
 #include <QString>
+#include <QVariant>
 
 #include "Helpers/MurmurHash3.h"
 
@@ -74,12 +76,38 @@ using std::wstring;
 string toHex(char *bytes, uint size);
 QString getHumenSize(uint64 size);
 
+template <class T> class VPtr
+{
+public:
+	static T* asPtr(QVariant v)
+	{
+		return  (T *) v.value<void *>();
+	}
+
+	static QVariant asQVariant(T* ptr)
+	{
+		return qVariantFromValue((void *) ptr);
+	}
+
+	static T* fromPtr(uint u)
+	{
+		return (T*)u;
+	}
+
+	static uint toPtr(T* t)
+	{
+		return (uint)t;
+	}
+};
+
 enum DiscType
 {
-	NO = -1,
+	NOTHING = -1,
 	XSF = 0,
 	GDFX = 0xFD90000,
 	XGD3 = 0x2080000,
+	LIVE,
+	GOD
 };
 
 #pragma pack(1) //Byte alignment

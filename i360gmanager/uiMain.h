@@ -7,6 +7,8 @@
 #include "ui_uiMain.h"
 #include "ui_uiAbout.h"
 
+#include "Xbox/Game.h"
+#include "xgdf/Raw.h"
 #include "IsoList.h"
 #include "Loader.h"
 #include "XGDF/Iso.h"
@@ -60,11 +62,15 @@ private:
 	//Helper data
 	IsoList *_model;
 	Loader *_loader;
+	IsoList *_external;
 
 	QString _lastDotPath;
 	QString _lastIsoPath;
 	QString _gamePath;
 	QString _filePath;
+
+	//Settings
+	QString sExternalPath, sSourcePath;
 
 	//Forms
 	Ui::MainClass ui;

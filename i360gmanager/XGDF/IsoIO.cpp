@@ -1,15 +1,6 @@
 #include "iso.h"
 
-/**
- * getHandle opens up a real handle to the iso, it does its own caching so you can call this many times
- * @return HANDLE to the iso
- */
-HANDLE Iso::getHandle()
-{
-	if(_realHandle == NULL)
-		_realHandle = (HANDLE)_get_osfhandle(_handle);
-	return _realHandle;
-}
+
 
 /**
  * getMapOfFile creates a View of a file starting from address with a size
@@ -22,7 +13,7 @@ HANDLE Iso::getHandle()
  */
 void *Iso::getMapOfFile(uint64 address, uint size, void *outOffset)
 {
-	uint offset = address % _granularity;
+	uint offset = address % granularity;
 	address -= offset;
 	size += offset; 
 	DWORD high = HIDWORD(address);

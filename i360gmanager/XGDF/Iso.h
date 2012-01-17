@@ -15,6 +15,7 @@
 #include <QMutex>
 #include <QSettings>
 
+#include "Xbox/Game.h"
 #include "common.h"
 #include "Xbox/xex.h"
 #include "Xbox/xbe.h"
@@ -24,33 +25,8 @@
 //External shit
 extern QMutex mTreeWidget;
 extern bool stopTreeWidget;
-extern map<string, string> fileNameDb;
-extern map<QString, QString> xbox1Name;
-template <class T> class VPtr
-{
-public:
-	static T* asPtr(QVariant v)
-	{
-		return  (T *) v.value<void *>();
-	}
 
-	static QVariant asQVariant(T* ptr)
-	{
-		return qVariantFromValue((void *) ptr);
-	}
-
-	static T* fromPtr(uint u)
-	{
-		return (T*)u;
-	}
-
-	static uint toPtr(T* t)
-	{
-		return (uint)t;
-	}
-};
-
-class Iso  : public QObject
+class Iso  : public Game
 {
 	Q_OBJECT
 
@@ -83,7 +59,6 @@ public:
 
 	//IsoIO
 	uint getHash();
-	HANDLE getHandle();
 	void *getMapOfFile(uint64 address, uint size, void *outOffset = NULL);
 
 	//IsoFiles
@@ -131,33 +106,17 @@ private:
 	//Disc info
 	QString _titleId;
 	QString _name;
-	QString _path;
 	long _fileNo;
-	DiscType _type;
 	MediaInfo _mediaInfo;
 
 	//Disc files
 	FileNode *_rootFile;
-	Xex *_xex;
 	XboxFileInfo *_defaultXex;
-	Xbe *_xbe;
 	XboxFileInfo *_defaultXbe;
 
-	//Disc data IO
-	HANDLE _realHandle;
-	HANDLE _mapHandle;
-	int _handle;
-	uint _granularity;
-	uint _hash;
+
 	map<uint, SectorData*> _sectors;
 
-	//Timings and information
-	long s;
-	void startTime(){ s = clock();}
-	long stopTime(){ return clock()-s;}
-
-	//Helper data
-	QThread *_thread;
 };
 extern QSettings *settings;
 #endif

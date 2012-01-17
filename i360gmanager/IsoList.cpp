@@ -10,25 +10,25 @@ IsoList::IsoList() : QAbstractTableModel()
 	_header.push_back(QString("Iso"));          //5
 }
 
-void IsoList::clearIsos()
+void IsoList::clearGames()
 {
-	while(!_isos.empty())
+	while(!_games.empty())
 	{
-		delete _isos.back();
-		_isos.pop_back();
+		delete _games.back();
+		_games.pop_back();
 	}
 	emit layoutChanged();
 }
 
-void IsoList::addIso(Iso *iso)
+void IsoList::addGame(Game *game)
 {
-	_isos.push_back(iso);
+	_games.push_back(game);
 	emit layoutChanged();
 }
 
 int IsoList::rowCount(const QModelIndex& parent) const
 {
-	return _isos.size();
+	return _games.size();
 }
 
 int IsoList::columnCount(const QModelIndex& parent) const
@@ -36,16 +36,16 @@ int IsoList::columnCount(const QModelIndex& parent) const
 	return _header.size();
 }
 
-vector<Iso*> *IsoList::getIsos()
+vector<Game*> *IsoList::getGames()
 {
-	return &_isos;
+	return &_games;
 }
 
-Iso* IsoList::getIso(int index)
+Game* IsoList::getGame(int index)
 {
 	try
 	{
-		return _isos.at(index);
+		return _games.at(index);
 	}
 	catch(...)
 	{
@@ -58,7 +58,7 @@ QVariant IsoList::data(const QModelIndex& index, int role) const
 	switch(role)
 	{
 		case Qt::DisplayRole:
-			return _isos.at(index.row())->getField(index.column());
+			return _games.at(index.row())->getField(index.column());
 		break;
 		//case Qt::BackgroundRole:
 		//	return _isos->at(index.row())->getBackground(index.column());

@@ -1,27 +1,11 @@
 #include <Windows.h>
 #include "Iso.h"
 
-Iso::Iso(QString path)
+Iso::Iso(QString path) : Game(path)
 {
-	//Make this a threaded object
-	_thread = new QThread;
-	moveToThread(_thread);
-	_thread->start();
-
 	//Default values
-	_xex = NULL;
-	_xbe = NULL;
 	_defaultXex = _defaultXbe = NULL;
 	_rootFile = NULL;
-	_hash = 0;
-	_realHandle = NULL;
-	_type = NO;
-	_path = path;
-
-	//Some extra things to retrieve
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-	_granularity = info.dwAllocationGranularity;
 
 	//IO
 	_handle = _open(path.toStdString().c_str(), _O_BINARY | _O_RDONLY);
@@ -49,10 +33,6 @@ bool Iso::Initialize()
 
 Iso::~Iso()
 {
-	//Delete the xex
-	if(_xex != NULL)
-		delete _xex;
-
 	//We should dealloc the bin tree
 	deleteTree();
 
@@ -60,15 +40,6 @@ Iso::~Iso()
 	map<uint,SectorData*>::iterator it;
 	for(it = _sectors.begin(); it != _sectors.end(); it++)
 		delete it->second;
-
-	//Close handles
-	CloseHandle(_mapHandle);
-	_close(_handle);  //Close the handle to the iso, (this will also close the get_osfhandle)
-
-	//Thread
-	_thread->quit();
-	_thread->wait();
-	delete _thread;
 }
 
 /**
@@ -136,7 +107,7 @@ bool Iso::isValidMedia()
 {
 	if(_handle < 0)
 		return false;                 //Valid to initalize the iso
-	if(_type != NO)
+	if(_type != NOTHING)
 		return true;                  //We already read the disc, and saw it was a good one!
 
 	if(!readMagicMedia(XSF))          //Check for Xbox 1 disc

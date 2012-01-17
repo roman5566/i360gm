@@ -7,7 +7,7 @@
 #include <iostream>
 #include <sstream>
 
-#include "XGDF/Iso.h"
+#include "Xbox/Game.h"
 
 using std::vector;
 
@@ -19,13 +19,13 @@ public:
 	int columnCount(const QModelIndex& parent) const;
 	QVariant data(const QModelIndex& index, int role) const;
 	QVariant headerData(int section, Qt::Orientation orientation, int role) const;
-	void addIso(Iso *iso);
-	void clearIsos();
-	Iso* getIso(int index);
-	vector<Iso*> *getIsos();
+	void addGame(Game *game);
+	void clearGames();
+	Game* getGame(int index);
+	vector<Game*> *getGames();
 
 protected:
-	vector<Iso*> _isos;
+	vector<Game*> _games;
 
 private:
 	vector<QString> _header;
