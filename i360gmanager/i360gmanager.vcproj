@@ -166,6 +166,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\GuiSlots.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\Loader.cpp"
 				>
 			</File>
@@ -498,11 +502,11 @@
 			Name="Models"
 			>
 			<File
-				RelativePath=".\IsoList.cpp"
+				RelativePath=".\GameList.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\IsoList.h"
+				RelativePath=".\GameList.h"
 				>
 			</File>
 		</Filter>

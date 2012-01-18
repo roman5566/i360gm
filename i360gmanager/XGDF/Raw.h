@@ -16,11 +16,8 @@ public:
 	QString getExecutable();
 	static bool isRaw(QString path);
 
-	QString getTitleId();
-	QString getName();
-
 private:
-	QString _titleId, _name;
+	
 };
 
 #endif

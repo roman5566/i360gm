@@ -54,8 +54,6 @@ public:
 	uint getFileNo();
 	FileNode* getRootNode();
 	QVariant getField(int column);
-	QString getTitleId();
-	QString getName();
 
 	//IsoIO
 	uint getHash();
@@ -104,8 +102,6 @@ private:
 	void extractFile(QString output, FileNode *node);                       //IsoIO
 
 	//Disc info
-	QString _titleId;
-	QString _name;
 	long _fileNo;
 	MediaInfo _mediaInfo;
 

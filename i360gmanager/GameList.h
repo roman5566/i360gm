@@ -6,15 +6,21 @@
 
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 #include "Xbox/Game.h"
 
 using std::vector;
 
-class IsoList : public QAbstractTableModel
+typedef vector<Game*> GameVector;
+typedef map<QString, Game*> GameMap;
+typedef GameMap::iterator GameMapIt;
+#define forGameMap(v) for (GameMapIt it = v.begin(); it != v.end(); it++)
+
+class GameList : public QAbstractTableModel
 {
 public:
-	IsoList();
+	GameList();
 	int rowCount(const QModelIndex& parent) const;
 	int columnCount(const QModelIndex& parent) const;
 	QVariant data(const QModelIndex& index, int role) const;
@@ -23,9 +29,15 @@ public:
 	void clearGames();
 	Game* getGame(int index);
 	vector<Game*> *getGames();
+	
+
+	//Overloads
+	GameMap getMap();
+	GameMap getMissingGames(GameList *g);
 
 protected:
 	vector<Game*> _games;
+	GameMap _gameMap;
 
 private:
 	vector<QString> _header;

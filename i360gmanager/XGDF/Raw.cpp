@@ -36,42 +36,6 @@ QVariant Raw::getField(int column)
 	}
 }
 
-QString Raw::getTitleId()
-{
-	if(_titleId.isEmpty())
-	{
-		if(_xex != NULL)
-			_titleId = QString::fromStdString(_xex->getTitleId());
-		else if(_xbe != NULL)
-			_titleId = QString::fromStdString(_xbe->getTitleId());
-	}
-	return _titleId;
-}
-
-QString Raw::getName()
-{
-	if(_name.isEmpty())
-	{
-		if(_xex != NULL)
-			_name = QString::fromStdString(fileNameDb[_xex->getFullId()]);
-		else if(_xbe != NULL)
-		{
-			_name = xbox1Name[getTitleId()];
-			if(_name.isEmpty())
-			{
-				//mainGui->addLog(tr("This xbox 1 game entry to net yet in DB! Update!")+getShortIso());
-				_name = QString::fromStdWString(_xbe->getName());
-			}
-		}
-		if(_name.isEmpty())
-		{
-			//mainGui->addLog(tr("Was not able to resolve name of: ")+getShortIso());
-			_name = "Fudge"; //Default it to file name
-		}
-	}
-	return _name;
-}
-
 bool Raw::Initialize()
 {
 	QString filePath = getExecutable();
@@ -92,8 +56,8 @@ bool Raw::Initialize()
 			_type = XSF;
 			_xbe = new Xbe(NULL, buffer, 0);
 		}
-		return false;
-
+		else
+			return false;
 	}
 	else
 		return false;

@@ -9,7 +9,7 @@
 
 #include "Xbox/Game.h"
 #include "xgdf/Raw.h"
-#include "IsoList.h"
+#include "GameList.h"
 #include "Loader.h"
 #include "XGDF/Iso.h"
 
@@ -23,7 +23,7 @@ public:
 
 
 	Ui::MainClass *getUi(){return &ui;}
-	void refreshDir(QString directory, bool keep = false);
+	void refreshDir(QString directory, GameList *list, bool keep = false);
 
 	//Data
 	signals:
@@ -41,7 +41,7 @@ public:
 		//Loader
 		void progressTotalIsos(uint isos);
 		void progressIso(QString iso);
-		void doneIsoDir(vector<Iso*> *isos);
+		void loaderDone(vector<Game*> *games, uint vptr);
 
 		//Extraction
 		void fileExtractedSuccess(QString name);
@@ -60,9 +60,8 @@ private:
 	//Helper functions
 
 	//Helper data
-	IsoList *_model;
+	GameList *_source, *_external;
 	Loader *_loader;
-	IsoList *_external;
 
 	QString _lastDotPath;
 	QString _lastIsoPath;

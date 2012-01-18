@@ -1,9 +1,12 @@
 #ifndef LOADER_H
 #define LOADER_H
 
-#include "XGDF/Iso.h"
+#include "GameList.h"
 #include <QDir>
 #include <QThread>
+
+#include "XGDF/Iso.h"
+#include "XGDF/Raw.h"
 
 class Loader : public QObject
 {
@@ -14,15 +17,15 @@ public:
 	~Loader();
 
 public slots:
-	void readIsoDir(QString path);
+	void readIsoDir(QString path, uint vptr);
 
 signals:
 	void doProgressTotalIsos(uint isos);
 	void doProgressIso(QString iso);
-	void doDoneIsoDir(vector<Iso*> *isos);
+	void doDoneLoading(vector<Game*> *games, uint vptr);
 
 private:
-	void readIsoDirR(QString path, vector<Iso*> *isos);
+	void readIsoDir(QString path, vector<Game*> *isos);
 	QThread *_thread;
 };
 

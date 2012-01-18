@@ -1,5 +1,5 @@
 #include "uiMain.h"
-#include "IsoList.h"
+#include "GameList.h"
 
 //Mutex
 QMutex mTreeWidget;
@@ -20,14 +20,14 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	
 	_loader->connect(_loader, SIGNAL(doProgressTotalIsos(uint)), this, SLOT(progressTotalIsos(uint)));
 	_loader->connect(_loader, SIGNAL(doProgressIso(QString)), this, SLOT(progressIso(QString)));
-	_loader->connect(_loader, SIGNAL(doDoneIsoDir(vector<Iso*>*)), this, SLOT(doneIsoDir(vector<Iso*>*)));
+	_loader->connect(_loader, SIGNAL(doDoneLoading(vector<Game*> *, uint)), this, SLOT(loaderDone(vector<Game*> *, uint)));
 
 	//Set model for iso list
-	_model = new IsoList();
-	ui.sourceView->setModel(_model);
+	_source = new GameList();
+	ui.sourceView->setModel(_source);
 	ui.sourceView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 	
-	_external = new IsoList();
+	_external = new GameList();
 	ui.externView->setModel(_external);
 	ui.externView->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
 
@@ -84,7 +84,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 
 	//If we have a gamePath use it
 	if(_gamePath.length() > 0)
-		refreshDir(_gamePath);
+		refreshDir(_gamePath, _source);
+
+	if(sExternalPath.length() > 0)
+		refreshDir(sExternalPath, _external);
 }
 
 Main::~Main()
@@ -121,22 +124,23 @@ void Main::progressIso(QString iso)
 	getUi()->progressBar->setValue(getUi()->progressBar->value()+1);
 }
 
-void Main::doneIsoDir(vector<Iso*> *isos)
+void Main::loaderDone(vector<Game*> *games, uint vptr)
 {
-	_model->clearGames();                      //Clear the list
+	GameList *list = VPtr<GameList>::fromPtr(vptr);
+	list->clearGames();                      //Clear the list
 
-	for (int i = 0; i < isos->size(); ++i)
+	for (int i = 0; i < games->size(); ++i)
 	{
-		Iso *iso = isos->at(i);
+		Game *game = games->at(i);
 		//Set up the connections for feedback and threading
-		connect(iso, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
-		connect(iso, SIGNAL(doBytesWritten(uint)), this, SLOT(bytesWritten(uint)));
-		connect(iso, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
-		connect(iso, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
-		connect(iso, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
-		_model->addGame(iso);
+		connect(game, SIGNAL(doFileExtracted(QString, uint)), this, SLOT(fileExtracted(QString, uint)));
+		connect(game, SIGNAL(doBytesWritten(uint)), this, SLOT(bytesWritten(uint)));
+		connect(game, SIGNAL(doIsoExtracted(Iso *)), this, SLOT(isoExtracted(Iso *)));
+		connect(game, SIGNAL(doSetTree(QTreeWidgetItem *)), this, SLOT(setTree(QTreeWidgetItem *)));
+		connect(game, SIGNAL(doFileExtractedSuccess(QString)), this, SLOT(fileExtractedSuccess(QString)));
+		list->addGame(game);
 	}
-	delete isos; //Delete that nasty vector!!!
+	delete games; //Delete that nasty vector!!!
 	getUi()->progressBar->setMaximum(100);
 	getUi()->progressBar->reset();
 }
@@ -187,7 +191,7 @@ void Main::reportIntline9()
 	calculateMemory();
 
 	double avgHash = 0, avgBin = 0;
-	vector<Game*> *isos = _model->getGames();
+	vector<Game*> *isos = _source->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
 		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
@@ -209,7 +213,7 @@ void Main::reportIntline9()
 void Main::checkHashCollision()
 {
 	map<uint, uint> hashes;
-	vector<Game*> *isos = _model->getGames();
+	vector<Game*> *isos = _source->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
 		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
@@ -228,7 +232,7 @@ void Main::calculateMemory()
 {
 	map<uint,SectorData*>::iterator it;
 	uint64 total = 0, fileNodeKb = 0, sectorsKb = 0;
-	vector<Game*> *isos = _model->getGames();
+	vector<Game*> *isos = _source->getGames();
 	for(int i = 0; i < isos->size(); i++)
 	{
 		Iso *iso = dynamic_cast<Iso*>(isos->at(i));
@@ -258,7 +262,7 @@ void Main::setGamePath()
 	_gamePath = dir;        
 
 	if(_gamePath.length() > 0)
-		refreshDir(_gamePath);
+		refreshDir(_gamePath, _source);
 
 	getUi()->sourceView->showRow(1);
 }
@@ -268,7 +272,7 @@ void Main::slotOnClickList(const QModelIndex &current, const QModelIndex &previo
 	//Only update the list if the dock is visible, if it is not visible then dont update!
 	if(getUi()->DockFileExplorer->isVisible())
 	{
-		Iso *iso = dynamic_cast<Iso*>(_model->getGame(current.row()));
+		Iso *iso = dynamic_cast<Iso*>(_source->getGame(current.row()));
 		if(iso == NULL)
 			return;
 
@@ -312,7 +316,7 @@ void Main::bytesWritten(uint bytes)
 
 void Main::extractFile()
 {
-	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
+	Iso *iso = dynamic_cast<Iso*>(_source->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL || getUi()->fileTree->currentIndex().row() < 0)
 		return addLog("No file selected!");
 
@@ -337,7 +341,7 @@ void Main::extractFile()
 void Main::extractIso()
 {
 	//Get the iso
-	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
+	Iso *iso = dynamic_cast<Iso*>(_source->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL)
 		return addLog("No iso selected!");
 
@@ -360,7 +364,7 @@ void Main::extractIso()
 void Main::saveDot()
 {
 	//Get info
-	Iso *iso = dynamic_cast<Iso*>(_model->getGame(getUi()->sourceView->currentIndex().row()));
+	Iso *iso = dynamic_cast<Iso*>(_source->getGame(getUi()->sourceView->currentIndex().row()));
 	if(iso == NULL)
 		return addLog("No iso selected!");
 	FileNode *root = iso->getRootNode();
@@ -406,39 +410,13 @@ void Main::walkDot(QString &trace, FileNode *&node)
 	//Add myself to label list
 	trace.append(sp.sprintf("\t %i [label=\"%s (%i)\"];\n", (uint)node, QString::fromAscii((const char*)node->file->name, node->file->length).toStdString().c_str(), node->file->length));
 }
-void Main::refreshDir(QString directory, bool keep)
+
+void Main::refreshDir(QString directory, GameList *list, bool keep)
 {
 	getUi()->fileTree->clear();
-	getUi()->sourceView->reset();
-	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory));
+	if(list == _source) getUi()->sourceView->reset();
+	if(list == _external) getUi()->externView->reset();
 
-	//Start loading external
-	//_external->a
-	getUi()->externView->reset();
-
-	QDir dir(sExternalPath);
-	//QStringList filter; filter << "*.iso" << "*.360" << "*.000";        //Filter the dir list
-	//dir.setNameFilters(filter);
-	dir.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot);
-	QFileInfoList list = dir.entryInfoList();
-
-	for (int i = 0; i < list.size(); ++i)
-	{
-		const QFileInfo *fileInfo = &list.at(i);
-		if(fileInfo->isDir())
-		{
-			if(Raw::isRaw(fileInfo->absoluteFilePath()))
-			{
-				Raw *raw = new Raw(fileInfo->absoluteFilePath());
-				raw->Initialize();
-				_external->addGame(raw);
-
-			}
-			//readIsoDirR(fileInfo->absoluteFilePath(), isos);
-			continue;
-		}
-		//Iso *iso = new Iso(fileInfo->absoluteFilePath());
-		//isos->push_back(iso);
-	}
-	
+	//Call the loader
+	QMetaObject::invokeMethod(_loader, "readIsoDir", Q_ARG(QString, directory), Q_ARG(uint, VPtr<GameList>::toPtr(list)));
 }

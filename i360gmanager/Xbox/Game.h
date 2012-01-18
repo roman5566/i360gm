@@ -33,13 +33,15 @@ public:
 	//All functions that need implementations
 	virtual QVariant getField(int column) = 0;
 	virtual uint getHash() = 0;
-	virtual QString getTitleId() = 0;
-	virtual QString getName() = 0;
 
 	//Default implementations
 	QString getPath();
 	HANDLE getHandle();
 	DiscType getDiscType();
+
+	QString getName();
+	QString getTitleId();
+	QString getUniqueId();
 
 public slots:
 	virtual bool Initialize() = 0;
@@ -53,6 +55,7 @@ protected:
 	Xex *_xex;           //The executable for Xbox 360
 	Xbe *_xbe;           //The executable for Xbox
 	uint _hash;          //murmur hash
+	QString _titleId, _name,_unqiueId;
 
 	//Handles
 	HANDLE _realHandle;
