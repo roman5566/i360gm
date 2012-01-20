@@ -4,6 +4,7 @@ Game::Game(QString path)
 {
 	//Defaults
 	_hash = 0;
+	_headerList = NULL;
 	_type = NOTHING;
 	_path = path;
 	_xex = NULL;
@@ -19,6 +20,40 @@ Game::Game(QString path)
 	SYSTEM_INFO info;
 	GetSystemInfo(&info);
 	granularity = info.dwAllocationGranularity;
+}
+
+/**
+ * getField returns data based on colum number, this is used for the ItemWidget of Qt
+ * @param column referencing to what colum we want the data
+ * @return QVariant containing data for that column
+ */
+QVariant Game::getField(int column)
+{
+	
+	QString str;
+	switch(_headerList->at(column).code)
+	{
+	//case TIME_BIN:
+	//	return _binTree;
+	//case TIME_HASH:
+	//	return _hashTime;
+	case HASH:
+		str = str.sprintf("0x%08X", getHash());
+		return str;
+	case TITLEID:
+		return getTitleId();
+	case NAME:
+		return getName();
+	//case PATH:
+		//return getIso();
+	default:
+		return QVariant();
+	}
+}
+
+void Game::setHeaderList(QVector<HeaderInfo> *headerList)
+{
+	_headerList = headerList;
 }
 
 Game::~Game()

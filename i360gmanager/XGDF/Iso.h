@@ -53,7 +53,6 @@ public:
 	QString getShortIso();
 	uint getFileNo();
 	FileNode* getRootNode();
-	QVariant getField(int column);
 
 	//IsoIO
 	uint getHash();

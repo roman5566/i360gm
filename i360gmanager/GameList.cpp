@@ -2,12 +2,14 @@
 
 GameList::GameList() : QAbstractTableModel()
 {
-	_header.push_back(QString("Bin"));          //0
-	_header.push_back(QString("Hash"));         //1
-	_header.push_back(QString("Hash"));         //2
-	_header.push_back(QString("Title ID"));		//3
-	_header.push_back(QString("Full Name"));	//4
-	_header.push_back(QString("Iso"));          //5
+	headers.clear();
+	foreach(const HeaderInfo *value, allHeaders)
+	{
+		if(value->visbility)
+		{
+			headers.push_back(*value);
+		}
+	}
 }
 
 //Operator overloads
@@ -45,6 +47,7 @@ void GameList::clearGames()
 
 void GameList::addGame(Game *game)
 {
+	game->setHeaderList(&headers);               //Give that game a pointer to its BOSS!!
 	_gameMap[game->getUniqueId()] = game;
 	_games.push_back(game);
 	emit layoutChanged();
@@ -57,7 +60,7 @@ int GameList::rowCount(const QModelIndex& parent) const
 
 int GameList::columnCount(const QModelIndex& parent) const
 {
-	return _header.size();
+	return headers.size();
 }
 
 vector<Game*> *GameList::getGames()
@@ -84,6 +87,10 @@ QVariant GameList::data(const QModelIndex& index, int role) const
 		case Qt::DisplayRole:
 			return _games.at(index.row())->getField(index.column());
 		break;
+		//case Qt::CheckStateRole:
+		//	return true;
+
+		//break;
 		//case Qt::BackgroundRole:
 		//	return _isos->at(index.row())->getBackground(index.column());
 		//break;
@@ -99,7 +106,7 @@ QVariant GameList::headerData(int section, Qt::Orientation orientation, int role
 		std::stringstream ss;
 		if(orientation == Qt::Horizontal)
 		{
-			return _header.at(section);
+			return headers.at(section).name;
 		}
 		else if(orientation == Qt::Vertical)
 		{

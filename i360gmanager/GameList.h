@@ -3,6 +3,7 @@
 
 #include <QAbstractTableModel>
 #include <QtGui>
+#include <QSet>
 
 #include <iostream>
 #include <sstream>
@@ -35,12 +36,14 @@ public:
 	GameMap getMap();
 	GameMap getMissingGames(GameList *g);
 
+	QVector<HeaderInfo> headers;
+
 protected:
 	vector<Game*> _games;
 	GameMap _gameMap;
 
 private:
-	vector<QString> _header;
+	
 
 };
 

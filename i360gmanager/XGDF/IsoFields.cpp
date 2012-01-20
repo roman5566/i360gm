@@ -6,33 +6,6 @@ map<uint, SectorData*> *Iso::getSectors()
 {
 	return &_sectors;
 }
-/**
- * getField returns data based on colum number, this is used for the ItemWidget of Qt
- * @param column referencing to what colum we want the data
- * @return QVariant containing data for that column
- */
-QVariant Iso::getField(int column)
-{
-	QString str;
-	switch(column)
-	{
-	case 0:
-		return _binTree;
-	case 1:
-		return _hashTime;
-	case 2:
-		str = str.sprintf("0x%08X", getHash());
-		return str;
-	case 3:
-		return getTitleId();
-	case 4:
-		return getName();
-	case 5:
-		return getIso();
-	default:
-		return QVariant();
-	}
-}
 
 /**
  * Get total number of files inside this iso (including dirs and empty files)

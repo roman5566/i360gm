@@ -5,6 +5,7 @@
 QMutex mTreeWidget;
 bool stopTreeWidget;
 QSettings *settings;
+QSet<HeaderInfo*> allHeaders;
 
 map<string, string> fileNameDb;
 map<QString, QString> xbox1Name;
@@ -21,6 +22,10 @@ Main::Main(QWidget *parent, Qt::WFlags flags)
 	_loader->connect(_loader, SIGNAL(doProgressTotalIsos(uint)), this, SLOT(progressTotalIsos(uint)));
 	_loader->connect(_loader, SIGNAL(doProgressIso(QString)), this, SLOT(progressIso(QString)));
 	_loader->connect(_loader, SIGNAL(doDoneLoading(vector<Game*> *, uint)), this, SLOT(loaderDone(vector<Game*> *, uint)));
+
+
+	//All the headers we currently have
+	LOAD_ALL_HEADERS;
 
 	//Set model for iso list
 	_source = new GameList();
@@ -221,7 +226,7 @@ void Main::checkHashCollision()
 
 		if(hashes[iso->getHash()] > 1)
 		{
-			addLog("Found a collision!!!!!!!!");
+			addLog("Found a collision!!!!!!!! THIS IS BAAAAD!");
 			return;
 		}
 	}

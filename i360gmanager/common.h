@@ -72,6 +72,43 @@ using std::wstring;
 
 #endif
 
+enum HeaderCode
+{
+	TIME_BIN,
+	TIME_HASH,
+	HASH,
+	TITLEID,
+	NAME,
+	PATH,
+};
+typedef struct HeaderInfoS
+{
+	bool visbility;
+	QString name;
+	QString description;
+	HeaderCode code;
+
+	HeaderInfoS()
+	{
+		visbility = false;
+	}
+
+	HeaderInfoS(bool v, QString n, QString d, HeaderCode c)
+	{
+		visbility = v;
+		name = n;
+		description = d;
+		code = c;
+	}
+} HeaderInfo;
+extern QSet<HeaderInfo*> allHeaders;
+#define LOAD_ALL_HEADERS allHeaders.insert(new HeaderInfo(false, "Bin", "Binary search tree run time", TIME_BIN)); \
+allHeaders.insert(new HeaderInfo(false, "Hash", "hashing algorithm run time", TIME_HASH)); \
+allHeaders.insert(new HeaderInfo(true, "Hash", "Hash of the game", HASH)); \
+allHeaders.insert(new HeaderInfo(true, "Title ID", "Title ID of the xex/xbe in hex", TITLEID)); \
+allHeaders.insert(new HeaderInfo(true, "Name", "Name of this game*", NAME));\
+allHeaders.insert(new HeaderInfo(false, "Path", "The path to this game", PATH))
+
 //General functions
 string toHex(char *bytes, uint size);
 QString getHumenSize(uint64 size);

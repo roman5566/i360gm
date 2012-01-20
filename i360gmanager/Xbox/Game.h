@@ -31,7 +31,6 @@ public:
 	~Game();
 
 	//All functions that need implementations
-	virtual QVariant getField(int column) = 0;
 	virtual uint getHash() = 0;
 
 	//Default implementations
@@ -43,11 +42,16 @@ public:
 	QString getTitleId();
 	QString getUniqueId();
 
+	//Public handling
+	void setHeaderList(QVector<HeaderInfo> *headerList);
+	QVariant getField(int column);
+
 public slots:
 	virtual bool Initialize() = 0;
 
 protected:
 	uint granularity;
+	QVector<HeaderInfo> *_headerList;
 
 	//Game disc info
 	QString _path;

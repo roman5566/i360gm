@@ -9,6 +9,9 @@ Xbe::Xbe(XboxFileInfo *Xbe, void *buffer, uint offset)
 
 	memcpy(&_header, (char*)_xbeBuffer, sizeof(XbeHeader));
 	memcpy(&_certificate, (char*)_xbeBuffer+_header.getAddress(_header.certifcateAddress), sizeof(XbeHeader));
+
+	//Fix stupid little endian
+	endian32(_certificate.titleId);
 }
 
 Xbe::~Xbe()
@@ -19,7 +22,6 @@ Xbe::~Xbe()
 
 string Xbe::getTitleId()
 {
-	endian32(_certificate.titleId);
 	return toHex((char*)&_certificate.titleId, 4);
 }
 
